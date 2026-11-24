@@ -6,13 +6,13 @@ Sirve para decidir antes de dibujar nada si el mapeo `categories [category, face
 
 ## Preparar
 
-1. En el `.pbix` de esta carpeta (o uno en blanco): Obtener datos → Excel → `C:	cviz\dev\DonutChart\DonutChart_Dataset.xlsx`,
+1. En el `.pbix` de esta carpeta (o uno en blanco): Obtener datos → Excel → `C:\tcviz\dev\DonutChart\DonutChart_Dataset.xlsx`,
    hojas **Ventas** y **Detalle** (sin relacionarlas).
    - **Ventas** (580 filas, Begudes Nord, enero-septiembre): Marca, Familia, Zona, Canal, Subcanal, Litros (2026),
      Ventas netas, Litros AA (2025), Ventas netas AA, Plan litros (plan 2026 repartido por marca), Nota (texto en 2 filas).
      Café Nord es nueva en 2026 (Litros AA = 0): sirve para el caso "new".
    - **Detalle** (54.662 filas): PDV × SKU con Litros 2026, para pasar del tope de 30.000.
-2. Importa `C:	cviz\dev\DonutChart\dist\donutChartTCViz5449856DE5A343AFB84B575BC5FDB5E8_test.1.0.0.1.pbiviz`
+2. Importa `C:\tcviz\dev\DonutChart\dist\donutChartTCViz5449856DE5A343AFB84B575BC5FDB5E8_test.1.0.0.1.pbiviz`
    (o el de número más alto en `dist\`).
 3. Página nueva, visual "Donut & Pie Chart by TCViz (test)" a tamaño grande. En la primera línea sale la marca
    `[test AAAA-MM-DD HH:MM v1.0.0.N]`: si no coincide con el paquete importado, Desktop sirve uno anterior
