@@ -175,6 +175,8 @@ export class Visual implements IVisual {
     private minFs = 8;
     private geo: Geo | null = null;
     private tableEl: HTMLDivElement | null = null;
+    /** Letra de la tabla dibujada: las etiquetas nunca la superan. */
+    private tableFs = 0;
     private canvasCtx: CanvasRenderingContext2D | null = null;
     private fmtCache = new Map<string, valueFormatter.IValueFormatter>();
     private idCache = new Map<string, ISelectionId>();
@@ -184,6 +186,12 @@ export class Visual implements IVisual {
     private hoverKey: string | null = null;
     private focusIdx = -1;
     private hasFocus = false;
+    /**
+     * Foco de teclado visible (patrón focus-visible): solo cuando el foco llega o se mueve con el teclado. Un clic da el
+     * foco al contenedor pero no pinta contorno ni mueve el elemento enfocado (si no, el mayor parecía seleccionado).
+     */
+    private kbMode = false;
+    private pointerDown = false;
     /** Selección propia: claves de categoría (o OTHER_KEY). Se calcula aquí y se pasa entera a Power BI. */
     private selKeys = new Set<string>();
     private pendingRestore: ISelectionId[] | null = null;
@@ -236,8 +244,19 @@ export class Visual implements IVisual {
         }
 
         this.root.addEventListener("keydown", (e: KeyboardEvent) => this.onKey(e));
-        this.root.addEventListener("focus", () => { this.hasFocus = true; if (this.focusIdx < 0) this.focusIdx = 0; this.paintState(); this.announce(); });
-        this.root.addEventListener("blur", () => { this.hasFocus = false; this.hideTip(); this.paintState(); });
+        this.root.addEventListener("pointerdown", () => { this.pointerDown = true; this.kbMode = false; });
+        this.root.addEventListener("mousedown", () => { this.pointerDown = true; this.kbMode = false; });
+        this.root.addEventListener("focus", () => {
+            this.hasFocus = true;
+            // Con Tab el foco llega sin puntero: modo teclado. Con un clic, no.
+            this.kbMode = !this.pointerDown;
+            this.pointerDown = false;
+            if (!this.kbMode) return;
+            if (this.focusIdx < 0) this.focusIdx = 0;
+            this.paintState();
+            this.announce();
+        });
+        this.root.addEventListener("blur", () => { this.hasFocus = false; this.kbMode = false; this.pointerDown = false; this.hideTip(); this.paintState(); });
         this.root.addEventListener("click", (e: MouseEvent) => this.onClick(e));
         this.root.addEventListener("contextmenu", (e: MouseEvent) => this.onContext(e));
         this.root.addEventListener("mousemove", (e: MouseEvent) => this.onMove(e));
@@ -669,6 +688,7 @@ export class Visual implements IVisual {
         this.svg.selectAll("*").remove();
         d3.select(this.root).selectAll(".dn-landing, .dn-msg, .dn-table, .dn-notes").remove();
         this.tableEl = null;
+        this.tableFs = 0;
         this.geo = null;
         this.arcs = [];
         d3.select(this.root).selectAll(".dn-sm-title, .dn-smnote").remove();
@@ -1043,6 +1063,7 @@ export class Visual implements IVisual {
             }
             if (t) {
                 this.tableEl = t.el;
+                this.tableFs = t.fs;
                 if (pos === "right") {
                     t.el.style.left = (W - pad - t.w) + "px";
                     t.el.style.top = Math.max(pad, Math.round((H - t.h) / 2)) + "px";
@@ -1081,26 +1102,30 @@ export class Visual implements IVisual {
     }
 
     /**
-     * La leyenda-tabla en su sitio y con todo su texto: baja la letra hasta el mínimo, quita la nota de redondeo, pliega
-     * "Otros", pasa las cifras a compacto, quita las filas de segmento, la minibarra, las notas y la segunda columna de
-     * cambio, quita cabecera y total y, solo si aun así no caben, pliega las últimas filas en "+N more · x %" (suma 100,
-     * sin "…"). score = cuánto se ha recortado (para elegir posición en Automático).
+     * La leyenda-tabla en su sitio. El reparto de espacio sale del contenido: con más columnas el donut cede ancho. La
+     * letra escala como las etiquetas (k común) y no baja de 0,9 × su base escalada mientras quede otra salida: primero
+     * se quita lo accesorio (nota de redondeo, "Otros" desplegado, cifras completas, filas de segmento, notas, total y
+     * cabecera), después las columnas (minibarra, segunda columna de cambio), y solo entonces la letra baja hasta el
+     * mínimo y se pliegan las últimas filas en "+N more · x %" (suma 100, sin "…"). score = cuánto se ha recortado,
+     * con más peso cuanto peor (letra bajo el suelo > columnas > filas): en Automático gana la posición que menos recorta.
      */
-    private fitTable(pos: string, W: number, H: number, pad: number): { el: HTMLDivElement; w: number; h: number; score: number } | null {
+    private fitTable(pos: string, W: number, H: number, pad: number): { el: HTMLDivElement; w: number; h: number; score: number; fs: number } | null {
         const s = this.settings;
         const mini = W < 200 || H < 140;
-        const maxW = pos === "right" ? Math.floor(W * (mini ? 0.55 : this.proColumns ? 0.58 : 0.5)) : W - 2 * pad;
-        const maxH = pos === "right" ? H - 2 * pad : Math.floor(H * (mini ? 0.6 : 0.5));
+        const pro = this.proColumns;
+        const maxW = pos === "right" ? Math.floor(W * (mini ? 0.55 : pro ? 0.64 : 0.5)) : W - 2 * pad;
+        const maxH = pos === "right" ? H - 2 * pad : Math.floor(H * (mini ? 0.6 : pro ? 0.56 : 0.5));
         if (maxW < 40 || maxH < 12) return null;
         const fs0 = this.fz(Number(s.legend.fontSize));
+        const floorFs = Math.max(this.minFs, Math.round(fs0 * 0.9 * 2) / 2);
         const o: TableOpts = {
             fs: fs0, expanded: this.otherExpanded, fold: 0, compact: false,
             header: !!s.legend.header, total: s.legend.totalRow === "on" || (s.legend.totalRow === "auto" && s.slices.shape === "pie"),
             rounded: true, segRows: true, ann: true, bar: true, second: true,
         };
-        let steps = 0;
+        let score = 0;
         let el: HTMLDivElement | null = null;
-        for (let iter = 0; iter < 90; iter++) {
+        for (let iter = 0; iter < 120; iter++) {
             el = this.buildTable(o);
             el.style.visibility = "hidden";
             el.style.left = "0px"; el.style.top = "0px";
@@ -1113,22 +1138,22 @@ export class Visual implements IVisual {
             if (h <= maxH && fitsW) {
                 el.style.visibility = "";
                 el.style.width = w + "px";
-                return { el, w, h, score: steps * 10 + (fs0 - o.fs) };
+                return { el, w, h, score: score + (fs0 - o.fs), fs: o.fs };
             }
             el.remove();
-            if (o.fs > this.minFs) { o.fs = Math.max(this.minFs, o.fs - 0.5); continue; }
-            steps++;
-            if (o.rounded && this.roundedNote) { o.rounded = false; continue; }
-            if (o.expanded) { o.expanded = false; continue; }
-            if (!o.compact) { o.compact = true; continue; }
-            if (o.segRows && this.segOn) { o.segRows = false; continue; }
-            if (o.bar && this.cmpOn) { o.bar = false; continue; }
-            if (o.ann && this.annOn) { o.ann = false; continue; }
-            if (o.second && this.cmpOn && s.compare.changeShown === "both") { o.second = false; continue; }
-            if (mini && o.header) { o.header = false; continue; }
-            if (o.total) { o.total = false; continue; }
-            if (o.header) { o.header = false; continue; }
-            if (o.fold < this.entries.length - 1) { o.fold = o.fold === 0 ? 2 : o.fold + 1; continue; }
+            if (o.fs > floorFs) { o.fs = Math.max(floorFs, o.fs - 0.5); continue; }
+            if (o.rounded && this.roundedNote) { o.rounded = false; score += 5; continue; }
+            if (o.expanded) { o.expanded = false; score += 5; continue; }
+            if (!o.compact) { o.compact = true; score += 10; continue; }
+            if (o.segRows && this.segOn) { o.segRows = false; score += 20; continue; }
+            if (o.ann && this.annOn) { o.ann = false; score += 20; continue; }
+            if (mini && o.header) { o.header = false; score += 20; continue; }
+            if (o.total) { o.total = false; score += 20; continue; }
+            if (o.header) { o.header = false; score += 30; continue; }
+            if (o.bar && this.cmpOn) { o.bar = false; score += 100; continue; }
+            if (o.second && this.cmpOn && s.compare.changeShown === "both") { o.second = false; score += 100; continue; }
+            if (o.fs > this.minFs) { o.fs = Math.max(this.minFs, o.fs - 0.5); score += 1000; continue; }
+            if (o.fold < this.entries.length - 1) { o.fold = o.fold === 0 ? 2 : o.fold + 1; score += 200; continue; }
             break;
         }
         return null;
@@ -1500,7 +1525,7 @@ export class Visual implements IVisual {
 
     /** Hueco para los iconos del objetivo en el borde exterior (solo con Target y radio suficiente). */
     private iconSpaceFor(R: number): number {
-        if (!this.tgtOn || R < 40) return 0;
+        if (!this.tgtOn || R < 40 || !this.anyStatusIcon()) return 0;
         return Math.max(12, Math.min(16, Math.round(this.fz(8.5)))) + 3;
     }
 
@@ -1520,7 +1545,8 @@ export class Visual implements IVisual {
         const sa = (Number(s.slices.startAngle) || 0) * Math.PI / 180;
         p.arcs = this.makeArcs(p.entries, sa);
         const labelsOn = !!s.labels.show;
-        const fsL = this.fz(Number(s.labels.fontSize));
+        // Las etiquetas nunca con más letra que la tabla (la tabla es la lectura principal).
+        const fsL = this.tableFs > 0 ? Math.max(this.minFs, Math.min(this.fz(Number(s.labels.fontSize)), this.tableFs)) : this.fz(Number(s.labels.fontSize));
         let R = R0;
         let labels: PlacedLabel[] = [];
         const outSpace = ringSpace + iconSpace;
@@ -1664,7 +1690,8 @@ export class Visual implements IVisual {
         if (s.labels.show) {
             // El texto escala con el PANEL (lado menor / 300), no con el visual entero: paneles pequeños, letra pequeña.
             const kp = Math.max(0.6, Math.min(1.8, Math.min(cw, ch) / 300));
-            const fsL = Math.max(this.minFs, Math.round(Number(s.labels.fontSize) * kp * 2) / 2);
+            let fsL = Math.max(this.minFs, Math.round(Number(s.labels.fontSize) * kp * 2) / 2);
+            if (this.tableFs > 0) fsL = Math.max(this.minFs, Math.min(fsL, this.tableFs));
             const levels = Math.max(1, ...panels.map(p => Math.max(0, ...p.arcs.map(a => this.variants(this.labelParts(a.e)).length))));
             const sizes: number[] = [];
             for (let f = fsL; f > this.minFs; f -= 0.5) sizes.push(f);
@@ -1771,6 +1798,18 @@ export class Visual implements IVisual {
         this.drawCenter(p, null);
     }
 
+    /** Status on slices: Misses only (por defecto, solo ✕) / All / Off. El estado completo siempre está en la tabla. */
+    private showsStatus(st: { glyph: string } | null): boolean {
+        if (!st) return false;
+        const mode = String(this.settings.target?.statusOnSlices ?? "misses");
+        return mode === "all" || (mode === "misses" && st.glyph === "✕");
+    }
+
+    /** ¿Algún sector de algún panel lleva icono? Si no, no se reserva hueco en el borde. */
+    private anyStatusIcon(): boolean {
+        return this.panels.some(p => p.entries.some(e => this.showsStatus(this.tgtStatus(e.value, e.tgt))));
+    }
+
     /** Icono de estado del objetivo en el borde exterior de cada sector (✓ ≈ ✕), solo donde cabe sin pisar al vecino. */
     private drawTargetIcons(pg: Sel<SVGGElement>, p: PanelDraw): void {
         const g0 = p.geo;
@@ -1779,7 +1818,7 @@ export class Visual implements IVisual {
         const gi = pg.append("g").attr("class", "dn-ticons").attr("transform", "translate(" + g0.cx + "," + g0.cy + ")");
         for (const a of p.arcs) {
             const st = this.tgtStatus(a.e.value, a.e.tgt);
-            if (!st) continue;
+            if (!st || !this.showsStatus(st)) continue;
             if ((a.a1 - a.a0) * r < d * 1.15) continue;
             const am = (a.a0 + a.a1) / 2;
             const x = Math.sin(am) * r, y = -Math.cos(am) * r;
@@ -2094,6 +2133,9 @@ export class Visual implements IVisual {
         } else {
             this.selKeys.clear();
             this.selectionManager.clear();
+            // Clic en vacío: también fuera el estado de foco (el siguiente Tab/flecha empieza de nuevo).
+            this.kbMode = false;
+            this.focusIdx = -1;
             this.paintState();
         }
     }
@@ -2345,7 +2387,7 @@ export class Visual implements IVisual {
         if (!this.panels.length || !this.panels.some(p => p.geo) || !this.entries.length) return;
         const any = this.selKeys.size > 0;
         const hover = this.hoverKey;
-        const focus = this.hasFocus ? this.focusItems()[this.focusIdx] : undefined;
+        const focus = this.hasFocus && this.kbMode ? this.focusItems()[this.focusIdx] : undefined;
         const hoverPair = hover ? this.pairOf(hover) : null;
         const hoverEntry = hover ? (this.entryOf(hover) ?? this.catOf(hover)?.e ?? hoverPair?.e ?? null) : null;
         this.svg.selectAll<SVGGElement, unknown>(".dn-sg").each((_d, i, nodes) => {
@@ -2471,6 +2513,14 @@ export class Visual implements IVisual {
         if (tgt && tgt !== this.root && tgt.tagName === "BUTTON") return;
         const items = this.focusItems();
         if (!items.length) return;
+        // Una tecla de navegación con el foco puesto por clic: se enseña el foco donde estaba (o en el primero), sin moverlo.
+        const nav = ["ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown", "Home", "End", "Enter", " "].indexOf(e.key) >= 0;
+        if (nav && (!this.kbMode || this.focusIdx < 0)) {
+            const first = this.focusIdx < 0;
+            this.kbMode = true;
+            if (first) this.focusIdx = 0;
+            if (first && e.key !== "Enter" && e.key !== " ") { e.preventDefault(); e.stopPropagation(); this.paintState(); this.announce(); return; }
+        }
         let handled = true;
         const cur = items[this.focusIdx] ?? items[0];
         const curKey = cur.kind === "entry" ? cur.e.key : cur.kind === "child" ? cur.c.key : cur.key;

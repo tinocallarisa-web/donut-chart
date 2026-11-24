@@ -800,6 +800,29 @@
           "type": {
             "numeric": true
           }
+        },
+        "statusOnSlices": {
+          "displayName": "Status on slices",
+          "displayNameKey": "Prop_target_statusOnSlices",
+          "type": {
+            "enumeration": [
+              {
+                "value": "misses",
+                "displayName": "Misses only",
+                "displayNameKey": "Enum_statusOnSlices_misses"
+              },
+              {
+                "value": "all",
+                "displayName": "All",
+                "displayNameKey": "Enum_statusOnSlices_all"
+              },
+              {
+                "value": "off",
+                "displayName": "Off",
+                "displayNameKey": "Enum_statusOnSlices_off"
+              }
+            ]
+          }
         }
       }
     },

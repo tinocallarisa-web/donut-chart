@@ -686,6 +686,64 @@ async def bloque2(b):
     check("región viva: anuncia el aviso de mezcla (Fruitia)", "Fruitia" in live and "share down" in live, live)
     await pg.close()
 
+    print("Arreglos tras Desktop (24-11): foco fantasma, letra de la tabla, iconos del objetivo")
+    pg = await page(b, dv_caso_a(), 900, 480)
+    box = await pg.evaluate("() => { const p = document.querySelector('path.dn-slice[data-key*=\"Nord Cola\"]'); const r = p.getBoundingClientRect(); const a = p.getPointAtLength(p.getTotalLength() * 0.25); const m = p.getScreenCTM(); return { x: a.x * m.a + m.e, y: a.y * m.d + m.f, cx: r.x + r.width / 2, cy: r.y + r.height / 2 }; }")
+    await pg.mouse.click(box["cx"], box["cy"])
+    await pg.wait_for_timeout(30)
+    i = await info(pg)
+    act = await pg.evaluate("() => document.activeElement && document.activeElement.className")
+    check("clic real en un sector: sin contorno de foco ni fila enfocada (el mayor no queda destacado)", not i["focusRing"] and await pg.evaluate("() => document.querySelectorAll('.dn-focusrow').length") == 0, f"activo={act}")
+    await pg.mouse.click(3, 470)
+    await pg.wait_for_timeout(30)
+    i = await info(pg)
+    sel = await pg.evaluate("() => (window.__sel || []).length")
+    ops = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-sg')).map(g => g.getAttribute('opacity'))")
+    check("después, clic en vacío: sin selección, sin contorno y ningún sector destacado", sel == 0 and not i["focusRing"] and all(o == "1" for o in ops)
+          and await pg.evaluate("() => document.querySelectorAll('.dn-focusrow').length") == 0, f"sel={sel} ops={ops}")
+    await shot(pg, "fix_foco_tras_clic")
+    await pg.keyboard.press("ArrowRight")
+    i = await info(pg)
+    check("con el foco puesto por clic, una flecha enseña el foco (modo teclado)", i["focusRing"], "")
+    await pg.evaluate("() => document.querySelector('.dn-root').blur()")
+    i = await info(pg)
+    check("al perder el foco, sin contorno", not i["focusRing"], "")
+    await pg.keyboard.press("Tab")
+    await pg.focus(".dn-root")
+    i = await info(pg)
+    check("foco por teclado (Tab): aparece el contorno", i["focusRing"], "")
+    await eventos(pg, "foco")
+    await pg.close()
+
+    full = dv_ventas({}, compare=True, target=True, nota=True, segment="Familia")
+    for W, H in [(960, 540), (1200, 640), (500, 320)]:
+        lbl = f"todo Familia {W}x{H}"
+        pg = await page(b, full, W, H, name=f"fix_todo_familia_{W}x{H}")
+        i = await info(pg)
+        comprobar_dibujo(i, W, H, lbl)
+        tfs = await pg.evaluate("() => { const t = document.querySelector('.dn-table'); return t ? parseFloat(getComputedStyle(t).fontSize) : 0; }")
+        lab = max(i["labelSizes"]) if i["labelSizes"] else 0
+        check(f"{lbl}: letra de la tabla ≥ la de las etiquetas", tfs >= lab - 1e-6, f"tabla={tfs} etiquetas={lab}")
+        if W >= 960:
+            check(f"{lbl}: letra de la tabla ≥ 10 px", tfs >= 10, f"tabla={tfs}")
+        await eventos(pg, lbl)
+        await pg.close()
+
+    for mode, quiere in [(None, {"✕"}), ("all", {"✕", "≈", "✓"}), ("off", set())]:
+        objs = {"slices": {"maxSlices": 12, "groupBelow": 0}}
+        if mode:
+            objs["target"] = {"statusOnSlices": mode}
+        for facet in [None, "Zona"]:
+            lbl = f"Status on slices = {mode or 'misses (defecto)'}{' SM' if facet else ''}"
+            pg = await page(b, dv_ventas(objs, target=True, facet=facet), 1200, 640, name=f"fix_status_{mode or 'misses'}{'_sm' if facet else ''}")
+            i = await info(pg)
+            sts = {t["st"] for t in i["ticons"]}
+            ok = sts <= quiere and (sts == quiere if mode == "all" and not facet else True) and (bool(sts) if quiere == {"✕"} else True)
+            check(f"{lbl}: iconos {sorted(quiere) or 'ninguno'}", ok if quiere else not sts, str(sorted(sts)))
+            te = fila(i, "Tè Nord")
+            check(f"{lbl}: el estado completo sigue en la tabla", (te is None and facet) or (te and "✕" in te["tgt"]), str(te))
+            await pg.close()
+
     print("Bloque 2 · Licencia: vista previa (edición) y lectura sin licencia")
     for W, H in [(1200, 640), (500, 320)]:
         dv = dv_ventas({}, facet="Zona", compare=True, target=True, segment="Canal", nota=True)

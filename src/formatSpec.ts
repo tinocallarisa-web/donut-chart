@@ -668,6 +668,30 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "label": "Close at (%)",
                 "min": 1,
                 "max": 1000
+            },
+            {
+                "name": "statusOnSlices",
+                "type": "enum",
+                "def": "misses",
+                "key": "Prop_target_statusOnSlices",
+                "label": "Status on slices",
+                "items": [
+                    [
+                        "misses",
+                        "Enum_statusOnSlices_misses",
+                        "Misses only"
+                    ],
+                    [
+                        "all",
+                        "Enum_statusOnSlices_all",
+                        "All"
+                    ],
+                    [
+                        "off",
+                        "Enum_statusOnSlices_off",
+                        "Off"
+                    ]
+                ]
             }
         ]
     },

@@ -152,3 +152,9 @@ P.update({
 "Δ pp": ["Δ p.p.", "Δ pts", "Δ Pp.", "Δ p.p.", "Δ pp", "Δ pp", "Δ pt", "Δ 百分点", "Δ %p", "Δ pp"],
 "⚠ Share and value move in opposite directions": ["⚠ Quota e valor movem-se em sentidos opostos", "⚠ La part et la valeur évoluent en sens inverse", "⚠ Anteil und Wert entwickeln sich gegenläufig", "⚠ Quota e valore si muovono in direzioni opposte", "⚠ Aandeel en waarde bewegen in tegengestelde richting", "⚠ Udział i wartość zmieniają się w przeciwnych kierunkach", "⚠ シェアと値が逆方向に動いています", "⚠ 份额与值的变化方向相反", "⚠ 점유율과 값이 반대 방향으로 움직입니다", "⚠ Cuota y valor se mueven en sentidos opuestos"],
 })
+
+# Arreglos tras la prueba en Desktop (24-11). Orden: pt, fr, de, it, nl, pl, ja, zh, ko, es
+P.update({
+"Status on slices": ["Estado nas fatias", "État sur les parts", "Status an den Segmenten", "Stato sulle fette", "Status op segmenten", "Stan na wycinkach", "スライス上の状態", "扇区上的状态", "조각에 상태 표시", "Estado en los sectores"],
+"Misses only": ["Só os não cumpridos", "Non atteints uniquement", "Nur verfehlte", "Solo non raggiunti", "Alleen niet gehaald", "Tylko nieosiągnięte", "未達のみ", "仅未达成", "미달만", "Solo los no cumplidos"],
+})

@@ -95,6 +95,9 @@ OBJECTS = [
     ("target", "Target (Pro)", [
         ("metAt", "Met at (%)", "num", 100, {"min": 1, "max": 1000}),
         ("closeAt", "Close at (%)", "num", 90, {"min": 1, "max": 1000}),
+        # Iconos en el borde de los sectores: por defecto solo los que no llegan (✕); el estado completo, en la tabla.
+        ("statusOnSlices", "Status on slices", "enum", "misses",
+         {"items": [("misses", "Misses only"), ("all", "All"), ("off", "Off")]}),
     ]),
     ("annotations", "Annotations (Pro)", [
         ("show", "Show annotations", "bool", True, {}),
