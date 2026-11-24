@@ -92,7 +92,7 @@ export const STYLE_TOKENS: Record<string, StyleTokens> = {
 for (const k of PRO_STYLES) {
     const t = STYLE_TOKENS[k];
     TEMPLATES[k] = { labels: { color: t.text }, center: { color: t.text }, legend: { color: t.text },
-        scaleRing: { color: t.axis }, slices: { otherColor: t.axis } };
+        scaleRing: { color: t.axis }, slices: { otherColor: luminance(t.bg) < 0.2 ? "#8C8C8C" : "#A19F9D" } };
 }
 const FONT_DEFAULT = "'Segoe UI', wf_segoe-ui_normal, helvetica, arial, sans-serif";
 
@@ -107,9 +107,9 @@ function reportTemplate(host: IVisualHost): Settings {
 
 let instanceCounter = 0;
 
-/** Una parte de una etiqueta: se retiran en el orden % → valor → nombre (SPEC 2). */
+/** Una parte de una etiqueta: se retiran en el orden valor → nombre → % (Tino, 24-11: el % es lo último). */
 interface LabelPart { kind: "pct" | "val" | "name"; text: string; }
-interface PlacedLabel { e: Entry; text: string; x: number; y: number; anchor: "middle" | "start" | "end"; inside: boolean; w: number; leader?: [number, number][]; }
+interface PlacedLabel { e: Entry; text: string; x: number; y: number; anchor: "middle" | "start" | "end"; inside: boolean; w: number; fs: number; leader?: [number, number][]; }
 interface Geo { cx: number; cy: number; R: number; ri: number; ringR: number; ax: number; ay: number; aw: number; ah: number; }
 interface Arc { e: Entry; a0: number; a1: number; idx: number; }
 type FocusItem = { kind: "entry"; e: Entry } | { kind: "child"; e: Entry; c: Cat; i: number };
@@ -685,24 +685,55 @@ export class Visual implements IVisual {
     // ── Colores ──────────────────────────────────────────────────────────────
 
     /** Color por clave: lo guardado para la categoría > regla fx de su fila > "All slices" fijo > paleta. */
+    /**
+     * Color por clave: lo guardado para la categoría > regla fx de su fila > "All slices" fijo > paleta. Los colores
+     * automáticos no se repiten entre sectores visibles: si la paleta del tema (o del estilo) se queda corta, se
+     * generan tonos más claros u oscuros del mismo color hasta que se distingan. "Otros" va siempre en un gris neutro,
+     * fuera de la paleta y distinto de cualquier sector.
+     */
     private assignColors(): void {
         const s = this.settings;
         const pal: any = this.host.colorPalette;
         const look = this.look;
-        const styleCols = look ? Array.from(new Set(look.series.concat([look.plan, look.up, look.down, look.axis]))) : null;
+        const styleCols = look ? Array.from(new Set(look.series.concat([look.plan, look.up, look.down]))) : null;
         const all = this.model.cats.slice().sort((a, b) => b.value - a.value);
         const fixedAll = String(s.dataColors.rule || "");
+        const used: string[] = [];
+        const auto: Entry[] = [];
         for (const e of this.entries) {
-            if (e.isOther) { e.color = this.hc ? this.hcBg : String(s.slices.otherColor || "#A19F9D"); continue; }
+            if (e.isOther) continue;
             const c = e.members[0];
             const i = all.indexOf(c);
-            if (this.hc) e.color = this.hcBg;
-            else if (c.fill) e.color = c.fill;
+            if (this.hc) { e.color = this.hcBg; continue; }
+            if (c.fill) e.color = c.fill;
             else if (c.rule) e.color = c.rule;
             else if (fixedAll) e.color = fixedAll;
-            else if (styleCols) e.color = styleCols[i % styleCols.length];
-            else if (this.tplEfectiva === "classic") e.color = CLASSIC[i % CLASSIC.length];
-            else e.color = pal?.getColor?.(c.name)?.value ?? CLASSIC[i % CLASSIC.length];
+            else {
+                if (styleCols) e.color = styleCols[i % styleCols.length];
+                else if (this.tplEfectiva === "classic") e.color = CLASSIC[i % CLASSIC.length];
+                else e.color = pal?.getColor?.(c.name)?.value ?? CLASSIC[i % CLASSIC.length];
+                auto.push(e);
+                continue;
+            }
+            used.push(e.color);
+        }
+        // Otros: gris neutro (el del ajuste, o el del tema), distinto de los sectores.
+        const other = this.entries.find(e => e.isOther);
+        const grays = [String(s.slices.otherColor || "#A19F9D"), "#A19F9D", "#8A8886", "#C8C6C4", "#6E6E6E", "#D9D9D9", "#5A5A5A"];
+        const otherColor = this.hc ? this.hcBg : grays.find(g => !used.some(u => colorDist(u, g) < 40) && !auto.some(e => colorDist(e.color, g) < 25)) ?? grays[0];
+        if (other) other.color = otherColor;
+        if (this.hc) return;
+        const reserved = other ? [otherColor] : [];
+        for (const e of auto) {
+            const base = e.color;
+            let pick = base;
+            const clash = (c: string) => used.concat(reserved).some(u => colorDist(u, c) < 50);
+            for (let k = 1; clash(pick) && k <= 12; k++) {
+                const t = 0.2 * Math.ceil(k / 2);
+                pick = mix(base, k % 2 ? "#FFFFFF" : "#000000", Math.min(0.8, t));
+            }
+            e.color = pick;
+            used.push(pick);
         }
     }
 
@@ -990,20 +1021,46 @@ export class Visual implements IVisual {
         this.arcs = pieGen(this.entries).map((p, i) => ({ e: p.data, a0: p.startAngle, a1: p.endAngle, idx: i }));
         const labelsOn = !!s.labels.show;
         const fsL = this.fz(Number(s.labels.fontSize));
-        const plan = (R: number) => this.planLabels(R, pie ? 0 : R * Number(s.slices.innerRadius) / 100, cx, cy, ax, ay, aw, ah, fsL, ringSpace);
+        const riOf = (r: number) => (pie ? 0 : r * Number(s.slices.innerRadius) / 100);
         let R = R0;
         let labels: PlacedLabel[] = [];
-        if (labelsOn) {
-            const first = plan(R0);
-            labels = first.placed;
-            // Etiquetas que no caben dentro: se encoge el donut para darles columna si el radio no baja de ~60 %.
-            if (first.needW > 0) {
-                const e = Math.max(6, fsL * 0.8);
-                const fitR = (w: number) => Math.min(R0, aw / 2 - ringSpace - e - 6 - w - 2);
-                const r1 = fitR(first.needWFull), r2 = fitR(first.needW);
-                const nr = r1 >= R0 * 0.72 ? r1 : r2 >= Math.max(R0 * 0.6, 24) ? r2 : R0;
-                if (nr < R0) { R = Math.floor(nr); labels = plan(R).placed; }
+        if (labelsOn && this.arcs.length) {
+            // Todas las etiquetas con el mismo contenido y la misma letra (Tino, 24-11). Con la tabla visible, siempre
+            // dentro: se encoge la letra de todas a la vez hasta el mínimo y luego se recorta el contenido de todas
+            // (valor → nombre → %); el sector que no admite ni la mínima se queda sin etiqueta (el dato está en la tabla).
+            // Fuera con guía solo con la tabla en Off, donde la etiqueta es lo único que nombra el sector.
+            const tableOn = !!this.tableEl;
+            const pmode = String(s.labels.position);
+            const mode: "inside" | "auto" | "outside" = tableOn || pmode === "inside" ? "inside" : pmode === "outside" ? "outside" : "auto";
+            const levels = Math.max(...this.arcs.map(a => this.variants(this.labelParts(a.e)).length));
+            const sizes: number[] = [];
+            for (let f = fsL; f > this.minFs; f -= 0.5) sizes.push(f);
+            sizes.push(this.minFs);
+            const planAt = (level: number, f: number) => {
+                let p = this.planLabels(R0, riOf(R0), cx, cy, ax, ay, aw, ah, f, ringSpace, level, mode);
+                let r = R0;
+                if (mode !== "inside" && p.needW > 0) {
+                    const e = Math.max(6, f * 0.8);
+                    const nr = Math.min(R0, aw / 2 - ringSpace - e - 6 - p.needW - 2);
+                    if (nr < R0 && nr >= Math.max(R0 * 0.6, 24)) {
+                        r = Math.floor(nr);
+                        p = this.planLabels(r, riOf(r), cx, cy, ax, ay, aw, ah, f, ringSpace, level, mode);
+                    }
+                }
+                return { p, r };
+            };
+            // Sectores sin remedio: no admiten ni la versión mínima a la letra mínima. No cuentan para elegir.
+            const floor = planAt(levels - 1, this.minFs);
+            const target = floor.p.placed.length;
+            let best = floor;
+            search: for (let level = 0; level < levels; level++) {
+                for (const f of sizes) {
+                    const c = planAt(level, f);
+                    if (c.p.placed.length >= target) { best = c; break search; }
+                }
             }
+            R = best.r;
+            labels = best.p.placed;
         }
         const ri = pie ? 0 : R * Number(s.slices.innerRadius) / 100;
         const ringR = R + (ringOn ? 2 : 0);
@@ -1076,12 +1133,12 @@ export class Visual implements IVisual {
         }
     }
 
-    /** Variantes de una etiqueta, de la completa a la mínima: se retira % → valor → nombre. */
+    /** Variantes de una etiqueta, de la completa a la mínima: se retira valor → nombre → % (el % es lo último que se quita). */
     private variants(parts: LabelPart[]): string[] {
         const out: string[] = [];
         let cur = parts.slice();
         out.push(cur.map(p => p.text).join(" · "));
-        for (const kind of ["pct", "val", "name"] as const) {
+        for (const kind of ["val", "name", "pct"] as const) {
             if (cur.length <= 1) break;
             if (cur.some(p => p.kind === kind)) { cur = cur.filter(p => p.kind !== kind); out.push(cur.map(p => p.text).join(" · ")); }
         }
@@ -1107,58 +1164,49 @@ export class Visual implements IVisual {
     }
 
     /**
-     * Cascada de etiquetas: dentro del sector si cabe (de la completa a la mínima) → fuera, con guía, en dos columnas sin
-     * solapes → retirada entera. Nunca se recorta un texto. needW = ancho que pedirían las de fuera (para encoger el radio).
+     * Coloca TODAS las etiquetas con el mismo contenido (nivel de recorte `level`) y la misma letra `fs`: dentro del
+     * sector si cabe; si no, y se permite (tabla en Off), fuera con guía en dos columnas sin solapes; si no, retirada
+     * entera. Nunca se recorta un texto. needW = ancho que pedirían las de fuera (para encoger el radio).
      */
-    private planLabels(R: number, ri: number, cx: number, cy: number, ax: number, ay: number, aw: number, ah: number, fs: number, ringSpace: number):
-        { placed: PlacedLabel[]; needW: number; needWFull: number } {
-        const s = this.settings;
-        const posMode = String(s.labels.position);
+    private planLabels(R: number, ri: number, cx: number, cy: number, ax: number, ay: number, aw: number, ah: number, fs: number, ringSpace: number,
+        level: number, mode: "inside" | "auto" | "outside"): { placed: PlacedLabel[]; retired: number; needW: number } {
         const h = fs * 1.2;
-        const gap = Number(s.slices.gap) || 0;
+        const gap = Number(this.settings.slices.gap) || 0;
         const placed: PlacedLabel[] = [];
-        const outside: { a: Arc; vars: string[]; am: number }[] = [];
-        const tryInside = (a: Arc, texts: string[]): boolean => {
+        const outside: { a: Arc; text: string; am: number }[] = [];
+        let retired = 0;
+        const tryInside = (a: Arc, text: string): boolean => {
             const am = (a.a0 + a.a1) / 2;
             const radii = ri > 0 ? [(ri + R) / 2] : [R * 0.62, R * 0.72, R * 0.5];
             if (a.a1 - a.a0 >= 2 * Math.PI - 1e-6) radii.unshift(ri > 0 ? (ri + R) / 2 : 0);
-            for (const text of texts) {
-                const w = this.measure(text, fs) + 2;
-                for (const rm of radii) {
-                    const x = rm * Math.sin(am), y = -rm * Math.cos(am);
-                    if (this.fitsInSlice(x, y, w, h, a.a0, a.a1, ri, R, gap / 2 + 1)) {
-                        placed.push({ e: a.e, text, x: cx + x, y: cy + y, anchor: "middle", inside: true, w });
-                        return true;
-                    }
+            const w = this.measure(text, fs) + 2;
+            for (const rm of radii) {
+                const x = rm * Math.sin(am), y = -rm * Math.cos(am);
+                if (this.fitsInSlice(x, y, w, h, a.a0, a.a1, ri, R, gap / 2 + 1)) {
+                    placed.push({ e: a.e, text, x: cx + x, y: cy + y, anchor: "middle", inside: true, w, fs });
+                    return true;
                 }
             }
             return false;
         };
-        // 1) La etiqueta completa dentro; 2) completa (o la mayor que quepa) fuera, en su columna; 3) si no hay sitio
-        // fuera, una versión reducida dentro; 4) retirada entera.
-        const all: { a: Arc; vars: string[]; am: number }[] = this.arcs.map(a => ({ a, vars: this.variants(this.labelParts(a.e)), am: (a.a0 + a.a1) / 2 }));
-        for (const it of all) {
-            if (posMode !== "outside" && tryInside(it.a, it.vars.slice(0, 1))) continue;
-            if (posMode !== "inside") outside.push(it);
-            else tryInside(it.a, it.vars.slice(1));
+        for (const a of this.arcs) {
+            const vars = this.variants(this.labelParts(a.e));
+            const text = vars[Math.min(level, vars.length - 1)];
+            if (mode !== "outside" && tryInside(a, text)) continue;
+            if (mode === "inside") retired++;
+            else outside.push({ a, text, am: (a.a0 + a.a1) / 2 });
         }
-        const fallback = () => {
-            if (posMode === "outside") return;
-            for (const it of outside) if (!placed.some(p => p.e === it.a.e)) tryInside(it.a, it.vars.slice(1));
-        };
-        if (!outside.length) return { placed, needW: 0, needWFull: 0 };
+        if (!outside.length) return { placed, retired, needW: 0 };
         const e = Math.max(6, fs * 0.8);
-        const needW = Math.max(...outside.map(o => this.measure(o.vars[o.vars.length - 1], fs))) + 4;
-        const needWFull = Math.max(...outside.map(o => this.measure(o.vars[0], fs))) + 4;
+        const needW = Math.max(...outside.map(o => this.measure(o.text, fs))) + 4;
         const rOut = R + ringSpace;
         const hOut = fs * 1.4;
         for (const side of [1, -1]) {
             const colX = cx + side * (rOut + e + 4);
             const avail = side > 0 ? ax + aw - (colX + 3) - 1 : colX - 3 - ax - 1;
-            let items = outside.filter(o => (Math.sin(o.am) >= 0 ? 1 : -1) === side).map(o => {
-                const text = o.vars.find(v => this.measure(v, fs) + 2 <= avail);
-                return { o, text, ideal: cy - (rOut + e) * Math.cos(o.am) };
-            }).filter(it => it.text !== undefined);
+            const mine = outside.filter(o => (Math.sin(o.am) >= 0 ? 1 : -1) === side);
+            const items = mine.filter(o => this.measure(o.text, fs) + 2 <= avail).map(o => ({ o, ideal: cy - (rOut + e) * Math.cos(o.am) }));
+            retired += mine.length - items.length;
             const minY = ay + hOut / 2, maxY = ay + ah - hOut / 2;
             // Si no caben todas en la columna, se retiran enteras las de los sectores más pequeños.
             let ys: number[] = [];
@@ -1171,23 +1219,22 @@ export class Visual implements IVisual {
                 let worst = 0;
                 items.forEach((it, i) => { if (it.o.a.e.value < items[worst].o.a.e.value) worst = i; });
                 items.splice(worst, 1);
+                retired++;
             }
             items.forEach((it, i) => {
                 const am = it.o.am;
                 const p0: [number, number] = [cx + R * Math.sin(am), cy - R * Math.cos(am)];
                 const p1: [number, number] = [cx + (rOut + e * 0.6) * Math.sin(am), cy - (rOut + e * 0.6) * Math.cos(am)];
                 const p2: [number, number] = [colX, ys[i]];
-                placed.push({ e: it.o.a.e, text: it.text, x: colX + side * 3, y: ys[i], anchor: side > 0 ? "start" : "end", inside: false,
-                    w: this.measure(it.text, fs) + 2, leader: [p0, p1, p2] });
+                placed.push({ e: it.o.a.e, text: it.o.text, x: colX + side * 3, y: ys[i], anchor: side > 0 ? "start" : "end", inside: false,
+                    w: this.measure(it.o.text, fs) + 2, fs, leader: [p0, p1, p2] });
             });
         }
-        fallback();
-        return { placed, needW, needWFull };
+        return { placed, retired, needW };
     }
 
     private drawLabels(labels: PlacedLabel[]): void {
         const s = this.settings;
-        const fs = this.fz(Number(s.labels.fontSize));
         const g = this.svg.append("g").attr("class", "dn-labels").style("pointer-events", "none");
         const outColor = this.hc ? this.hcFg : String(s.labels.color || this.ink);
         for (const l of labels) {
@@ -1201,7 +1248,7 @@ export class Visual implements IVisual {
                 else fill = contrast("#FFFFFF", l.e.color) >= contrast("#252423", l.e.color) ? "#FFFFFF" : "#252423";
             }
             const t = g.append("text").attr("class", "dn-label").attr("data-key", l.e.key).attr("x", l.x).attr("y", l.y).attr("dy", "0.35em")
-                .attr("text-anchor", l.anchor).attr("font-size", fs).attr("fill", fill).style("font-family", this.font).text(l.text);
+                .attr("text-anchor", l.anchor).attr("font-size", l.fs).attr("fill", fill).style("font-family", this.font).text(l.text);
             if (l.inside && this.patternsOn && !this.hc) {
                 t.attr("paint-order", "stroke").attr("stroke", fill === "#FFFFFF" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)").attr("stroke-width", 2.5);
             }
@@ -1965,6 +2012,25 @@ function luminance(hex: string): number {
     const n = parseInt(m[1], 16);
     const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(c => { const x = c / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
     return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+
+function rgbOf(hex: string): [number, number, number] {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+    if (!m) return [128, 128, 128];
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Distancia perceptual aproximada entre dos colores (RGB ponderado, 0–~765). */
+function colorDist(a: string, b: string): number {
+    const [r1, g1, b1] = rgbOf(a), [r2, g2, b2] = rgbOf(b);
+    const rm = (r1 + r2) / 2;
+    return Math.sqrt((2 + rm / 256) * (r1 - r2) ** 2 + 4 * (g1 - g2) ** 2 + (2 + (255 - rm) / 256) * (b1 - b2) ** 2);
+}
+
+function mix(a: string, b: string, t: number): string {
+    const x = rgbOf(a), y = rgbOf(b);
+    return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("").toUpperCase();
 }
 
 function contrast(a: string, b: string): number {

@@ -113,7 +113,7 @@ window.powerbi = { visuals: { plugins: {} }, extensibility: {} };
 (function(){
  let sel = [];
  const T = { foreground: '#252423', background: '#FFFFFF', secondary: '#605E5C',
-   colors: ['#118DFF', '#12239E', '#E66C37', '#6B007B', '#E044A7', '#744EC2', '#D9B300', '#D64550', '#197278', '#1AAB40'] };
+   colors: window.__themeColors || ['#118DFF', '#12239E', '#E66C37', '#6B007B', '#E044A7', '#744EC2', '#D9B300', '#D64550', '#197278', '#1AAB40'] };
  const asignados = {}; let nAsig = 0;
  window.__host = {
   eventService: { renderingStarted(){ __ev.push('S'); }, renderingFinished(){ __ev.push('F'); }, renderingFailed(o,m){ __ev.push('X'); console.error('FAILED', m); } },
@@ -146,7 +146,7 @@ def check(name, ok, detail=""):
         FALLOS.append(name)
 
 
-async def page(b, dv, W=900, H=560, plan=PLAN, edit=False, hc=False, name=None, locale="en-US", fetch_ok=True, allow=True, op=0):
+async def page(b, dv, W=900, H=560, plan=PLAN, edit=False, hc=False, name=None, locale="en-US", fetch_ok=True, allow=True, op=0, theme_colors=None):
     guid = json.load(io.open(os.path.join(DROP, "pbiviz.json"), encoding="utf-8"))["visual"]["guid"]
     pg = await b.new_page(viewport={"width": W + 20, "height": H + 20})
     errs = []
@@ -154,7 +154,7 @@ async def page(b, dv, W=900, H=560, plan=PLAN, edit=False, hc=False, name=None, 
     pg.on("pageerror", lambda e: errs.append(str(e)))
     await pg.set_content(f"<html><body style='margin:0;background:#fff'><div id='host' style='position:relative;width:{W}px;height:{H}px;overflow:hidden'></div></body></html>")
     await pg.add_style_tag(path=os.path.join(DROP, "visual.css"))
-    await pg.add_script_tag(content=f"window.__plan = {json.dumps(plan)}; window.__hc = {json.dumps(hc)}; window.__locale = {json.dumps(locale)}; window.__fetchOk = {json.dumps(fetch_ok)}; window.__allow = {json.dumps(allow)};")
+    await pg.add_script_tag(content=f"window.__plan = {json.dumps(plan)}; window.__hc = {json.dumps(hc)}; window.__locale = {json.dumps(locale)}; window.__fetchOk = {json.dumps(fetch_ok)}; window.__allow = {json.dumps(allow)}; window.__themeColors = {json.dumps(theme_colors)};")
     await pg.add_script_tag(content=STUB)
     await pg.add_script_tag(path=os.path.join(DROP, "visual.js"))
     await pg.evaluate("(g) => { window.__v = powerbi.visuals.plugins[g].create({ element: document.getElementById('host'), host: __host }); }", guid)
@@ -215,6 +215,9 @@ INFO = r"""() => {
   return { labels, tb, rows, allText, center, slices, minFont: sizes.length ? Math.min(...sizes) : 0, maxFont: sizes.length ? Math.max(...sizes) : 0,
     tableOverflow: table ? (table.scrollHeight > table.clientHeight + 1 || table.scrollWidth > table.clientWidth + 1) : false,
     bg: root.style.background, wm: wm && wm.style.display !== 'none' ? wm.textContent : null, notes: allText,
+    leaders: root.querySelectorAll('.dn-leader').length,
+    ring: (() => { const g = root.querySelector('.dn-slices'); return g ? R(g) : null; })(),
+    labelSizes: Array.from(root.querySelectorAll('text.dn-label')).map(t => +t.getAttribute('font-size')),
     focusRing: !!root.querySelector('.dn-focus path'), live: (root.querySelector('.dn-live') || {}).textContent || '' };
 }"""
 
@@ -264,6 +267,28 @@ def comprobar_dibujo(i, W, H, label, mira_suma=True):
     check(f"{label}: texto ≥ 8 px", i["minFont"] >= 8 - 1e-6, str(i["minFont"]))
 
 
+def comprobar_etiquetas(i, label, contenido, tabla=True):
+    """Tino, 24-11: todas iguales (letra y contenido); con tabla, todas dentro y sin guías; el % es lo último que se quita."""
+    labs = i["labels"]
+    check(f"{label}: todas las etiquetas con la misma letra", len(set(i["labelSizes"])) <= 1, str(sorted(set(i["labelSizes"]))))
+    check(f"{label}: todas con el mismo contenido (mismas partes)", len({l["text"].count(" · ") for l in labs}) <= 1, str([l["text"] for l in labs]))
+    if contenido in ("percent", "namePercent", "valuePercent", "all", "auto"):
+        check(f"{label}: % en toda etiqueta visible", all("%" in l["text"] for l in labs), str([l["text"] for l in labs]))
+    if tabla:
+        ring = i["ring"]
+        dentro = all(ring and l["x0"] >= ring["x0"] - 0.5 and l["x1"] <= ring["x1"] + 0.5 and l["y0"] >= ring["y0"] - 0.5 and l["y1"] <= ring["y1"] + 0.5 for l in labs)
+        check(f"{label}: con tabla, ninguna guía ni etiqueta fuera del anillo", i["leaders"] == 0 and dentro, f"guías={i['leaders']}")
+
+
+def comprobar_colores(i, label):
+    fills = [s["fill"].upper() for s in i["slices"]]
+    check(f"{label}: colores de sectores únicos", len(set(fills)) == len(fills), str(fills))
+    otro = next((s["fill"].upper() for s in i["slices"] if "other" in s["key"]), None)
+    if otro:
+        r, g, b_ = int(otro[1:3], 16), int(otro[3:5], 16), int(otro[5:7], 16)
+        check(f"{label}: Otros en gris neutro distinto", max(r, g, b_) - min(r, g, b_) <= 12 and fills.count(otro) == 1, otro)
+
+
 TAMANOS = [(1200, 640), (500, 320), (300, 200), (160, 120)]
 
 
@@ -295,10 +320,41 @@ async def main():
                 pg = await page(b, dv_caso_a(objs), W, H, name=f"a_{tag}_{W}x{H}")
                 i = await info(pg)
                 comprobar_dibujo(i, W, H, lbl, mira_suma=tag != "off" and tag != "all10")
-                if W >= (1200 if tag == "fuera" else 500):
-                    check(f"{lbl}: hay etiquetas fuera con guía", await pg.evaluate("() => document.querySelectorAll('.dn-leader').length") > 0, "")
+                nlead = await pg.evaluate("() => document.querySelectorAll('.dn-leader').length")
+                if tag == "fuera":
+                    check(f"{lbl}: con tabla visible, Outside no saca etiquetas fuera", nlead == 0, str(nlead))
+                elif W >= 500:
+                    check(f"{lbl}: hay etiquetas fuera con guía", nlead > 0, "")
                 await eventos(pg, lbl)
                 await pg.close()
+
+        print("Etiquetas iguales y colores (prueba de Tino: Report theme, 10 marcas)")
+        TEMA6 = ['#118DFF', '#12239E', '#E66C37', '#6B007B', '#E044A7', '#744EC2']
+        for cont in ["value", "all", "auto"]:
+            for W, H in [(900, 640), (500, 320), (300, 200)]:
+                for tema, tc in [("tema10", None), ("tema6", TEMA6)]:
+                    lbl = f"{cont} {W}x{H} {tema}"
+                    objs = {"labels": {"content": cont}, "slices": {"maxSlices": 8}}
+                    pg = await page(b, dv_caso_a(objs), W, H, theme_colors=tc, name=f"etq_{cont}_{W}x{H}_{tema}")
+                    i = await info(pg)
+                    comprobar_dibujo(i, W, H, lbl)
+                    comprobar_etiquetas(i, lbl, cont)
+                    comprobar_colores(i, lbl)
+                    await eventos(pg, lbl)
+                    await pg.close()
+        for est in ["classic", "boardroom", "ledger", "editorial", "signal", "aurora", "terrace"]:
+            pg = await page(b, dv_caso_a({"style": {"template": est}, "slices": {"maxSlices": 12, "groupBelow": 0}}), 700, 400, name=f"colores_{est}")
+            comprobar_colores(await info(pg), f"{est} 10 sectores")
+            await pg.close()
+            pg = await page(b, dv_caso_a({"style": {"template": est}}), 700, 400)
+            comprobar_colores(await info(pg), f"{est} con Otros")
+            await pg.close()
+        for W, H in [(900, 640), (500, 320)]:
+            pg = await page(b, dv_caso_a({"legend": {"position": "off"}, "labels": {"content": "all"}}), W, H, name=f"etq_off_all_{W}x{H}")
+            i = await info(pg)
+            comprobar_dibujo(i, W, H, f"off all {W}x{H}", mira_suma=False)
+            comprobar_etiquetas(i, f"off all {W}x{H}", "all", tabla=False)
+            await pg.close()
 
         print("Formato de números")
         hover = "() => { const p = document.querySelector('path.dn-slice'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); return (window.__tip.dataItems || []).map(d => d.value); }"
