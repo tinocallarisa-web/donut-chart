@@ -1,5 +1,5 @@
 /*
- * Donut & Pie Chart by TCViz — bloque 1 (motor gratuito).
+ * Donut & Pie Chart by TCViz — motor gratuito (bloque 1) y funciones Pro (bloque 2).
  *
  * Gratis: donut y queso (radio interior, ángulo de inicio, separación), "Otros" honesto (Show at most / Group below %,
  * conjunto y orden globales, todas sus identidades al seleccionarlo), % por resto mayor que suman 100, negativos y
@@ -8,8 +8,12 @@
  * el ángulo de inicio real, texto que escala con el visual, resaltado parcial, tooltips y tooltips de página, menú
  * contextual, teclado, tarjeta Accessibility, Report theme y Classic, landing y asistente, formato desde el lienzo.
  *
- * Pro (bloque 2, aún sin dibujar): Compare with, Target, Segment, Small multiples, Annotation. Los seis estilos de la
- * colección ya funcionan con vista previa bajo la marca común.
+ * Pro (bloque 2): Compare with (Δ pp con minibarra divergente, Δ %, cabecera "Total ±x % vs …", "36 % +2,1" en la
+ * etiqueta si cabe en todas, aviso ⚠ de mezcla, new/gone), Target (% of target con ✓ ≈ ✕ e icono en el borde, aviso si
+ * los totales no coinciden), Segment (anillo exterior de 2 niveles, filas sangradas, selección por par con todas sus
+ * identidades), Small multiples (mismo "Otros", orden y colores; Size by total; tabla compartida), Annotations (subfila
+ * en cursiva) y los seis estilos. Sin licencia: editando, todo bajo la marca común (4 paneles); en lectura, el gratis.
+ * Orden por cabecera de la tabla en memoria.
  *
  * Reglas de la cartera que se cumplen aquí:
  *  - renderingStarted / Finished|Failed 1:1 por update(): los repintados internos (licencia, hover, selección,
@@ -438,13 +442,20 @@ export class Visual implements IVisual {
     }
 
     /**
-     * Qué funciones Pro pide el informe. Bloque 1: solo los estilos de la colección (los pozos Pro existen pero aún no
-     * dibujan nada: sin licencia, el donut es el gratis exacto y no se avisa de una función que no se ve).
+     * Qué funciones Pro pide el informe: un campo en Compare with, Target, Segment, Small multiples o Annotation, o un
+     * estilo de la colección. Sin licencia: editando se dibujan completas bajo la marca común; en lectura, el gratis exacto.
      */
     private attemptedProFeatures(): { labels: string[]; signature: string; touched: Set<string> } {
         const objs: any = this.dataView?.metadata?.objects ?? {};
         const tpl = String(objs.style?.template ?? "");
+        const cols = this.dataView?.metadata?.columns ?? [];
+        const has = (role: string) => cols.some(c => !!(c.roles && c.roles[role]));
         const groups: [string, boolean, string][] = [
+            ["comparison", has("compare"), "cmp"],
+            ["targets", has("target"), "tgt"],
+            ["segments", has("segment"), "seg"],
+            ["small multiples", has("facet"), "sm"],
+            ["annotations", has("annotation") && objs.annotations?.show !== false, "ann"],
             ["style templates", PRO_STYLES.indexOf(tpl) >= 0, "style=" + tpl],
         ];
         const labels: string[] = [];
@@ -466,22 +477,48 @@ export class Visual implements IVisual {
     private featName(id: string): string {
         switch (id) {
             case "style templates": return this.t("Feat_styles", "collection styles");
+            case "comparison": return this.t("Feat_compare", "comparison");
+            case "targets": return this.t("Feat_target", "targets");
+            case "segments": return this.t("Feat_segment", "segment ring");
+            case "small multiples": return this.t("Feat_sm", "small multiples");
+            case "annotations": return this.t("Feat_ann", "annotations");
             default: return id;
         }
     }
 
-    /** La marca común, solo con una función Pro puesta y solo editando, en la franja baja del área del donut. */
+    /**
+     * La marca común, solo con una función Pro puesta y solo editando, en la franja baja del área de dibujo: por debajo
+     * de la cifra central de cada panel y nunca encima de la tabla (donde van las columnas Δ y % of target).
+     */
     private updateWatermark(): void {
         const { labels } = this.attemptedProFeatures();
-        const g = this.geo;
-        if (!this.proPreview || !labels.length || !this.model || !g) { renderProWatermark(this.wm, null); this.wmZone.style.display = "none"; return; }
-        const top = Math.max(g.cy + g.ri * 0.55, g.ay + g.ah * 0.62);
-        const h = Math.max(40, g.ay + g.ah - top);
-        Object.assign(this.wmZone.style, { display: "block", left: g.ax + "px", top: (g.ay + g.ah - h) + "px", width: g.aw + "px", height: h + "px" });
+        const ps = this.panels.filter(p => p.geo);
+        if (!this.proPreview || !labels.length || !this.model || !ps.length) { renderProWatermark(this.wm, null); this.wmZone.style.display = "none"; return; }
+        const g = ps[0].geo;
+        // Área de dibujo: la del panel único, o la unión de las celdas de la rejilla.
+        const ax = Math.min(...ps.map(p => p.geo.ax)), aw = Math.max(...ps.map(p => p.geo.ax + p.geo.aw)) - ax;
+        const ay = Math.min(...ps.map(p => p.geo.ay)), bottom = Math.max(...ps.map(p => p.geo.ay + p.geo.ah));
+        const ah = bottom - ay;
+        const lastRow = ps.filter(p => Math.abs(p.geo.cy - Math.max(...ps.map(q => q.geo.cy))) < 1);
+        const safe = Math.max(...lastRow.map(p => p.geo.cy + Math.max(p.geo.ri * 0.55 + 2, this.centerHalf(p))));
+        const top = Math.max(safe, ps.length > 1 ? 0 : g.ay + g.ah * 0.62);
+        const h = Math.max(40, bottom - top);
+        Object.assign(this.wmZone.style, { display: "block", left: ax + "px", top: (bottom - h) + "px", width: aw + "px", height: h + "px" });
         renderProWatermark(this.wm, {
-            width: g.aw, height: h * 2.2, title: this.t("UI_ProPreview", "Pro preview"), features: labels.map(l => this.featName(l)),
+            width: aw, height: Math.min(ah, h * 2.2), title: this.t("UI_ProPreview", "Pro preview"), features: labels.map(l => this.featName(l)),
             highContrast: this.hc ? { foreground: this.hcFg, background: this.hcBg } : null,
         });
+    }
+
+    /** Media altura del texto central dibujado en un panel (para no taparlo con la marca). */
+    private centerHalf(p: PanelDraw): number {
+        if (!p.g) return 0;
+        let half = 0;
+        p.g.selectAll<SVGTextElement, unknown>(".dn-center-text").each((_d, i, nodes) => {
+            const y = Number(nodes[i].getAttribute("y")), fs = Number(nodes[i].getAttribute("font-size"));
+            half = Math.max(half, Math.abs(y - p.geo.cy) + fs * 0.6);
+        });
+        return half;
     }
 
     private cancelLicenseIcon(): void {
@@ -913,7 +950,7 @@ export class Visual implements IVisual {
     }
 
     private fmtPP(d10: number): string {
-        const s = d10 > 0 ? "+" : d10 < 0 ? "−" : "±";
+        const s = d10 > 0 ? "+" : d10 < 0 ? "−" : "";
         try {
             return s + new Intl.NumberFormat(this.host.locale || "en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(d10) / 10);
         } catch { return s + (Math.abs(d10) / 10).toFixed(1); }
@@ -921,7 +958,7 @@ export class Visual implements IVisual {
 
     private fmtSignedPct(x: number): string {
         const r = Math.round(x * 1000);
-        const s = r > 0 ? "+" : r < 0 ? "−" : "±";
+        const s = r > 0 ? "+" : r < 0 ? "−" : "";
         try {
             return s + new Intl.NumberFormat(this.host.locale || "en-US", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(r) / 1000);
         } catch { return s + (Math.abs(r) / 10).toFixed(1) + "%"; }
@@ -1625,7 +1662,9 @@ export class Visual implements IVisual {
         // Etiquetas comunes a todos los paneles: siempre dentro (la tabla compartida nombra los sectores).
         const labelsByPanel: PlacedLabel[][] = panels.map(() => []);
         if (s.labels.show) {
-            const fsL = this.fz(Number(s.labels.fontSize));
+            // El texto escala con el PANEL (lado menor / 300), no con el visual entero: paneles pequeños, letra pequeña.
+            const kp = Math.max(0.6, Math.min(1.8, Math.min(cw, ch) / 300));
+            const fsL = Math.max(this.minFs, Math.round(Number(s.labels.fontSize) * kp * 2) / 2);
             const levels = Math.max(1, ...panels.map(p => Math.max(0, ...p.arcs.map(a => this.variants(this.labelParts(a.e)).length))));
             const sizes: number[] = [];
             for (let f = fsL; f > this.minFs; f -= 0.5) sizes.push(f);
@@ -2816,6 +2855,7 @@ export class Visual implements IVisual {
         marcar(".dn-center-text", "center", 1);
         marcar(".dn-table", "legend", 1);
         marcar(".dn-ring", "scaleRing", 3);
+        marcar(".dn-sm-title", "smallMultiples", 1);
     }
 
     private getSubSelectionStyles(subs: powerbi.visuals.CustomVisualSubSelection[]): powerbi.visuals.SubSelectionStyles | undefined {
@@ -2827,6 +2867,7 @@ export class Visual implements IVisual {
             case "center": return { type: 1, fontSize: ref("center", "fontSize"), fontColor: ref("center", "color") } as any;
             case "legend": return { type: 1, fontSize: ref("legend", "fontSize"), fontColor: ref("legend", "color") } as any;
             case "scaleRing": return { type: 3, stroke: ref("scaleRing", "color") } as any;
+            case "smallMultiples": return { type: 1, fontSize: ref("smallMultiples", "titleFontSize"), fontColor: ref("smallMultiples", "titleColor") } as any;
         }
         return undefined;
     }
@@ -2847,6 +2888,7 @@ export class Visual implements IVisual {
             case "center": return [toggle("center", "show"), div, reset("center"), nav("center")] as any;
             case "legend": return [pick("legend", "position"), toggle("legend", "header"), pick("legend", "totalRow"), div, reset("legend"), nav("legend")] as any;
             case "scaleRing": return [pick("scaleRing", "mode"), div, reset("scaleRing"), nav("scaleRing")] as any;
+            case "smallMultiples": return [toggle("smallMultiples", "titleBold"), toggle("smallMultiples", "border"), toggle("smallMultiples", "sizeByTotal"), div, reset("smallMultiples"), nav("smallMultiples")] as any;
         }
         return undefined;
     }

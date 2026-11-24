@@ -107,6 +107,53 @@ def dv_caso_f(n=None, segmento=False):
 
 TOTAL_F = sum(r["Litros"] for r in DETALLE)
 
+
+def dv_ventas(objects=None, compare=False, target=False, nota=False, facet=None, segment=None, marcas_excl=(), sin_aa=()):
+    """Hoja Ventas agregada como Desktop: una fila por Marca (× Zona × Canal si se piden), medidas por fila.
+    Nota llega como "First Nota" (texto o None). sin_aa: marcas con Litros AA vacío (para "new" con blanco)."""
+    objects = json.loads(json.dumps(objects or {}))
+    objects.setdefault("style", {}).setdefault("guide", False)
+    keys = ["Marca"] + ([facet] if facet else []) + ([segment] if segment else [])
+    g = OrderedDict()
+    for r in VENTAS:
+        if r["Marca"] in marcas_excl:
+            continue
+        k = tuple(r[x] for x in keys)
+        a = g.setdefault(k, [0.0, 0.0, 0.0, None, 0])
+        a[0] += r["Litros"] or 0
+        a[1] += r["Litros AA"] or 0
+        a[2] += r["Plan litros"] or 0
+        if r["Nota"] and a[3] is None:
+            a[3] = r["Nota"]
+        a[4] += 1
+    filas = sorted(g.items(), key=lambda kv: -kv[1][0])
+    cats = [col("Marca", "category", [k[0] for k, _ in filas])]
+    if facet:
+        cats.append(col(facet, "facet", [k[1] for k, _ in filas]))
+    if segment:
+        cats.append(col(segment, "segment", [k[-1] for k, _ in filas]))
+    ms = [measure("Litros", "values", [v[0] for _, v in filas])]
+    if compare:
+        ms.append(measure("Litros AA", "compare", [None if k[0] in sin_aa else v[1] for k, v in filas]))
+    if target:
+        ms.append(measure("Plan litros", "target", [v[2] for _, v in filas]))
+    if nota:
+        m = {"source": {"displayName": "First Nota", "queryName": "m.Nota", "roles": {"annotation": True}, "type": {"text": True}, "isMeasure": True},
+             "values": [v[3] for _, v in filas]}
+        ms.append(m)
+    return {"metadata": {"objects": objects, "columns": [c["source"] for c in cats] + [m["source"] for m in ms]},
+            "categorical": {"categories": cats, "values": ms}}
+
+
+def ventas_por(campo):
+    d = defaultdict(lambda: [0.0, 0.0, 0.0])
+    for r in VENTAS:
+        x = d[r[campo]]
+        x[0] += r["Litros"] or 0
+        x[1] += r["Litros AA"] or 0
+        x[2] += r["Plan litros"] or 0
+    return d
+
 STUB = r"""
 window.__ev = []; window.__persist = []; window.__notif = []; window.__fetch = 0; window.__menu = [];
 window.powerbi = { visuals: { plugins: {} }, extensibility: {} };
@@ -198,21 +245,45 @@ INFO = r"""() => {
   const tb = table ? R(table) : null;
   const rows = [];
   if (table) {
-    const cells = Array.from(table.querySelectorAll('.dn-grid > .dn-c'));
-    for (let i = 0; i < cells.length; i += 4) {
-      const c = cells.slice(i, i + 4);
-      rows.push({ name: c[1].textContent, value: c[2].textContent, pct: c[3].textContent, header: c[1].classList.contains('dn-h'),
-        total: c[1].classList.contains('dn-t'), child: c[1].classList.contains('dn-child'), key: c[1].getAttribute('data-key') });
+    // Filas por data-ri (el número de columnas cambia con Compare/Target); las subfilas (cap, ann) se cuentan aparte.
+    const by = new Map();
+    for (const c of table.querySelectorAll('.dn-grid > .dn-c')) {
+      const ri = c.getAttribute('data-ri');
+      if (!by.has(ri)) by.set(ri, {});
+      by.get(ri)[c.getAttribute('data-col')] = c;
+    }
+    for (const r of by.values()) {
+      if (!r.name) continue;
+      const n = r.name, T = x => (r[x] ? r[x].textContent : null);
+      rows.push({ name: n.textContent, value: T('val'), pct: T('pct'), dpp: T('dpp'), dval: T('dval'), tgt: T('tgt'),
+        dpp10: r.dpp && r.dpp.hasAttribute('data-dpp10') ? +r.dpp.getAttribute('data-dpp10') : (n.hasAttribute('data-dpp10') ? +n.getAttribute('data-dpp10') : null),
+        mix: n.hasAttribute('data-mix'), isNew: n.hasAttribute('data-new'), gone: n.hasAttribute('data-gone'),
+        header: n.classList.contains('dn-h'), total: n.classList.contains('dn-t'), child: n.classList.contains('dn-child'),
+        seg: n.classList.contains('dn-seg'), goneRow: n.classList.contains('dn-gone'), key: n.getAttribute('data-key'),
+        bar: r.bar ? ((r.bar.querySelector('rect') || {getAttribute(){return ''}}).getAttribute('data-sign') || '') : null });
     }
   }
-  const allText = Array.from(root.querySelectorAll('text, .dn-table, .dn-notes, .dn-msg, .dn-landing')).map(e => e.textContent).join(' | ');
+  const allText = Array.from(root.querySelectorAll('text, .dn-table, .dn-notes, .dn-msg, .dn-landing, .dn-sm-title, .dn-smnote')).map(e => e.textContent).join(' | ');
   const center = Array.from(root.querySelectorAll('.dn-center-text')).map(t => ({ text: t.textContent, size: +t.getAttribute('font-size'), ...R(t) }));
   const slices = Array.from(root.querySelectorAll('path.dn-slice')).map(p => ({ key: p.getAttribute('data-key'), fill: p.getAttribute('fill'), stroke: p.getAttribute('stroke') }));
   const sizes = Array.from(root.querySelectorAll('svg text')).filter(t => t.textContent.trim() && !t.textContent.startsWith('[test'))
      .map(t => parseFloat(t.getAttribute('font-size') || getComputedStyle(t).fontSize));
   if (table) sizes.push(parseFloat(getComputedStyle(table).fontSize));
   const wm = h.querySelector('.tcviz-wm');
-  return { labels, tb, rows, allText, center, slices, minFont: sizes.length ? Math.min(...sizes) : 0, maxFont: sizes.length ? Math.max(...sizes) : 0,
+  const cap = table ? Array.from(table.querySelectorAll('.dn-cap')).map(c => c.textContent) : [];
+  const ann = table ? Array.from(table.querySelectorAll('.dn-ann')).map(c => ({ text: c.textContent, italic: getComputedStyle(c).fontStyle })) : [];
+  const segs = Array.from(root.querySelectorAll('path.dn-seg')).map(p => ({ key: p.getAttribute('data-key'), fill: p.getAttribute('fill'), panel: p.getAttribute('data-panel') }));
+  const ticons = Array.from(root.querySelectorAll('.dn-ticon')).map(g => ({ key: g.getAttribute('data-key'), st: g.getAttribute('data-status'), ...R(g) }));
+  const panels = Array.from(root.querySelectorAll('.dn-panel')).map(g => {
+    const c = Array.from(g.querySelectorAll('.dn-center-text')).map(t => t.textContent);
+    const ring = g.querySelector('.dn-slices'); return { center: c, ...(ring ? R(ring) : {}), slices: Array.from(g.querySelectorAll('path.dn-slice')).map(p => ({ key: p.getAttribute('data-key'), fill: p.getAttribute('fill') })) };
+  });
+  const titles = Array.from(root.querySelectorAll('.dn-sm-title')).map(t => t.textContent);
+  const smnote = (root.querySelector('.dn-smnote') || {}).textContent || '';
+  const wz = root.querySelector('.dn-wmzone'); const wzone = wz && wz.style.display !== 'none' ? R(wz) : null;
+  const dcells = table ? Array.from(table.querySelectorAll('[data-col=dpp],[data-col=dval],[data-col=bar],[data-col=tgt]')).map(R) : [];
+  const centers = Array.from(root.querySelectorAll('.dn-center-text')).map(R);
+  return { cap, ann, segs, ticons, panels, titles, smnote, wzone, dcells, centers, labels, tb, rows, allText, center, slices, minFont: sizes.length ? Math.min(...sizes) : 0, maxFont: sizes.length ? Math.max(...sizes) : 0,
     tableOverflow: table ? (table.scrollHeight > table.clientHeight + 1 || table.scrollWidth > table.clientWidth + 1) : false,
     bg: root.style.background, wm: wm && wm.style.display !== 'none' ? wm.textContent : null, notes: allText,
     leaders: root.querySelectorAll('.dn-leader').length, otherPattern: !!root.querySelector('.dn-pat-other'),
@@ -241,7 +312,7 @@ def pct_num(t):
 def comprobar_dibujo(i, W, H, label, mira_suma=True):
     """Las comprobaciones de cada captura: % suman 100, sin "…", etiquetas sin solaparse ni salirse, la tabla cabe."""
     if mira_suma:
-        filas = [r for r in i["rows"] if not r["header"] and not r["total"] and not r["child"]]
+        filas = [r for r in i["rows"] if not r["header"] and not r["total"] and not r["child"] and not r["seg"]]
         nums = [pct_num(r["pct"]) for r in filas]
         check(f"{label}: los % de la tabla suman 100", filas and None not in nums and abs(sum(nums) - 100) < 1e-6, str([r["pct"] for r in filas]))
         hijos = [r for r in i["rows"] if r["child"]]

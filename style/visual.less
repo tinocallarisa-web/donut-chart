@@ -85,3 +85,23 @@
     .dn-l-title { font-size: 14px; }
     .dn-l-inline { font-size: 12px; }
 }
+
+// Bloque 2 (Pro): columnas de cambio y objetivo, subfilas, paneles de small multiples.
+.dn-table {
+    .dn-bar { display: flex; align-items: center; justify-content: center; align-self: center; svg { display: block; } }
+    .dn-sort { font: inherit; font-weight: 600; background: transparent; border: none; padding: 0; margin: 0; cursor: pointer; color: inherit; text-align: inherit; white-space: nowrap; }
+    .dn-sort:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+    .dn-h.dn-num .dn-sort { text-align: right; }
+    .dn-cap { font-weight: 600; padding-bottom: 0.2em; cursor: default; }
+    .dn-ann { font-style: italic; padding: 0 0 0.12em 0.9em; overflow-wrap: anywhere; font-size: 0.92em; }
+    .dn-seg.dn-name { padding-left: 0.9em; }
+    .dn-tag { font-style: italic; }
+    .dn-glyph { font-weight: 700; }
+    .dn-gone { cursor: default; }
+}
+.dn-root {
+    .dn-sm-title { position: absolute; white-space: nowrap; overflow: hidden; pointer-events: none; }
+    .dn-smnote { position: absolute; white-space: nowrap; overflow: hidden; pointer-events: none; }
+    .dn-seg, .dn-ticon { cursor: pointer; }
+    &.dn-motion .dn-segg { transition: opacity 120ms ease; }
+}
