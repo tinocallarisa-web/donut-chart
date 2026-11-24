@@ -153,7 +153,10 @@ export class Visual implements IVisual {
         L.push("HIGHLIGHTS: " + (anyHighlight ? "SÍ llegan" : "no"));
 
         // Suma de "values" por categoría (lo que serían los sectores) y por panel
-        const vcol = groups.length ? groups[0].values.find((c: DataViewValueColumn) => this.hasRole(c.source, "values")) : undefined;
+        // Directo de categorical.values, NO de grouped(): grouped() puede quedarse con el primer segmento tras un Append.
+        const vcol = (vals as unknown as DataViewValueColumn[]).find(c => this.hasRole(c.source, "values"));
+        const vg = groups.length ? groups[0].values.find((c: DataViewValueColumn) => this.hasRole(c.source, "values")) : undefined;
+        L.push("values directos=" + (vcol ? vcol.values.length : 0) + "  values vía grouped()=" + (vg ? vg.values.length : 0));
         if (axisCat && vcol) {
             const porCat = new Map<string, number>();
             const paneles = new Set<string>();
