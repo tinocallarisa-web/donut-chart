@@ -720,20 +720,31 @@ export class Visual implements IVisual {
         // Otros: gris neutro (el del ajuste, o el del tema), distinto de los sectores.
         const other = this.entries.find(e => e.isOther);
         const grays = [String(s.slices.otherColor || "#A19F9D"), "#A19F9D", "#8A8886", "#C8C6C4", "#6E6E6E", "#D9D9D9", "#5A5A5A"];
-        const otherColor = this.hc ? this.hcBg : grays.find(g => !used.some(u => colorDist(u, g) < 40) && !auto.some(e => colorDist(e.color, g) < 25)) ?? grays[0];
+        const otherColor = this.hc ? this.hcBg : grays.find(g => !used.some(u => deltaE2000(toLab(u), toLab(g)) < 12)) ?? grays[0];
         if (other) other.color = otherColor;
         if (this.hc) return;
-        const reserved = other ? [otherColor] : [];
+        // Tonos automáticos perceptiblemente distintos: ΔE2000 ≥ 12 con cualquier sector visible y ≥ 20 con sus vecinos;
+        // si variar la luminosidad no basta, se rota el tono. Ningún automático en gris (el gris es solo de "Otros").
+        const fixed = this.entries.filter(e => !e.isOther && auto.indexOf(e) < 0).map(e => e.color).concat(other ? [otherColor] : []);
+        const chosen = new Map<Entry, string>();
+        const order = this.entries;
         for (const e of auto) {
-            const base = e.color;
-            let pick = base;
-            const clash = (c: string) => used.concat(reserved).some(u => colorDist(u, c) < 50);
-            for (let k = 1; clash(pick) && k <= 12; k++) {
-                const t = 0.2 * Math.ceil(k / 2);
-                pick = mix(base, k % 2 ? "#FFFFFF" : "#000000", Math.min(0.8, t));
+            const idx = order.indexOf(e);
+            const prev = idx > 0 ? order[idx - 1] : null;
+            const next = idx === order.length - 1 ? order[0] : order[idx + 1];
+            const neigh = [prev, next].filter(x => x && (x.isOther || auto.indexOf(x) < 0 || chosen.has(x))).map(x => chosen.get(x) ?? x.color);
+            const others = fixed.concat(Array.from(chosen.values()));
+            let bestC = e.color, bestScore = -Infinity;
+            for (const c of colorCandidates(e.color)) {
+                const lab = toLab(c);
+                const minAll = others.length ? Math.min(...others.map(o => deltaE2000(lab, toLab(o)))) : 99;
+                const minNb = neigh.length ? Math.min(...neigh.map(o => deltaE2000(lab, toLab(o)))) : 99;
+                if (minAll >= 12 && minNb >= 20) { bestC = c; bestScore = Infinity; break; }
+                const score = Math.min(minAll / 12, minNb / 20);
+                if (score > bestScore) { bestScore = score; bestC = c; }
             }
-            e.color = pick;
-            used.push(pick);
+            chosen.set(e, bestC);
+            e.color = bestC;
         }
     }
 
@@ -1049,14 +1060,23 @@ export class Visual implements IVisual {
                 }
                 return { p, r };
             };
-            // Sectores sin remedio: no admiten ni la versión mínima a la letra mínima. No cuentan para elegir.
+            // La letra común la deciden los sectores legibles (los que admiten su etiqueta mínima a ≥ 0,75 × la letra base),
+            // no el más pequeño: con esa letra, la etiqueta que no cabe en su sector se oculta (el dato está en la tabla).
+            const fsLeg = Math.max(this.minFs, fsL * 0.75);
+            const legible = new Set(planAt(levels - 1, fsLeg).p.placed.map(l => l.e));
             const floor = planAt(levels - 1, this.minFs);
-            const target = floor.p.placed.length;
             let best = floor;
+            const fitsAll = (c: { p: { placed: PlacedLabel[] } }) => {
+                if (!legible.size) return c.p.placed.length >= floor.p.placed.length;
+                const got = new Set(c.p.placed.map(l => l.e));
+                for (const e of legible) if (!got.has(e)) return false;
+                return true;
+            };
             search: for (let level = 0; level < levels; level++) {
                 for (const f of sizes) {
+                    if (legible.size && f < fsLeg) break;
                     const c = planAt(level, f);
-                    if (c.p.placed.length >= target) { best = c; break search; }
+                    if (fitsAll(c)) { best = c; break search; }
                 }
             }
             R = best.r;
@@ -2021,16 +2041,81 @@ function rgbOf(hex: string): [number, number, number] {
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/** Distancia perceptual aproximada entre dos colores (RGB ponderado, 0–~765). */
-function colorDist(a: string, b: string): number {
-    const [r1, g1, b1] = rgbOf(a), [r2, g2, b2] = rgbOf(b);
-    const rm = (r1 + r2) / 2;
-    return Math.sqrt((2 + rm / 256) * (r1 - r2) ** 2 + 4 * (g1 - g2) ** 2 + (2 + (255 - rm) / 256) * (b1 - b2) ** 2);
+function toLab(hex: string): [number, number, number] {
+    const lin = rgbOf(hex).map(v => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
+    const x = (lin[0] * 0.4124 + lin[1] * 0.3576 + lin[2] * 0.1805) / 0.95047;
+    const y = lin[0] * 0.2126 + lin[1] * 0.7152 + lin[2] * 0.0722;
+    const z = (lin[0] * 0.0193 + lin[1] * 0.1192 + lin[2] * 0.9505) / 1.08883;
+    const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+    return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
 }
 
-function mix(a: string, b: string, t: number): string {
-    const x = rgbOf(a), y = rgbOf(b);
-    return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("").toUpperCase();
+/** CIEDE2000. */
+function deltaE2000(a: [number, number, number], b: [number, number, number]): number {
+    const [L1, a1, b1] = a, [L2, a2, b2] = b;
+    const rad = Math.PI / 180;
+    const C1 = Math.hypot(a1, b1), C2 = Math.hypot(a2, b2), Cm = (C1 + C2) / 2;
+    const G = 0.5 * (1 - Math.sqrt(Math.pow(Cm, 7) / (Math.pow(Cm, 7) + Math.pow(25, 7))));
+    const a1p = a1 * (1 + G), a2p = a2 * (1 + G);
+    const C1p = Math.hypot(a1p, b1), C2p = Math.hypot(a2p, b2);
+    const h = (x: number, y: number) => { if (x === 0 && y === 0) return 0; const v = Math.atan2(y, x) / rad; return v < 0 ? v + 360 : v; };
+    const h1p = h(a1p, b1), h2p = h(a2p, b2);
+    const dL = L2 - L1, dC = C2p - C1p;
+    let dh = 0;
+    if (C1p * C2p !== 0) { dh = h2p - h1p; if (dh > 180) dh -= 360; else if (dh < -180) dh += 360; }
+    const dH = 2 * Math.sqrt(C1p * C2p) * Math.sin(dh * rad / 2);
+    const Lm = (L1 + L2) / 2, Cmp = (C1p + C2p) / 2;
+    let hm = h1p + h2p;
+    if (C1p * C2p !== 0) { if (Math.abs(h1p - h2p) > 180) hm += h1p + h2p < 360 ? 360 : -360; hm /= 2; }
+    const T = 1 - 0.17 * Math.cos((hm - 30) * rad) + 0.24 * Math.cos(2 * hm * rad) + 0.32 * Math.cos((3 * hm + 6) * rad) - 0.2 * Math.cos((4 * hm - 63) * rad);
+    const dTheta = 30 * Math.exp(-Math.pow((hm - 275) / 25, 2));
+    const Rc = 2 * Math.sqrt(Math.pow(Cmp, 7) / (Math.pow(Cmp, 7) + Math.pow(25, 7)));
+    const Sl = 1 + 0.015 * Math.pow(Lm - 50, 2) / Math.sqrt(20 + Math.pow(Lm - 50, 2));
+    const Sc = 1 + 0.045 * Cmp, Sh = 1 + 0.015 * Cmp * T;
+    const Rt = -Math.sin(2 * dTheta * rad) * Rc;
+    return Math.sqrt(Math.pow(dL / Sl, 2) + Math.pow(dC / Sc, 2) + Math.pow(dH / Sh, 2) + Rt * (dC / Sc) * (dH / Sh));
+}
+
+function toHsl(hex: string): [number, number, number] {
+    const [r, g, b] = rgbOf(hex).map(v => v / 255);
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+    if (max === min) return [0, 0, l];
+    const d = max - min, sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    const hh = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [hh * 60, sat, l];
+}
+
+function fromHsl(hh: number, sat: number, l: number): string {
+    hh = ((hh % 360) + 360) % 360;
+    const c = (1 - Math.abs(2 * l - 1)) * sat, x = c * (1 - Math.abs(((hh / 60) % 2) - 1)), m = l - c / 2;
+    const [r, g, b] = hh < 60 ? [c, x, 0] : hh < 120 ? [x, c, 0] : hh < 180 ? [0, c, x] : hh < 240 ? [0, x, c] : hh < 300 ? [x, 0, c] : [c, 0, x];
+    return "#" + [r, g, b].map(v => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+
+/** Croma (LCh): por debajo de ~15 el color se lee como gris. */
+function chroma(hex: string): number { const [, a, b] = toLab(hex); return Math.hypot(a, b); }
+
+/**
+ * Candidatos para un color automático, del cambio más pequeño al mayor: el propio, luego luminosidad, luego tono.
+ * Un gris de la paleta (croma < 15) se sustituye por tonos con color a su misma luminosidad.
+ */
+function colorCandidates(base: string): string[] {
+    const [h0, s0, l0] = toHsl(base);
+    const gray = chroma(base) < 15;
+    const out: { c: string; cost: number }[] = [];
+    if (!gray) out.push({ c: base.toUpperCase(), cost: 0 });
+    const sat = Math.max(gray ? 0.55 : s0, 0.45);
+    const hues = gray ? [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map(x => [x, 1]) : [0, 30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180].map(x => [x, Math.abs(x) / 30]);
+    for (const [dh, hc] of hues) {
+        for (const dl of [0, 0.15, -0.15, 0.28, -0.28]) {
+            if (!gray && dh === 0 && dl === 0) continue;
+            const l = Math.max(0.25, Math.min(0.8, (gray ? Math.max(0.35, Math.min(0.7, l0)) : l0) + dl));
+            const c = fromHsl((gray ? 0 : h0) + dh, sat, l);
+            if (chroma(c) < 15) continue;
+            out.push({ c, cost: hc + Math.abs(dl) / 0.15 });
+        }
+    }
+    return out.sort((a, b) => a.cost - b.cost).map(x => x.c);
 }
 
 function contrast(a: string, b: string): number {

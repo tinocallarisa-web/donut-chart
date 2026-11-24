@@ -280,13 +280,62 @@ def comprobar_etiquetas(i, label, contenido, tabla=True):
         check(f"{label}: con tabla, ninguna guía ni etiqueta fuera del anillo", i["leaders"] == 0 and dentro, f"guías={i['leaders']}")
 
 
+def _lab(hexc):
+    h = hexc.lstrip("#")
+    lin = []
+    for k in (0, 2, 4):
+        c = int(h[k:k + 2], 16) / 255
+        lin.append(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4)
+    x = (lin[0] * 0.4124 + lin[1] * 0.3576 + lin[2] * 0.1805) / 0.95047
+    y = lin[0] * 0.2126 + lin[1] * 0.7152 + lin[2] * 0.0722
+    z = (lin[0] * 0.0193 + lin[1] * 0.1192 + lin[2] * 0.9505) / 1.08883
+    f = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+    return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
+
+
+def de2000(c1, c2):
+    """CIEDE2000, implementación independiente de la del visual."""
+    from math import atan2, cos, degrees, exp, hypot, radians, sin, sqrt
+    L1, a1, b1 = _lab(c1)
+    L2, a2, b2 = _lab(c2)
+    Cm = (hypot(a1, b1) + hypot(a2, b2)) / 2
+    G = 0.5 * (1 - sqrt(Cm ** 7 / (Cm ** 7 + 25 ** 7)))
+    a1p, a2p = a1 * (1 + G), a2 * (1 + G)
+    C1p, C2p = hypot(a1p, b1), hypot(a2p, b2)
+    h1p = degrees(atan2(b1, a1p)) % 360
+    h2p = degrees(atan2(b2, a2p)) % 360
+    dL, dC = L2 - L1, C2p - C1p
+    dh = 0 if C1p * C2p == 0 else ((h2p - h1p + 180) % 360) - 180
+    dH = 2 * sqrt(C1p * C2p) * sin(radians(dh) / 2)
+    Lm, Cmp = (L1 + L2) / 2, (C1p + C2p) / 2
+    if C1p * C2p == 0:
+        hm = h1p + h2p
+    elif abs(h1p - h2p) > 180:
+        hm = (h1p + h2p + (360 if h1p + h2p < 360 else -360)) / 2
+    else:
+        hm = (h1p + h2p) / 2
+    T = 1 - 0.17 * cos(radians(hm - 30)) + 0.24 * cos(radians(2 * hm)) + 0.32 * cos(radians(3 * hm + 6)) - 0.2 * cos(radians(4 * hm - 63))
+    Rc = 2 * sqrt(Cmp ** 7 / (Cmp ** 7 + 25 ** 7))
+    Sl = 1 + 0.015 * (Lm - 50) ** 2 / sqrt(20 + (Lm - 50) ** 2)
+    Sc, Sh = 1 + 0.045 * Cmp, 1 + 0.015 * Cmp * T
+    Rt = -sin(radians(60 * exp(-((hm - 275) / 25) ** 2))) * Rc
+    return sqrt((dL / Sl) ** 2 + (dC / Sc) ** 2 + (dH / Sh) ** 2 + Rt * (dC / Sc) * (dH / Sh))
+
+
 def comprobar_colores(i, label):
-    fills = [s["fill"].upper() for s in i["slices"]]
+    sl = i["slices"]
+    fills = [s["fill"].upper() for s in sl]
     check(f"{label}: colores de sectores únicos", len(set(fills)) == len(fills), str(fills))
-    otro = next((s["fill"].upper() for s in i["slices"] if "other" in s["key"]), None)
+    otro = next((s["fill"].upper() for s in sl if "other" in s["key"]), None)
     if otro:
         r, g, b_ = int(otro[1:3], 16), int(otro[3:5], 16), int(otro[5:7], 16)
         check(f"{label}: Otros en gris neutro distinto", max(r, g, b_) - min(r, g, b_) <= 12 and fills.count(otro) == 1, otro)
+    pares = min((de2000(a, b) for k, a in enumerate(fills) for b in fills[k + 1:]), default=99)
+    vec = min((de2000(fills[k], fills[(k + 1) % len(fills)]) for k in range(len(fills))) if len(fills) > 1 else [99])
+    check(f"{label}: ΔE2000 ≥ 12 entre cualquier par", pares >= 12, f"{pares:.1f}")
+    check(f"{label}: ΔE2000 ≥ 20 entre vecinos", vec >= 20, f"{vec:.1f}")
+    grises = [s["fill"] for s in sl if "other" not in s["key"] and (lambda L: (L[1] ** 2 + L[2] ** 2) ** 0.5)(_lab(s["fill"])) < 15]
+    check(f"{label}: ningún sector automático en gris", not grises, str(grises))
 
 
 TAMANOS = [(1200, 640), (500, 320), (300, 200), (160, 120)]
@@ -349,6 +398,15 @@ async def main():
             pg = await page(b, dv_caso_a({"style": {"template": est}}), 700, 400)
             comprobar_colores(await info(pg), f"{est} con Otros")
             await pg.close()
+        for est in ["report", "classic", "boardroom", "ledger", "editorial", "signal", "aurora", "terrace"]:
+            for tema, tc in [("tema10", None), ("tema6", TEMA6)] if est == "report" else [("", None)]:
+                pg = await page(b, dv_caso_a({"style": {"template": est}, "slices": {"maxSlices": 12, "groupBelow": 0}}), 900, 640, theme_colors=tc, name=f"letra_{est}{tema}_900x640")
+                i = await info(pg)
+                base = 18   # 10 px × k (k = 640/300 → tope 1,8)
+                check(f"{est}{tema} 10 sectores (dos del 2%): letra común ≥ 0,75 × base", i["labelSizes"] and min(i["labelSizes"]) >= 0.75 * base - 1e-6, str(sorted(set(i["labelSizes"]))))
+                comprobar_etiquetas(i, f"{est}{tema} 10 sectores", "auto")
+                comprobar_colores(i, f"{est}{tema} 10 sectores")
+                await pg.close()
         for W, H in [(900, 640), (500, 320)]:
             pg = await page(b, dv_caso_a({"legend": {"position": "off"}, "labels": {"content": "all"}}), W, H, name=f"etq_off_all_{W}x{H}")
             i = await info(pg)
