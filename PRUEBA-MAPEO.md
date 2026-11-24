@@ -54,3 +54,8 @@ fetchMoreData y si hubo algún error o el visual se quedó en blanco. Con eso ba
 - **f (1.ª pasada, build .1):** Power BI recortó a 30.000, el visual pidió 1 ronda (`pedido`) y llegó un Append: las categorías ya tienen las 54.662 filas (1.746 PDV, 57 SKU). Pero la medida leída vía `values.grouped()` seguía con 30.000 valores (24.662 "vacíos", total 13,13 M en vez de 13,91 M): grouped() se queda con el primer segmento. Build .2 lee `categorical.values` directamente y muestra las dos cuentas. Repetir f con la .2.
 - **f OK (build .2):** `values directos=54662` frente a `vía grouped()=30000`; total 13.910.300 = el de la hoja Ventas; vacíos 0; 1.746 PDV y 57 paneles. **Validado: tras fetchMoreData hay que leer `categorical.values[i].values`, nunca `grouped()`.**
 - **g OK:** acepta la jerarquía Familia → Marca en Category; tras explorar en profundidad llega 1 categoría con rol category, `jerarquía=SÍ nivel="Marca"`, queryName `Ventas.Familia Hierarchy.Marca`, 10 filas; botones de drill en la cabecera.
+- **h OK:** Nota llega como "First Nota", rol=annotation, tipo=text, 2 con texto y 8 nulos (Aigua Serena "Leader in 2026" y la marca más pequeña).
+
+**Día 1 cerrado (24-11):** el mapeo categórico `[category, facet, segment]` + medidas aguanta los 8 casos. Para el motor:
+leer medidas de `categorical.values[i]` (nunca grouped()); agregar por clave sin fiarse del orden; formato por defecto propio
+cuando `format` no llega; compare = 0 con valor > 0 → "new"; centro = total de Values.
