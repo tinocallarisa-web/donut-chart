@@ -1,78 +1,87 @@
-// Line Chart by TCViz — estilos que entran en el paquete (importado en src/visual.ts; tools 7.x emite content.css).
+// Donut & Pie Chart by TCViz — estilos que entran en el paquete (importado en src/visual.ts; tools 7.x emite content.css).
+@import (less) "comun/watermark.less";
 
-.lc-root {
+.dn-root {
     position: absolute; inset: 0; overflow: hidden;
     font-family: "Segoe UI", wf_segoe-ui_normal, helvetica, arial, sans-serif;
-    .lc-svg { display: block; overflow: hidden; }
-    .lc-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-    // Marca de la vista previa Pro (como Pareto): blanca con sombra, girada, sin capturar clics. El tamaño, en código.
-    .lc-watermark {
-        position: absolute; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column;
-        text-align: center; pointer-events: none; z-index: 5; font-family: "Segoe UI", sans-serif; font-weight: 700;
-        letter-spacing: 0.06em; white-space: nowrap; color: #FFFFFF; opacity: 0.72; transform: rotate(-20deg);
-        text-shadow: 0 0 3px rgba(46, 52, 64, 0.95), 0 2px 6px rgba(46, 52, 64, 0.75);
-        div + div { font-weight: 600; letter-spacing: 0.02em; margin-top: 0.25em; opacity: 0.95; }
-    }
-    // Quitar el zoom: solo con zoom aplicado, arriba a la derecha.
-    .lc-zoom-reset {
-        position: absolute; top: 4px; right: 6px; z-index: 6; font: 600 11px "Segoe UI", sans-serif; padding: 2px 8px;
-        border: 1px solid #8A8886; border-radius: 4px; cursor: pointer; opacity: 0.92;
-        &:focus-visible { outline: 2px solid #2B6CB0; outline-offset: 1px; }
-    }
+    .dn-svg { position: absolute; left: 0; top: 0; display: block; overflow: hidden; }
+    .dn-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .dn-wmzone { position: absolute; display: none; pointer-events: none; z-index: 5; overflow: hidden; }
+    .dn-slice { cursor: pointer; }
+    &.dn-motion .dn-sg, &.dn-motion .dn-c { transition: opacity 120ms ease; }
+    @media (prefers-reduced-motion: reduce) { &.dn-motion .dn-sg, &.dn-motion .dn-c { transition: none; } }
+    .dn-msg { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; text-align: center; padding: 8px; box-sizing: border-box; }
+    .dn-notes { position: absolute; line-height: 1.3; overflow-wrap: anywhere; }
+}
+
+// Leyenda-tabla: muestra · nombre · valor · %, cifras con dígitos tabulares a la derecha.
+.dn-table {
+    position: absolute; box-sizing: border-box; line-height: 1.25; cursor: default;
+    .dn-grid { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; column-gap: 0.6em; align-items: baseline; }
+    .dn-c { padding: 0.16em 0; min-width: 0; outline-offset: 0; cursor: pointer; }
+    .dn-sw { display: flex; align-items: center; align-self: center; padding-left: 0.15em; svg { display: block; } }
+    .dn-name { overflow-wrap: anywhere; }
+    .dn-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .dn-h { font-weight: 600; border-bottom: 1px solid; padding-bottom: 0.25em; cursor: default; }
+    .dn-t { font-weight: 600; border-top: 1px solid; padding-top: 0.25em; cursor: default; }
+    .dn-child.dn-name { padding-left: 0.9em; }
+    .dn-focusrow { outline: var(--dn-focus-w, 2px) solid; }
+    .dn-toggle { font: inherit; background: transparent; border: none; padding: 0; margin: 0; cursor: pointer; text-align: left; }
+    .dn-note { margin-top: 0.35em; line-height: 1.3; overflow-wrap: anywhere; }
 }
 
 // Asistente de configuración: panel compacto en la esquina, solo editando
-.lc-guide {
+.dn-guide {
     display: none; position: absolute; right: 8px; bottom: 8px; width: 320px;
     max-width: calc(100% - 16px); max-height: calc(100% - 16px); overflow: auto;
     border: 1px solid #2B6CB0; border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
     padding: 8px 10px; box-sizing: border-box; z-index: 20; font: 11.5px/1.35 "Segoe UI", sans-serif; cursor: default;
-    .lc-g-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-weight: 700; div { flex: 1; } }
-    .lc-g-close { border: none; background: transparent; cursor: pointer; font-size: 13px; }
-    .lc-g-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
-    .lc-g-item { display: flex; gap: 6px; align-items: baseline; margin: 2px 0; span:first-child { font-weight: 700; width: 12px; flex-shrink: 0; } }
-    .lc-g-note { font-size: 11px; margin-top: 4px; }
-    .lc-g-foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
-    .lc-g-btn { font: 600 12px "Segoe UI", sans-serif; border-radius: 4px; padding: 3px 12px; cursor: pointer; border: 1px solid; flex-shrink: 0; }
-    .lc-g-try { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 4px 0; }
-    .lc-g-chip { display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 3px; background: #2B6CB0; color: #FFFFFF;
+    .dn-g-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-weight: 700; div { flex: 1; } }
+    .dn-g-close { border: none; background: transparent; cursor: pointer; font-size: 13px; }
+    .dn-g-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+    .dn-g-item { display: flex; gap: 6px; align-items: baseline; margin: 2px 0; span:first-child { font-weight: 700; width: 12px; flex-shrink: 0; } }
+    .dn-g-note { font-size: 11px; margin-top: 4px; }
+    .dn-g-foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+    .dn-g-btn { font: 600 12px "Segoe UI", sans-serif; border-radius: 4px; padding: 3px 12px; cursor: pointer; border: 1px solid; flex-shrink: 0; }
+    .dn-g-try { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 4px 0; }
+    .dn-g-chip { display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 3px; background: #2B6CB0; color: #FFFFFF;
         font-size: 9.5px; font-weight: 700; vertical-align: 1px; }
-    .lc-g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
-    .lc-g-tpl { border-style: solid; border-radius: 6px; padding: 4px; cursor: pointer; background: #FFFFFF; font: 11px "Segoe UI", sans-serif;
+    .dn-g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
+    .dn-g-tpl { border-style: solid; border-radius: 6px; padding: 4px; cursor: pointer; background: #FFFFFF; font: 11px "Segoe UI", sans-serif;
         color: #252423; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 }
 
 // Pantalla de inicio: la de la serie TCViz, en tres tamaños
-.lc-landing {
+.dn-landing {
     position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 18px;
     padding: 24px 32px; box-sizing: border-box; overflow: hidden; color: #605E5C; font-family: "Segoe UI", sans-serif;
-    .lc-l-head { display: flex; gap: 12px; align-items: center; }
-    .lc-l-icon { flex-shrink: 0; }
-    .lc-l-title { font-size: 20px; font-weight: 600; color: #252423; }
-    .lc-l-tag { font-size: 14px; margin-top: 2px; }
-    .lc-l-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; }
-    .lc-l-lbl { font-size: 10.5px; font-weight: 600; letter-spacing: 1.3px; text-transform: uppercase; color: #8A8886; margin-bottom: 7px; }
-    .lc-l-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; font-size: 13.5px; }
-    .lc-l-steps li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; }
-    .lc-l-n { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #2B6CB0; color: #FFFFFF; font-size: 10.5px; }
-    .lc-l-well { color: #252423; }
-    .lc-l-links { display: grid; gap: 7px; }
-    .lc-l-card { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border: 1px solid #E1DFDD; border-radius: 6px; background: #F7F6F3;
+    .dn-l-head { display: flex; gap: 12px; align-items: center; }
+    .dn-l-icon { flex-shrink: 0; }
+    .dn-l-title { font-size: 20px; font-weight: 600; color: #252423; }
+    .dn-l-tag { font-size: 14px; margin-top: 2px; }
+    .dn-l-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; }
+    .dn-l-lbl { font-size: 10.5px; font-weight: 600; letter-spacing: 1.3px; text-transform: uppercase; color: #8A8886; margin-bottom: 7px; }
+    .dn-l-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; font-size: 13.5px; }
+    .dn-l-steps li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; }
+    .dn-l-n { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #2B6CB0; color: #FFFFFF; font-size: 10.5px; }
+    .dn-l-well { color: #252423; }
+    .dn-l-links { display: grid; gap: 7px; }
+    .dn-l-card { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border: 1px solid #E1DFDD; border-radius: 6px; background: #F7F6F3;
         color: #252423; text-decoration: none; font-size: 13.5px; cursor: pointer; }
-    .lc-l-card:hover, .lc-l-card:focus-visible { border-color: #2B6CB0; outline: none; }
-    .lc-l-sub { margin-left: auto; color: #8A8886; font-size: 11px; }
-    .lc-l-inline { display: flex; gap: 14px; flex-wrap: wrap; }
-    .lc-l-a { color: #2B6CB0; font-weight: 600; text-decoration: none; cursor: pointer; }
-    .lc-l-a:hover, .lc-l-a:focus-visible { text-decoration: underline; outline: none; }
-    .lc-l-do { margin: 0; font-size: 12px; line-height: 1.45; }
+    .dn-l-card:hover, .dn-l-card:focus-visible { border-color: #2B6CB0; outline: none; }
+    .dn-l-sub { margin-left: auto; color: #8A8886; font-size: 11px; }
+    .dn-l-inline { display: flex; gap: 14px; flex-wrap: wrap; }
+    .dn-l-a { color: #2B6CB0; font-weight: 600; text-decoration: none; cursor: pointer; }
+    .dn-l-a:hover, .dn-l-a:focus-visible { text-decoration: underline; outline: none; }
+    .dn-l-do { margin: 0; font-size: 12px; line-height: 1.45; }
 }
-.lc-landing-m {
+.dn-landing-m {
     gap: 11px; padding: 16px 20px;
-    .lc-l-title { font-size: 16px; }
-    .lc-l-tag, .lc-l-steps, .lc-l-inline { font-size: 12.5px; }
+    .dn-l-title { font-size: 16px; }
+    .dn-l-tag, .dn-l-steps, .dn-l-inline { font-size: 12.5px; }
 }
-.lc-landing-s {
+.dn-landing-s {
     gap: 8px; padding: 12px 14px;
-    .lc-l-title { font-size: 14px; }
-    .lc-l-inline { font-size: 12px; }
+    .dn-l-title { font-size: 14px; }
+    .dn-l-inline { font-size: 12px; }
 }
