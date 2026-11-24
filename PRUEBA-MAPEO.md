@@ -39,3 +39,7 @@ fetchMoreData y si hubo algún error o el visual se quedó en blanco. Con eso ba
 
 - Desktop rechaza un campo en un pozo: anota cuál y el mensaje.
 - En f el número de filas no sube o sale `RECHAZADO`: es el dato clave; "Otros" no podría llevar el resto real.
+
+## Resultados (Tino, 24-11)
+
+- **a OK:** 1 categoría (rol category, texto), 10 filas, 1 medida rol=values, sin segment. Sectores = datos (Aigua Serena 24,0 %, Café Nord 1,9 %). Llegan ya ordenados de mayor a menor. `format=-` (columna sumada sin formato: el visual necesita formato por defecto propio).
