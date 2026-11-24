@@ -1501,7 +1501,7 @@ export class Visual implements IVisual {
     /** Hueco para los iconos del objetivo en el borde exterior (solo con Target y radio suficiente). */
     private iconSpaceFor(R: number): number {
         if (!this.tgtOn || R < 40) return 0;
-        return Math.max(9, Math.min(16, Math.round(this.fz(8.5)))) + 3;
+        return Math.max(12, Math.min(16, Math.round(this.fz(8.5)))) + 3;
     }
 
     /** Radio exterior del anillo de categorías (con Segment, el anillo exterior ocupa el resto) y radio interior. */
@@ -1786,7 +1786,7 @@ export class Visual implements IVisual {
             const ig = gi.append("g").attr("class", "dn-ticon").attr("data-key", a.e.key).attr("data-panel", String(p.index)).attr("data-status", st.glyph)
                 .attr("transform", "translate(" + x.toFixed(1) + "," + y.toFixed(1) + ")");
             ig.append("circle").attr("r", d / 2).attr("fill", this.hc ? this.hcBg : st.color).attr("stroke", this.hc ? this.hcFg : this.bgColor).attr("stroke-width", 1);
-            ig.append("text").attr("text-anchor", "middle").attr("dy", "0.35em").attr("font-size", Math.max(6, d * 0.72)).attr("font-weight", 700)
+            ig.append("text").attr("text-anchor", "middle").attr("dy", "0.35em").attr("font-size", Math.max(8, d * 0.7)).attr("font-weight", 700)
                 .attr("fill", this.hc ? this.hcFg : "#FFFFFF").style("pointer-events", "none").text(st.glyph);
         }
     }

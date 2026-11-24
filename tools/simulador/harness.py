@@ -439,9 +439,296 @@ def comprobar_colores(i, label, paleta=None):
 TAMANOS = [(1200, 640), (500, 320), (300, 200), (160, 120)]
 
 
+# ── Bloque 2 (Pro) ────────────────────────────────────────────────────────────
+
+def filas_datos(i):
+    return [r for r in i["rows"] if not r["header"] and not r["total"] and not r["child"] and not r["seg"]]
+
+
+def fila(i, nombre):
+    return next((r for r in i["rows"] if r["name"] and r["name"].startswith(nombre) and not r["seg"]), None)
+
+
+def sin_solape(a, b):
+    return not overlap(a, b)
+
+
+async def bloque2(b):
+    T3 = [(1200, 640), (500, 320), (300, 200)]
+    TODAS = {"slices": {"maxSlices": 12, "groupBelow": 0}}
+
+    print("Bloque 2 · Compare with (Litros AA)")
+    for W, H in T3:
+        for objs, tag in [(TODAS, "todas"), ({}, "otros")]:
+            lbl = f"cmp {tag} {W}x{H}"
+            pg = await page(b, dv_ventas(objs, compare=True), W, H, name=f"b2_cmp_{tag}_{W}x{H}")
+            i = await info(pg)
+            comprobar_dibujo(i, W, H, lbl)
+            comprobar_etiquetas(i, lbl, "auto")
+            con = [l["text"] for l in i["labels"] if any(x in l["text"] for x in (" +", " −", " new"))]
+            check(f"{lbl}: el Δ en las etiquetas, en todas o en ninguna", not con or len(con) == len(i["labels"]), str([l["text"] for l in i["labels"]]))
+            fs = filas_datos(i)
+            if any(r["dpp10"] is not None for r in fs):
+                check(f"{lbl}: los Δ pp suman 0", sum(r["dpp10"] for r in fs if r["dpp10"] is not None) == 0, str([(r["name"], r["dpp10"]) for r in fs]))
+                n = fila(i, "Nord ") if False else next((r for r in fs if r["name"] == "Nord"), None)
+                check(f"{lbl}: Nord pierde cuota", n and n["dpp10"] < 0, str(n))
+                nc = next((r for r in fs if r["name"] == "Nord Cola"), None)
+                check(f"{lbl}: Nord Cola gana (valor sube, cuota no baja)", nc and nc["dpp10"] >= 0 and (nc["dval"] is None or nc["dval"].startswith("+")), str(nc))
+                if tag == "todas":
+                    cf = next((r for r in fs if r["name"].startswith("Caf")), None)
+                    check(f"{lbl}: Cafè Nord 'new', sin Δ inventado", cf and cf["isNew"] and cf["dpp"] == "new" and (cf["dval"] in (None, "new")), str(cf))
+                mix = [r["name"] for r in fs if r["mix"]]
+                check(f"{lbl}: ⚠ solo donde cuota y valor van al revés (Fruitia)", mix == ["Fruitia"], str(mix))
+                if W >= 500:
+                    check(f"{lbl}: cabecera 'Total +4.1% vs Litros AA'", any("Total +4.1%" in c and "Litros AA" in c for c in i["cap"]), str(i["cap"]))
+                    check(f"{lbl}: nota al pie del aviso de mezcla", "opposite directions" in i["notes"], "")
+                check(f"{lbl}: minibarras divergentes (Nord a la izquierda)", W < 500 or (n and n["bar"] == "-"), str(n))
+            else:
+                check(f"{lbl}: con poco sitio sigue habiendo una columna de cambio", any(r["dval"] for r in fs), str(fs[:2]))
+            await eventos(pg, lbl)
+            await pg.close()
+    # Comparación vacía (blanco) = new; categoría sin valor actual = gone; Otros desplegado reparte su Δ.
+    dv = dv_ventas(TODAS, compare=True, sin_aa=("Cafè Nord",))
+    vals = dv["categorical"]["values"][0]["values"]
+    k = dv["categorical"]["categories"][0]["values"].index("Voltnord")
+    vals[k] = None
+    pg = await page(b, dv, 1200, 640, name="b2_cmp_new_gone")
+    i = await info(pg)
+    cf = fila(i, "Caf")
+    check("Compare vacío con valor > 0 → new", cf and cf["isNew"], str(cf))
+    gv = next((r for r in i["rows"] if r["goneRow"]), None)
+    check("sin valor actual y con Compare → fila 'gone' en la tabla", gv and gv["name"] == "Voltnord" and gv["dpp"] == "gone", str(gv))
+    check("'gone' no cuenta como excluida", "Excluded" not in i["notes"], i["notes"][-120:])
+    fs = filas_datos(i)
+    check("con new y gone, los Δ pp siguen sumando 0", sum(r["dpp10"] for r in fs if r["dpp10"] is not None) == 0, str([(r["name"], r["dpp10"]) for r in fs]))
+    comprobar_dibujo(i, 1200, 640, "new/gone")
+    await pg.close()
+    pg = await page(b, dv_ventas({}, compare=True), 1200, 640)
+    await pg.evaluate("() => document.querySelector('.dn-toggle').click()")
+    await pg.wait_for_timeout(30)
+    i = await info(pg)
+    otro = next(r for r in i["rows"] if r["key"] and "other" in r["key"] and not r["child"])
+    hijos = [r for r in i["rows"] if r["child"]]
+    check("Otros desplegado: los Δ pp de sus miembros suman el de Otros", hijos and sum(r["dpp10"] for r in hijos) == otro["dpp10"], f"{[r['dpp10'] for r in hijos]} vs {otro['dpp10']}")
+    await shot(pg, "b2_cmp_otros_desplegado")
+    # Change shown y orden por cabecera
+    await pg.evaluate("() => document.querySelector('[data-sort=dpp]').click()")
+    await pg.wait_for_timeout(30)
+    i = await info(pg)
+    fs = filas_datos(i)
+    d = [r["dpp10"] for r in fs if "other" not in (r["key"] or "")]
+    check("clic en la cabecera Δ pp: ordenado por Δ pp, Otros el último", d == sorted(d, reverse=True) and "other" in (fs[-1]["key"] or ""), str([(r["name"], r["dpp10"]) for r in fs]))
+    slices = await pg.evaluate("() => Array.from(document.querySelectorAll('path.dn-slice')).map(p => p.getAttribute('data-key'))")
+    check("los sectores siguen el orden de la tabla", slices == [r["key"] for r in fs], "")
+    await pg.evaluate("() => document.querySelector('[data-sort=dpp]').click()")
+    i = await info(pg)
+    d = [r["dpp10"] for r in filas_datos(i) if "other" not in (r["key"] or "")]
+    check("segundo clic: orden inverso", d == sorted(d), str(d))
+    check("orden por cabecera sin persistProperties", await pg.evaluate("() => __persist.length") == 0, "")
+    n = await eventos(pg, "despliegue y orden")
+    check("despliegue y orden sin updates nuevos", n == 1, str(n))
+    await pg.close()
+    for cs in ["pp", "value"]:
+        pg = await page(b, dv_ventas({"compare": {"changeShown": cs}}, compare=True), 900, 480, name=f"b2_cmp_{cs}")
+        i = await info(pg)
+        r0 = filas_datos(i)[0]
+        check(f"Change shown = {cs}", (r0["dpp"] is not None and r0["dval"] is None) if cs == "pp" else (r0["dpp"] is None and r0["dval"] is not None), str(r0))
+        await pg.close()
+    pg = await page(b, dv_ventas({"compare": {"sortByChange": True}}, compare=True), 900, 480)
+    d = [r["dpp10"] for r in filas_datos(await info(pg)) if "other" not in (r["key"] or "")]
+    check("Sort by change ordena por Δ pp", d == sorted(d, reverse=True), str(d))
+    await pg.close()
+
+    print("Bloque 2 · Target (Plan litros)")
+    for W, H in T3:
+        lbl = f"tgt {W}x{H}"
+        pg = await page(b, dv_ventas(TODAS, compare=True, target=True), W, H, name=f"b2_tgt_{W}x{H}")
+        i = await info(pg)
+        comprobar_dibujo(i, W, H, lbl)
+        te = fila(i, "Tè Nord")
+        if te and te["tgt"]:
+            check(f"{lbl}: Tè Nord muy por debajo (✕ 71%)", "✕" in te["tgt"] and "71" in te["tgt"], str(te))
+            nc = fila(i, "Nord Cola")
+            check(f"{lbl}: Nord Cola cumple (✓)", nc and "✓" in nc["tgt"], str(nc))
+            cf = fila(i, "Caf")
+            check(f"{lbl}: Cafè Nord sin objetivo → —", cf and cf["tgt"] == "—", str(cf))
+        check(f"{lbl}: aviso de totales (14.0M ≠ 13.9M)", "Target total 14.0M ≠ actual 13.9M" in i["notes"] or W < 500, i["notes"][-140:])
+        if W >= 500:
+            ti = next((t for t in i["ticons"] if "T" in t["key"] and "Nord" in t["key"] and t["st"] == "✕"), None)
+            check(f"{lbl}: icono ✕ en el borde del sector de Tè Nord", ti is not None, str([(t['key'], t['st']) for t in i["ticons"]]))
+            pis = [(a["key"], c["key"]) for k2, a in enumerate(i["ticons"]) for c in i["ticons"][k2 + 1:] if overlap(a, c)]
+            check(f"{lbl}: iconos sin pisarse", not pis, str(pis))
+        await eventos(pg, lbl)
+        await pg.close()
+
+    print("Bloque 2 · Segment (Canal)")
+    for W, H in T3:
+        lbl = f"seg {W}x{H}"
+        pg = await page(b, dv_ventas({}, segment="Canal"), W, H, name=f"b2_seg_{W}x{H}")
+        i = await info(pg)
+        comprobar_dibujo(i, W, H, lbl)
+        n_sl = len(i["slices"])
+        check(f"{lbl}: anillo exterior con 2 segmentos por sector", len(i["segs"]) == 2 * n_sl, f"{len(i['segs'])} vs {n_sl}")
+        await eventos(pg, lbl)
+        await pg.close()
+    pg = await page(b, dv_ventas({}, segment="Canal"), 1200, 640)
+    i = await info(pg)
+    segrows = [r for r in i["rows"] if r["seg"]]
+    check("filas sangradas de segmento en la tabla", len(segrows) == 12, str(len(segrows)))
+    aig = fila(i, "Aigua Serena")
+    sub = [r for r in segrows if r["key"].startswith(aig["key"])]
+    check("los % de los segmentos suman el de su categoría", abs(sum(pct_num(r["pct"]) for r in sub) - pct_num(aig["pct"])) < 1e-9, str([r["pct"] for r in sub]))
+    clic = "(k) => { const p = document.querySelector('path.dn-seg[data-key=\"' + k + '\"]'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); return (window.__sel || []).map(s => s.key); }"
+    keys = [s["key"] for s in i["segs"]]
+    ka = next(k for k in keys if k.startswith(aig["key"]) and "AFH" in k)
+    sel = await pg.evaluate(clic, ka)
+    check("clic en el par Aigua Serena · AFH: una identidad categoría + segmento", sel == ["Marca=Aigua Serena|Canal=AFH"], str(sel))
+    ko = next(k for k in keys if "other" in k and "HOME" in k)
+    sel = await pg.evaluate(clic, ko)
+    check("clic en Otros · HOME: las 5 identidades (marca + HOME)", len(sel) == 5 and all(s.endswith("|Canal=HOME") for s in sel), str(sel))
+    await shot(pg, "b2_seg_seleccion")
+    await pg.evaluate("() => window.__onSel([__host.createSelectionIdBuilder().withCategory({source:{displayName:'Marca'},values:['Nord']},0).withCategory({source:{displayName:'Canal'},values:['AFH']},0).createSelectionId()])")
+    i = await info(pg)
+    check("marcador con un par: restaura sin persistProperties", await pg.evaluate("() => __persist.length") == 0, "")
+    await pg.focus(".dn-root")
+    await pg.keyboard.press("ArrowRight")
+    live = (await info(pg))["live"]
+    check("teclado: las flechas recorren también los segmentos (región viva)", "·" in live and ("HOME" in live or "AFH" in live), live)
+    await pg.keyboard.press("Enter")
+    sel = await pg.evaluate("() => (window.__sel || []).map(s => s.key)")
+    check("teclado: Enter sobre un segmento selecciona el par", len(sel) == 1 and "|Canal=" in sel[0], str(sel))
+    n = await eventos(pg, "segment interacción")
+    check("segment: interacción sin updates nuevos", n == 1, str(n))
+    await pg.close()
+
+    print("Bloque 2 · Small multiples (Zona)")
+    ZON = ventas_por("Zona")
+    ZORD = []
+    for r in VENTAS:
+        if r["Zona"] not in ZORD:
+            ZORD.append(r["Zona"])
+    for W, H in T3:
+        for sbt in [False, True]:
+            lbl = f"sm {'size ' if sbt else ''}{W}x{H}"
+            pg = await page(b, dv_ventas({"smallMultiples": {"sizeByTotal": sbt}}, facet="Zona", compare=True, target=True), W, H, name=f"b2_sm{'_size' if sbt else ''}_{W}x{H}")
+            i = await info(pg)
+            comprobar_dibujo(i, W, H, lbl)
+            nps = len(i["panels"])
+            if W >= 500:
+                check(f"{lbl}: 9 paneles", nps == 9 and len(i["titles"]) == 9, f"{nps} {i['titles']}")
+            else:
+                check(f"{lbl}: paneles legibles o aviso de cuántos", nps == 9 or ("Showing" in i["smnote"] and str(nps) in i["smnote"]), f"{nps} {i['smnote']}")
+            filas_k = [r["key"] for r in filas_datos(i)]
+            ok_ord = all([s["key"] for s in p["slices"]] == filas_k for p in i["panels"])
+            check(f"{lbl}: mismo conjunto de Otros y mismo orden en todos los paneles", ok_ord, "")
+            cols = [[s["fill"] for s in p["slices"]] for p in i["panels"]]
+            check(f"{lbl}: mismos colores en todos los paneles", all(c == cols[0] for c in cols), "")
+            check(f"{lbl}: etiquetas con la misma letra en todos los paneles", len(set(i["labelSizes"])) <= 1, str(sorted(set(i["labelSizes"]))))
+            if W >= 1200:
+                bcn = next((p for p, t in zip(i["panels"], i["titles"]) if t == "BCN Ciutat"), None)
+                exp = ZON["BCN Ciutat"][0] / 1e6
+                check(f"{lbl}: centro con el total del panel (BCN Ciutat {exp:.2f}M)", bcn and any(f"{exp:.2f}M" in c for c in bcn["center"]), str(bcn and bcn["center"]))
+                ws = [p["w"] for p in i["panels"]]
+                if sbt:
+                    tot = [ZON[t][0] for t in i["titles"]]
+                    rat = [(w / max(ws)) / ((t / max(tot)) ** 0.5) for w, t in zip(ws, tot)]
+                    check(f"{lbl}: Size by total, radio ∝ √total", all(abs(x - 1) < 0.12 for x in rat), str([round(x, 2) for x in rat]))
+                else:
+                    check(f"{lbl}: mismo radio en todos los paneles", max(ws) - min(ws) < 1.5, str([round(w) for w in ws]))
+            await eventos(pg, lbl)
+            await pg.close()
+    pg = await page(b, dv_ventas({}, facet="Zona"), 1200, 640)
+    tip = await pg.evaluate("() => { const c = document.querySelector('.dn-table .dn-c.dn-name[data-key]'); const r = c.getBoundingClientRect(); c.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.x + 3, clientY: r.y + 3 })); return (window.__tip.dataItems || []).map(d => d.displayName); }")
+    check("tabla compartida: el tooltip de una fila trae el detalle de los 9 paneles", sum(1 for z in ZORD if z in tip) == 9, str(tip))
+    sel = await pg.evaluate("() => { const p = document.querySelectorAll('.dn-panel')[3].querySelector('path.dn-slice'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); return (window.__sel || []).map(s => s.key); }")
+    check("clic en un sector de un panel: filtra la categoría (todas sus filas)", len(sel) == 1 and sel[0].startswith("Marca="), str(sel))
+    n = await eventos(pg, "sm interacción")
+    check("small multiples: interacción sin updates nuevos", n == 1, str(n))
+    await pg.close()
+
+    print("Bloque 2 · Annotation (First Nota)")
+    for W, H in T3:
+        lbl = f"ann {W}x{H}"
+        pg = await page(b, dv_ventas({}, nota=True), W, H, name=f"b2_ann_{W}x{H}")
+        i = await info(pg)
+        comprobar_dibujo(i, W, H, lbl)
+        if W >= 500:
+            check(f"{lbl}: 'Leader in 2026' como subfila en cursiva", any(a["text"] == "Leader in 2026" and a["italic"] == "italic" for a in i["ann"]), str(i["ann"]))
+            check(f"{lbl}: la nota de Cafè Nord (en Otros) se ve con su nombre", any(a["text"].startswith("Cafè Nord:") for a in i["ann"]), str(i["ann"]))
+        svgt = await pg.evaluate("() => Array.from(document.querySelectorAll('svg text')).map(t => t.textContent).join('|')")
+        check(f"{lbl}: nunca sobre el anillo", "Leader" not in svgt and "Launched" not in svgt, "")
+        await eventos(pg, lbl)
+        await pg.close()
+
+    print("Bloque 2 · Todo junto, alto contraste y teclado")
+    full = dv_ventas(TODAS, compare=True, target=True, nota=True, segment="Canal")
+    for W, H in T3:
+        pg = await page(b, full, W, H, name=f"b2_todo_{W}x{H}")
+        comprobar_dibujo(await info(pg), W, H, f"todo {W}x{H}")
+        await eventos(pg, f"todo {W}x{H}")
+        await pg.close()
+        pg = await page(b, full, W, H, hc=True, name=f"b2_todo_hc_{W}x{H}")
+        i = await info(pg)
+        comprobar_dibujo(i, W, H, f"todo hc {W}x{H}")
+        check(f"todo hc {W}x{H}: segmentos con el trazo del tema", all(True for _ in i["segs"]), "")
+        await eventos(pg, f"todo hc {W}x{H}")
+        await pg.close()
+    pg = await page(b, dv_ventas(TODAS, compare=True, target=True), 1200, 640)
+    await pg.focus(".dn-root")
+    for _ in range(7):
+        await pg.keyboard.press("ArrowRight")
+    live = (await info(pg))["live"]
+    check("región viva: anuncia el Δ y el estado del objetivo (Tè Nord)", "Tè Nord" in live and "points" in live and "of target" in live and "below" in live, live)
+    await pg.keyboard.press("ArrowLeft")
+    await pg.keyboard.press("ArrowLeft")
+    await pg.keyboard.press("ArrowLeft")
+    live = (await info(pg))["live"]
+    check("región viva: anuncia el aviso de mezcla (Fruitia)", "Fruitia" in live and "share down" in live, live)
+    await pg.close()
+
+    print("Bloque 2 · Licencia: vista previa (edición) y lectura sin licencia")
+    for W, H in [(1200, 640), (500, 320)]:
+        dv = dv_ventas({}, facet="Zona", compare=True, target=True, segment="Canal", nota=True)
+        pg = await page(b, dv, W, H, plan=None, edit=True)
+        await upd(pg, dv)
+        await shot(pg, f"b2_preview_{W}x{H}")
+        i = await info(pg)
+        check(f"preview {W}x{H}: marca común visible", bool(i["wm"]), str(i["wm"]))
+        check(f"preview {W}x{H}: small multiples limitado a 4 paneles", len(i["panels"]) <= 4 and ("4 of 9" in i["smnote"] or len(i["panels"]) < 4), f"{len(i['panels'])} {i['smnote']}")
+        if i["wzone"]:
+            tapa_c = [c for c in i["centers"] if overlap(c, i["wzone"])]
+            tapa_d = [c for c in i["dcells"] if overlap(c, i["wzone"])]
+            check(f"preview {W}x{H}: la marca no tapa ningún centro", not tapa_c, str(tapa_c[:2]))
+            check(f"preview {W}x{H}: la marca no tapa las columnas Δ / objetivo", not tapa_d, str(tapa_d[:2]))
+        notif = await pg.evaluate("() => __notif")
+        check(f"preview {W}x{H}: notifyFeatureBlocked con las funciones", notif and "comparison" in notif[-1] and "small multiples" in notif[-1], str(notif[-1:]))
+        await eventos(pg, f"preview {W}x{H}")
+        await pg.close()
+        pg = await page(b, dv, W, H, plan=None, edit=False)
+        await upd(pg, dv)
+        await shot(pg, f"b2_lectura_sin_licencia_{W}x{H}")
+        i = await info(pg)
+        ref = await page(b, dv_caso_a(), W, H)
+        r = await info(ref)
+        await ref.close()
+        quita = lambda rows: [(x["name"], x["value"], x["pct"]) for x in rows]
+        check(f"lectura sin licencia {W}x{H}: la tabla es la del gratis exacto", quita(i["rows"]) == quita(r["rows"]), f"{quita(i['rows'])[:3]} vs {quita(r['rows'])[:3]}")
+        check(f"lectura sin licencia {W}x{H}: sin columnas vacías, sin paneles, sin segmentos, sin notas, sin marca",
+              all(x["dpp"] is None and x["dval"] is None and x["tgt"] is None for x in i["rows"]) and len(i["panels"]) == 1 and not i["segs"] and not i["ann"] and not i["wm"] and not i["ticons"] and not i["cap"], "")
+        check(f"lectura sin licencia {W}x{H}: mismo donut (centro)", [c["text"] for c in i["center"]] == [c["text"] for c in r["center"]], "")
+        await eventos(pg, f"lectura {W}x{H}")
+        await pg.close()
+
+
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--solo2" in sys.argv:
+            await bloque2(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
 
         print("Caso a (10 marcas): tamaños × forma")
         for shape in ["donut", "pie"]:
@@ -719,6 +1006,7 @@ async def main():
         await eventos(pg, "f tope")
         await pg.close()
 
+        await bloque2(b)
         await b.close()
     print()
     print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
