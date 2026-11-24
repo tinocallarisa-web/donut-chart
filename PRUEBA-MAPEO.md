@@ -44,3 +44,4 @@ fetchMoreData y si hubo algún error o el visual se quedó en blanco. Con eso ba
 
 - **a OK:** 1 categoría (rol category, texto), 10 filas, 1 medida rol=values, sin segment. Sectores = datos (Aigua Serena 24,0 %, Café Nord 1,9 %). Llegan ya ordenados de mayor a menor. `format=-` (columna sumada sin formato: el visual necesita formato por defecto propio).
 - **b OK:** 2 categorías (category + facet), 90 filas = 10 marcas × 9 zonas, paneles=9; total igual que en a. Filas ordenadas por panel y, dentro, por valor.
+- **c OK:** acepta los 3 a la vez; 180 filas = 10 × 9 × 2; total igual. Las filas llegan ordenadas por valor, mezclando segmentos: el visual agrega por clave (no depende del orden de llegada).
