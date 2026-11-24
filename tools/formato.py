@@ -26,6 +26,15 @@ ROLES = [
     ("tooltips", "Role_Tooltips", "Tooltips", "Extra measures in the tooltip."),
 ]
 
+# Formato de números como el nativo (mismos nombres que Power BI). Valor decimal vacío = automático.
+UNITS = {"items": [("auto", "Auto"), ("none", "None"), ("thousands", "Thousands"), ("millions", "Millions"),
+                   ("billions", "Billions"), ("trillions", "Trillions")]}
+NUM_FORMAT = [
+    ("displayUnits", "Display units", "enum", "auto", UNITS),
+    ("valueDecimals", "Value decimal places", "num", None, {"min": 0, "max": 9}),
+]
+PCT_FORMAT = [("percentDecimals", "Percentage decimal places", "num", 0, {"min": 0, "max": 4})]
+
 TEMPLATES = [("report", "Report theme"), ("classic", "Classic"),
              ("boardroom", "Boardroom (Pro)"), ("ledger", "Ledger (Pro)"), ("editorial", "Editorial (Pro)"),
              ("signal", "Signal (Pro)"), ("aurora", "Aurora (Pro)"), ("terrace", "Terrace (Pro)")]
@@ -60,14 +69,13 @@ OBJECTS = [
         ("position", "Position", "enum", "auto", {"items": [("auto", "Inside, then outside"), ("inside", "Inside only"), ("outside", "Outside")]}),
         ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
         ("color", "Text color (outside)", "fill", "#252423", {}),
-        ("decimals", "Percent decimals", "num", 0, {"min": 0, "max": 2}),
-    ]),
+    ] + NUM_FORMAT + PCT_FORMAT),
     ("center", "Center", [
         ("show", "Show total in the center", "bool", True, {}),
         ("title", "Title (blank = measure name)", "text", "", {}),
         ("fontSize", "Value size", "num", 20, {"min": 8, "max": 48}),
         ("color", "Text color", "fill", "#252423", {}),
-    ]),
+    ] + NUM_FORMAT),
     ("scaleRing", "Scale ring", [
         ("mode", "Marks", "enum", "quarters", {"items": [("off", "Off"), ("quarters", "Quarters (25 %)"), ("tens", "Every 10 %")]}),
         ("color", "Color", "fill", "#605E5C", {}),
@@ -78,7 +86,7 @@ OBJECTS = [
         ("totalRow", "Show total row", "enum", "auto", {"items": [("auto", "Automatic (pie)"), ("on", "On"), ("off", "Off")]}),
         ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
         ("color", "Text color", "fill", "#252423", {}),
-    ]),
+    ] + NUM_FORMAT + PCT_FORMAT),
     # Pro (bloque 2): existen en el panel con su campo puesto; en el bloque 1 aún no dibujan nada.
     ("compare", "Compare with (Pro)", [
         ("changeShown", "Change shown", "enum", "both", {"items": [("pp", "Share points"), ("value", "Value"), ("both", "Both")]}),
@@ -200,7 +208,7 @@ def generar():
           " * Los nombres internos (objeto.propiedad) no se renombran nunca: los informes guardados dejarían de leerlos.",
           " */",
           "export type PropType = \"bool\" | \"num\" | \"fill\" | \"enum\" | \"text\";",
-          "export interface PropSpec { name: string; type: PropType; def: string | number | boolean; key: string; label: string;",
+          "export interface PropSpec { name: string; type: PropType; def: string | number | boolean | null; key: string; label: string;",
           "    items?: [string, string, string][]; min?: number; max?: number; }",
           "export interface ObjSpec { name: string; key: string; label: string; props: PropSpec[]; }",
           "export interface GroupSpec { obj: string; toggle: string | null; key?: string; label?: string; }",

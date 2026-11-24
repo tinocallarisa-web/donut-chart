@@ -62,7 +62,7 @@ def measure(name, role, values, fmt=None, highlights=None):
     return m
 
 
-def dv_caso_a(objects=None, guia=False, highlights=None, negativos=False, colores=None):
+def dv_caso_a(objects=None, guia=False, highlights=None, negativos=False, colores=None, fmt=None):
     objects = json.loads(json.dumps(objects or {}))
     if not guia:
         objects.setdefault("style", {}).setdefault("guide", False)
@@ -75,7 +75,7 @@ def dv_caso_a(objects=None, guia=False, highlights=None, negativos=False, colore
     if colores:
         objs = [({"dataColors": {"fill": {"solid": {"color": colores[m]}}}} if m in colores else None) for m in marcas]
     cats = [col("Marca", "category", marcas, objects=objs)]
-    ms = [measure("Litros", "values", vals, highlights=highlights)]
+    ms = [measure("Litros", "values", vals, fmt=fmt, highlights=highlights)]
     return {"metadata": {"objects": objects, "columns": [c["source"] for c in cats] + [m["source"] for m in ms]},
             "categorical": {"categories": cats, "values": ms}}
 
@@ -299,6 +299,44 @@ async def main():
                     check(f"{lbl}: hay etiquetas fuera con guía", await pg.evaluate("() => document.querySelectorAll('.dn-leader').length") > 0, "")
                 await eventos(pg, lbl)
                 await pg.close()
+
+        print("Formato de números")
+        hover = "() => { const p = document.querySelector('path.dn-slice'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); return (window.__tip.dataItems || []).map(d => d.value); }"
+        pg = await page(b, dv_caso_a(), 900, 480)
+        i = await info(pg)
+        a = next(r for r in i["rows"] if r["name"] == MARCAS[0])
+        check("sin formato en la columna: cifra entera sin decimales espurios (3,340,463)", a["value"] == "3,340,463", a["value"])
+        tip = await pg.evaluate(hover)
+        check("tooltip con la cifra completa", "3,340,463" in tip, str(tip))
+        await pg.close()
+        objs = {"labels": {"content": "valuePercent", "displayUnits": "millions", "valueDecimals": 1, "percentDecimals": 1},
+                "center": {"displayUnits": "millions", "valueDecimals": 1}, "legend": {"displayUnits": "millions", "valueDecimals": 1, "percentDecimals": 1}}
+        for W, H in [(1200, 640), (500, 320)]:
+            pg = await page(b, dv_caso_a(objs), W, H, name=f"fmt_millones_{W}x{H}")
+            i = await info(pg)
+            comprobar_dibujo(i, W, H, f"Millions 1 decimal {W}x{H}")
+            a = next(r for r in i["rows"] if r["name"] == MARCAS[0])
+            check(f"{W}x{H}: tabla en millones con 1 decimal (3.3M)", a["value"] == "3.3M", a["value"])
+            check(f"{W}x{H}: centro en millones con 1 decimal (13.9M)", any(c["text"] == "13.9M" for c in i["center"]), str([c["text"] for c in i["center"]]))
+            if W == 1200:
+                check("etiquetas en millones con 1 decimal y % con 1 decimal", any("3.3M" in l["text"] and "24.0%" in l["text"] for l in i["labels"]), str([l["text"] for l in i["labels"]]))
+                filas = [r for r in i["rows"] if not r["header"] and not r["total"]]
+                check("% de la tabla con 1 decimal suman 100,0", all("." in r["pct"] for r in filas) and abs(sum(pct_num(r["pct"]) for r in filas) - 100) < 1e-9, str([r["pct"] for r in filas]))
+            await eventos(pg, f"millones {W}x{H}")
+            await pg.close()
+        pg = await page(b, dv_caso_a({"labels": {"content": "value"}}, fmt="€#,0"), 1200, 640, name="fmt_euros")
+        i = await info(pg)
+        a = next(r for r in i["rows"] if r["name"] == MARCAS[0])
+        check("moneda del modelo €#,0 en la tabla (€3,340,463)", a["value"] == "€3,340,463", a["value"])
+        check("moneda en el centro (€13.9M)", any(c["text"] == "€13.9M" for c in i["center"]), str([c["text"] for c in i["center"]]))
+        check("moneda en las etiquetas (€3.34M)", any(l["text"] == "€3.34M" for l in i["labels"]), str([l["text"] for l in i["labels"]]))
+        tip = await pg.evaluate(hover)
+        check("tooltip con el formato del modelo completo (€3,340,463)", "€3,340,463" in tip, str(tip))
+        comprobar_dibujo(i, 1200, 640, "euros")
+        await pg.close()
+        pg = await page(b, dv_caso_a(objs), 160, 120, name="fmt_millones_160x120")
+        comprobar_dibujo(await info(pg), 160, 120, "millones mini")
+        await pg.close()
 
         print("Caso a: Otros, selección y teclado")
         pg = await page(b, dv_caso_a(), 900, 480, name="a_base_900x480")

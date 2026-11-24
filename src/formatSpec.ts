@@ -3,7 +3,7 @@
  * Los nombres internos (objeto.propiedad) no se renombran nunca: los informes guardados dejarían de leerlos.
  */
 export type PropType = "bool" | "num" | "fill" | "enum" | "text";
-export interface PropSpec { name: string; type: PropType; def: string | number | boolean; key: string; label: string;
+export interface PropSpec { name: string; type: PropType; def: string | number | boolean | null; key: string; label: string;
     items?: [string, string, string][]; min?: number; max?: number; }
 export interface ObjSpec { name: string; key: string; label: string; props: PropSpec[]; }
 export interface GroupSpec { obj: string; toggle: string | null; key?: string; label?: string; }
@@ -287,13 +287,61 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "label": "Text color (outside)"
             },
             {
-                "name": "decimals",
+                "name": "displayUnits",
+                "type": "enum",
+                "def": "auto",
+                "key": "Prop_labels_displayUnits",
+                "label": "Display units",
+                "items": [
+                    [
+                        "auto",
+                        "Enum_displayUnits_auto",
+                        "Auto"
+                    ],
+                    [
+                        "none",
+                        "Enum_displayUnits_none",
+                        "None"
+                    ],
+                    [
+                        "thousands",
+                        "Enum_displayUnits_thousands",
+                        "Thousands"
+                    ],
+                    [
+                        "millions",
+                        "Enum_displayUnits_millions",
+                        "Millions"
+                    ],
+                    [
+                        "billions",
+                        "Enum_displayUnits_billions",
+                        "Billions"
+                    ],
+                    [
+                        "trillions",
+                        "Enum_displayUnits_trillions",
+                        "Trillions"
+                    ]
+                ]
+            },
+            {
+                "name": "valueDecimals",
+                "type": "num",
+                "def": null,
+                "key": "Prop_labels_valueDecimals",
+                "label": "Value decimal places",
+                "min": 0,
+                "max": 9
+            },
+            {
+                "name": "percentDecimals",
                 "type": "num",
                 "def": 0,
-                "key": "Prop_labels_decimals",
-                "label": "Percent decimals",
+                "key": "Prop_labels_percentDecimals",
+                "label": "Percentage decimal places",
                 "min": 0,
-                "max": 2
+                "max": 4
             }
         ]
     },
@@ -331,6 +379,54 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "def": "#252423",
                 "key": "Prop_center_color",
                 "label": "Text color"
+            },
+            {
+                "name": "displayUnits",
+                "type": "enum",
+                "def": "auto",
+                "key": "Prop_center_displayUnits",
+                "label": "Display units",
+                "items": [
+                    [
+                        "auto",
+                        "Enum_displayUnits_auto",
+                        "Auto"
+                    ],
+                    [
+                        "none",
+                        "Enum_displayUnits_none",
+                        "None"
+                    ],
+                    [
+                        "thousands",
+                        "Enum_displayUnits_thousands",
+                        "Thousands"
+                    ],
+                    [
+                        "millions",
+                        "Enum_displayUnits_millions",
+                        "Millions"
+                    ],
+                    [
+                        "billions",
+                        "Enum_displayUnits_billions",
+                        "Billions"
+                    ],
+                    [
+                        "trillions",
+                        "Enum_displayUnits_trillions",
+                        "Trillions"
+                    ]
+                ]
+            },
+            {
+                "name": "valueDecimals",
+                "type": "num",
+                "def": null,
+                "key": "Prop_center_valueDecimals",
+                "label": "Value decimal places",
+                "min": 0,
+                "max": 9
             }
         ]
     },
@@ -452,6 +548,63 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "def": "#252423",
                 "key": "Prop_legend_color",
                 "label": "Text color"
+            },
+            {
+                "name": "displayUnits",
+                "type": "enum",
+                "def": "auto",
+                "key": "Prop_legend_displayUnits",
+                "label": "Display units",
+                "items": [
+                    [
+                        "auto",
+                        "Enum_displayUnits_auto",
+                        "Auto"
+                    ],
+                    [
+                        "none",
+                        "Enum_displayUnits_none",
+                        "None"
+                    ],
+                    [
+                        "thousands",
+                        "Enum_displayUnits_thousands",
+                        "Thousands"
+                    ],
+                    [
+                        "millions",
+                        "Enum_displayUnits_millions",
+                        "Millions"
+                    ],
+                    [
+                        "billions",
+                        "Enum_displayUnits_billions",
+                        "Billions"
+                    ],
+                    [
+                        "trillions",
+                        "Enum_displayUnits_trillions",
+                        "Trillions"
+                    ]
+                ]
+            },
+            {
+                "name": "valueDecimals",
+                "type": "num",
+                "def": null,
+                "key": "Prop_legend_valueDecimals",
+                "label": "Value decimal places",
+                "min": 0,
+                "max": 9
+            },
+            {
+                "name": "percentDecimals",
+                "type": "num",
+                "def": 0,
+                "key": "Prop_legend_percentDecimals",
+                "label": "Percentage decimal places",
+                "min": 0,
+                "max": 4
             }
         ]
     },

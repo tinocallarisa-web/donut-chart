@@ -105,3 +105,16 @@ P.update({
 "the measure the slices share; its total goes in the center": ["a medida que as fatias repartem; o total vai para o centro", "la mesure que se partagent les parts ; son total s’affiche au centre", "die Measure, die die Segmente aufteilen; die Summe steht in der Mitte", "la misura che le fette si dividono; il totale va al centro", "de meting die de segmenten verdelen; het totaal staat in het midden", "miara, którą dzielą wycinki; jej suma trafia do środka", "スライスで分け合うメジャー。合計は中央に表示", "各扇区分摊的度量值；总计显示在中心", "조각이 나누는 측정값, 합계는 가운데에 표시", "la medida que se reparten los sectores; su total va al centro"],
 "more measures when you point at a slice": ["mais medidas ao apontar para uma fatia", "plus de mesures en pointant une part", "weitere Measures beim Zeigen auf ein Segment", "altre misure quando punti una fetta", "meer metingen als u naar een segment wijst", "więcej miar po wskazaniu wycinka", "スライスをポイントすると表示されるメジャー", "指向扇区时显示更多度量值", "조각을 가리킬 때 표시되는 측정값", "más medidas al señalar un sector"],
 })
+
+# Formato de números (mismos nombres que Power BI). Orden: pt, fr, de, it, nl, pl, ja, zh, ko, es
+P.update({
+"Display units": ["Unidades de exibição", "Unités d’affichage", "Anzeigeeinheiten", "Unità di visualizzazione", "Weergave-eenheden", "Jednostki wyświetlania", "表示単位", "显示单位", "표시 단위", "Unidades de visualización"],
+"Auto": ["Automático", "Automatique", "Automatisch", "Automatico", "Automatisch", "Automatycznie", "自動", "自动", "자동", "Automático"],
+"None": ["Nenhum", "Aucune", "Keine", "Nessuna", "Geen", "Brak", "なし", "无", "없음", "Ninguno"],
+"Thousands": ["Milhares", "Milliers", "Tausend", "Migliaia", "Duizenden", "Tysiące", "千", "千", "천", "Miles"],
+"Millions": ["Milhões", "Millions", "Millionen", "Milioni", "Miljoenen", "Miliony", "百万", "百万", "백만", "Millones"],
+"Billions": ["Bilhões", "Milliards", "Milliarden", "Miliardi", "Miljarden", "Miliardy", "十億", "十亿", "십억", "Miles de millones"],
+"Trillions": ["Trilhões", "Billions", "Billionen", "Bilioni", "Biljoenen", "Biliony", "兆", "万亿", "조", "Billones"],
+"Value decimal places": ["Casas decimais do valor", "Décimales de la valeur", "Dezimalstellen des Werts", "Posizioni decimali del valore", "Decimalen van waarde", "Miejsca dziesiętne wartości", "値の小数点以下桁数", "值的小数位", "값 소수 자릿수", "Posiciones decimales del valor"],
+"Percentage decimal places": ["Casas decimais da percentagem", "Décimales du pourcentage", "Dezimalstellen des Prozentsatzes", "Posizioni decimali della percentuale", "Decimalen van percentage", "Miejsca dziesiętne procentu", "パーセントの小数点以下桁数", "百分比的小数位", "백분율 소수 자릿수", "Posiciones decimales del porcentaje"],
+})

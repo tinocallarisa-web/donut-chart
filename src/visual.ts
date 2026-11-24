@@ -34,7 +34,7 @@ import "./../style/visual.less";
 
 import { STRINGS } from "./strings";
 import { OBJECTS, PANE, PropSpec } from "./formatSpec";
-import { buildModel, groupEntries, Model, Entry, Cat, OTHER_KEY } from "./model";
+import { buildModel, groupEntries, largestRemainder, Model, Entry, Cat, OTHER_KEY } from "./model";
 import { createProWatermark, renderProWatermark } from "./comun/watermark";
 
 import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructorOptions;
@@ -68,8 +68,6 @@ function matchesPlan(sp: unknown, planId: string): boolean {
 
 /** Rondas de fetchMoreData: 30.000 filas por ventana, hasta 11 ventanas. Si aún falta, "Other is incomplete". */
 const MAX_FETCH_ROUNDS = 10;
-/** Formato propio cuando la columna llega sin formato (columna sumada): miles con separador. */
-const DEFAULT_FMT = "#,0.##";
 
 /** Colores "Classic" de Power BI, por orden de categoría. */
 const CLASSIC = ["#118DFF", "#12239E", "#E66C37", "#6B007B", "#E044A7", "#744EC2", "#D9B300", "#D64550", "#197278", "#1AAB40"];
@@ -264,30 +262,83 @@ export class Visual implements IVisual {
         return f;
     }
 
-    /** Valor completo (tabla, tooltip): el formato de la fila (dinámico) o el de la medida; si no hay, el propio. */
+    /**
+     * Formato por defecto cuando la columna llega sin formato (columna sumada): miles con separador y sin decimales
+     * espurios (3,340,463, no 3,340,462.5); por debajo de 100, hasta dos decimales.
+     */
+    private static defaultFmt(v: number): string {
+        return Math.abs(v) >= 100 ? "#,0" : "#,0.##";
+    }
+
+    /** Valor completo (tooltip, lector de pantalla): el formato de la fila (dinámico) o el de la medida. */
     private fmtFull(v: number | null, fmt: string | undefined): string {
         if (v === null || v === undefined || !isFinite(v)) return this.t("UI_Blank", "(Blank)");
-        return this.formatter(fmt || DEFAULT_FMT).format(v);
+        return this.formatter(fmt || Visual.defaultFmt(v)).format(v);
     }
 
     /** Valor compacto con 3 cifras significativas (490K, 2,06M, 12,5K); los porcentajes, tal cual. */
     private fmtCompact(v: number, fmt: string | undefined): string {
-        const a = Math.abs(v);
-        const f = fmt || "#,0";
-        if (Visual.isPct(f) || a < 1000) return this.formatter(f).format(v);
-        const unit = a >= 1e12 ? 1e12 : a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : 1e3;
-        const scaled = a / unit;
-        const precision = Math.max(0, Math.min(2, 3 - (Math.floor(Math.log10(Math.max(scaled, 1))) + 1)));
-        try { return this.formatter(f, a, precision).format(v); } catch { return this.formatter(f).format(v); }
+        return this.fmtValue(v, fmt, "auto", null, "compact");
     }
 
-    /** % con la configuración regional (24 % en español, 24% en inglés). units en 10^-decimales de punto. */
-    private fmtPct(units: number): string {
-        const d = Math.round(Number(this.settings.labels?.decimals ?? 0));
+    /**
+     * Formato de números como el nativo (patrón de Bar Chart): el formato del modelo + host.locale, con Display units
+     * (Auto / None / Thousands / Millions / Billions / Trillions) y Value decimal places (null = automático).
+     * autoMode decide qué es "Auto" en cada sitio: unidades automáticas (etiquetas, centro) o cifra completa (tabla).
+     */
+    private fmtValue(v: number, fmt: string | undefined, units: string, decimals: number | null, autoMode: "compact" | "full"): string {
+        if (v === null || v === undefined || !isFinite(v)) return this.t("UI_Blank", "(Blank)");
+        const f = fmt || Visual.defaultFmt(v);
+        const dec = decimals === null || decimals === undefined || !isFinite(decimals) ? undefined : Math.max(0, Math.round(decimals));
+        const a = Math.abs(v);
+        const fixed: Record<string, number> = { thousands: 1e3, millions: 1e6, billions: 1e9, trillions: 1e12 };
+        let u = units;
+        if (u === "auto") u = autoMode === "compact" ? "auto" : "none";
+        try {
+            if (Visual.isPct(f) || u === "none") return this.formatter(f, undefined, dec).format(v);
+            if (fixed[u]) return this.formatter(f, fixed[u], dec ?? 0).format(v);
+            if (a < 1000) return this.formatter(f, undefined, dec).format(v);
+            const unit = a >= 1e12 ? 1e12 : a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : 1e3;
+            const precision = dec ?? Math.max(0, Math.min(2, 3 - (Math.floor(Math.log10(Math.max(a / unit, 1))) + 1)));
+            return this.formatter(f, a, precision).format(v);
+        } catch { return this.formatter(f).format(v); }
+    }
+
+    private numOpt(obj: string): number | null {
+        const d = this.settings[obj]?.valueDecimals;
+        return d === null || d === undefined || d === "" ? null : Number(d);
+    }
+
+    /** % con la configuración regional (24 % en español, 24% en inglés). units en 10^-d de punto porcentual. */
+    private fmtPct(units: number, d: number = this.pctDec("labels")): string {
         try {
             return new Intl.NumberFormat(this.host.locale || "en-US", { style: "percent", minimumFractionDigits: d, maximumFractionDigits: d })
                 .format(units / Math.pow(10, d) / 100);
         } catch { return (units / Math.pow(10, d)).toFixed(d) + "%"; }
+    }
+
+    private pctDec(obj: string): number {
+        return Math.max(0, Math.min(4, Math.round(Number(this.settings[obj]?.percentDecimals ?? 0)) || 0));
+    }
+
+    /**
+     * % de la tabla con sus propios decimales, por resto mayor (suman 100 y los de "Otros" suman lo de "Otros").
+     */
+    private tablePct(): { pct: Map<string, number>; adjusted: boolean } {
+        const d = this.pctDec("legend");
+        const units = 100 * Math.pow(10, d);
+        const lr = largestRemainder(this.entries.map(e => e.value), units);
+        const pct = new Map<string, number>();
+        let adjusted = lr.adjusted;
+        this.entries.forEach((e, i) => {
+            pct.set(e.key, lr.out[i]);
+            if (e.isOther) {
+                const sub = largestRemainder(e.members.map(c => c.value), lr.out[i]);
+                e.members.forEach((c, j) => pct.set(c.key, sub.out[j]));
+                adjusted = adjusted || sub.adjusted;
+            }
+        });
+        return { pct, adjusted };
     }
 
     private int(n: number): string { return this.formatter("#,0").format(n); }
@@ -333,7 +384,7 @@ export class Visual implements IVisual {
                 let v: any = p.type === "fill" ? saved?.solid?.color : saved;
                 if (v === undefined || v === null) v = t?.[obj]?.[p.name];
                 if (v === undefined || v === null) v = p.def;
-                if (p.type === "num") {
+                if (p.type === "num" && v !== null && v !== "") {
                     v = Number(v);
                     if (!isFinite(v)) v = p.def;
                     if (p.min !== undefined) v = Math.max(p.min, v);
@@ -600,9 +651,9 @@ export class Visual implements IVisual {
         }
         const s = this.settings;
         const g = groupEntries(m, { maxSlices: Number(s.slices.maxSlices), groupBelow: Number(s.slices.groupBelow), sort: String(s.slices.sort),
-            decimals: Math.round(Number(s.labels.decimals)), otherName: this.t("UI_Other", "Other") });
+            decimals: this.pctDec("labels"), otherName: this.t("UI_Other", "Other") });
         this.entries = g.entries;
-        this.roundedNote = g.adjusted;
+        this.roundedNote = g.adjusted || (this.entries.length > 0 && this.tablePct().adjusted);
         this.assignColors();
         if (this.pendingRestore) this.restoreSelection(this.pendingRestore);
         else if (!this.selKeys.size) {
@@ -775,7 +826,12 @@ export class Visual implements IVisual {
         const grid = document.createElement("div");
         grid.className = "dn-grid";
         el.appendChild(grid);
-        const val = (v: number, fmt: string | undefined) => (o.compact ? this.fmtCompact(v, fmt ?? m.format) : this.fmtFull(v, fmt ?? m.format));
+        const units = String(s.legend.displayUnits), dec = this.numOpt("legend");
+        // Auto = cifra completa; en tamaño mini (o si no cabe) la tabla pasa a unidades automáticas.
+        const val = (v: number, fmt: string | undefined) => this.fmtValue(v, fmt ?? m.format, o.compact && units === "auto" ? "auto" : units, dec, "full");
+        const tp = this.tablePct();
+        const dT = this.pctDec("legend");
+        const pctOf = (key: string) => this.fmtPct(tp.pct.get(key) ?? 0, dT);
         const cell = (row: HTMLElement[], cls: string, text: string, key?: string): HTMLDivElement => {
             const c = document.createElement("div");
             c.className = "dn-c " + cls;
@@ -812,7 +868,7 @@ export class Visual implements IVisual {
                 nm.appendChild(b);
             }
             cell(r, "dn-num", val(e.value, e.members[0].fmt), e.key);
-            cell(r, "dn-num", this.fmtPct(e.pct), e.key);
+            cell(r, "dn-num", pctOf(e.key), e.key);
             r.forEach(c => c.setAttribute("data-row", e.key));
             if (e.isOther && o.expanded) {
                 e.members.forEach((c, i) => {
@@ -821,7 +877,7 @@ export class Visual implements IVisual {
                     const cn = cell(rr, "dn-name dn-child", c.name, c.key);
                     cn.style.color = this.mutedInk;
                     cell(rr, "dn-num dn-child", val(c.value, c.fmt), c.key);
-                    cell(rr, "dn-num dn-child", this.fmtPct(e.memberPct[i]), c.key);
+                    cell(rr, "dn-num dn-child", pctOf(c.key), c.key);
                     rr.forEach(x => { x.setAttribute("data-row", c.key); x.setAttribute("data-child", "1"); });
                 });
             }
@@ -832,7 +888,7 @@ export class Visual implements IVisual {
             cell(r, "dn-sw", "");
             cell(r, "dn-name", this.tf("UI_More", "+{0} more", String(rest.reduce((a, e) => a + (e.isOther ? e.members.length : 1), 0))));
             cell(r, "dn-num", val(rest.reduce((a, e) => a + e.value, 0), m.format));
-            cell(r, "dn-num", this.fmtPct(rest.reduce((a, e) => a + e.pct, 0)));
+            cell(r, "dn-num", this.fmtPct(rest.reduce((a, e) => a + (tp.pct.get(e.key) ?? 0), 0), dT));
             r.forEach(c => { c.style.color = this.mutedInk; });
         }
         if (o.total) {
@@ -840,7 +896,7 @@ export class Visual implements IVisual {
             cell(r, "dn-t dn-sw", "");
             cell(r, "dn-t dn-name", this.t("UI_Total", "Total"));
             cell(r, "dn-t dn-num", val(m.total, m.format));
-            cell(r, "dn-t dn-num", this.fmtPct(100 * Math.pow(10, Math.round(Number(s.labels.decimals)))));
+            cell(r, "dn-t dn-num", this.fmtPct(100 * Math.pow(10, dT), dT));
             r.forEach(c => { c.style.borderTopColor = this.hc ? this.hcFg : this.gridLine; });
         }
         const notes = this.notesList(o.rounded);
@@ -1008,7 +1064,7 @@ export class Visual implements IVisual {
         let c = String(s.labels.content);
         if (c === "auto") c = s.legend.position === "off" ? "namePercent" : "percent";
         const pct: LabelPart = { kind: "pct", text: this.fmtPct(e.pct) };
-        const val: LabelPart = { kind: "val", text: this.fmtCompact(e.value, e.members[0].fmt ?? this.model.format) };
+        const val: LabelPart = { kind: "val", text: this.fmtValue(e.value, e.members[0].fmt ?? this.model.format, String(s.labels.displayUnits), this.numOpt("labels"), "compact") };
         const name: LabelPart = { kind: "name", text: e.name };
         switch (c) {
             case "value": return [val];
@@ -1168,8 +1224,10 @@ export class Visual implements IVisual {
         const rr = g0.ri * 0.9;
         const custom = String(s.center.title || "").trim();
         const title = focus ? focus.name : (custom || m.measureName);
-        const values = focus ? [this.fmtFull(focus.value, focus.fmt ?? m.format), this.fmtCompact(focus.value, focus.fmt ?? m.format)]
-            : (m.format ? [this.fmtFull(m.total, m.format), this.fmtCompact(m.total, m.format)] : [this.fmtCompact(m.total, undefined)]);
+        const cu = String(s.center.displayUnits), cd = this.numOpt("center");
+        const v0 = focus ? focus.value : m.total, f0 = focus ? (focus.fmt ?? m.format) : m.format;
+        // Auto = unidades automáticas; con unidades elegidas, solo esas.
+        const values = [this.fmtValue(v0, f0, cu, cd, "compact")];
         const sub = focus ? this.fmtPct(focus.pct) : "";
         const fits = (lines: { text: string; fs: number; bold: boolean }[]) => {
             const lh = lines.map(l => l.fs * 1.15);
@@ -1752,11 +1810,12 @@ export class Visual implements IVisual {
     // ── Panel de formato (desde la tabla de tools/formato.py) ───────────────
 
     private slice(obj: string, p: PropSpec): powerbi.visuals.FormattingSlice {
-        const value = this.settings?.[obj]?.[p.name] ?? p.def;
+        const cur = this.settings?.[obj]?.[p.name];
+        const value = cur === undefined ? p.def : cur;
         const descriptor = { objectName: obj, propertyName: p.name };
         const base = { uid: obj + "-" + p.name, displayName: this.t(p.key, p.label) };
         if (p.type === "bool") return { ...base, control: { type: "ToggleSwitch" as any, properties: { descriptor, value: !!value } } } as any;
-        if (p.type === "num") return { ...base, control: { type: "NumUpDown" as any, properties: { descriptor, value: Number(value),
+        if (p.type === "num") return { ...base, control: { type: "NumUpDown" as any, properties: { descriptor, value: value === null || value === "" ? undefined : Number(value),
             options: { minValue: p.min !== undefined ? { type: 0, value: p.min } : undefined, maxValue: p.max !== undefined ? { type: 1, value: p.max } : undefined } } } } as any;
         if (p.type === "fill") return { ...base, control: { type: "ColorPicker" as any, properties: { descriptor, value: { value: String(value) } } } } as any;
         if (p.type === "enum") {

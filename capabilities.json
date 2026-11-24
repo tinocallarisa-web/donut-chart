@@ -436,9 +436,54 @@
             }
           }
         },
-        "decimals": {
-          "displayName": "Percent decimals",
-          "displayNameKey": "Prop_labels_decimals",
+        "displayUnits": {
+          "displayName": "Display units",
+          "displayNameKey": "Prop_labels_displayUnits",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Auto",
+                "displayNameKey": "Enum_displayUnits_auto"
+              },
+              {
+                "value": "none",
+                "displayName": "None",
+                "displayNameKey": "Enum_displayUnits_none"
+              },
+              {
+                "value": "thousands",
+                "displayName": "Thousands",
+                "displayNameKey": "Enum_displayUnits_thousands"
+              },
+              {
+                "value": "millions",
+                "displayName": "Millions",
+                "displayNameKey": "Enum_displayUnits_millions"
+              },
+              {
+                "value": "billions",
+                "displayName": "Billions",
+                "displayNameKey": "Enum_displayUnits_billions"
+              },
+              {
+                "value": "trillions",
+                "displayName": "Trillions",
+                "displayNameKey": "Enum_displayUnits_trillions"
+              }
+            ]
+          }
+        },
+        "valueDecimals": {
+          "displayName": "Value decimal places",
+          "displayNameKey": "Prop_labels_valueDecimals",
+          "type": {
+            "numeric": true
+          }
+        },
+        "percentDecimals": {
+          "displayName": "Percentage decimal places",
+          "displayNameKey": "Prop_labels_percentDecimals",
           "type": {
             "numeric": true
           }
@@ -479,6 +524,51 @@
                 "color": true
               }
             }
+          }
+        },
+        "displayUnits": {
+          "displayName": "Display units",
+          "displayNameKey": "Prop_center_displayUnits",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Auto",
+                "displayNameKey": "Enum_displayUnits_auto"
+              },
+              {
+                "value": "none",
+                "displayName": "None",
+                "displayNameKey": "Enum_displayUnits_none"
+              },
+              {
+                "value": "thousands",
+                "displayName": "Thousands",
+                "displayNameKey": "Enum_displayUnits_thousands"
+              },
+              {
+                "value": "millions",
+                "displayName": "Millions",
+                "displayNameKey": "Enum_displayUnits_millions"
+              },
+              {
+                "value": "billions",
+                "displayName": "Billions",
+                "displayNameKey": "Enum_displayUnits_billions"
+              },
+              {
+                "value": "trillions",
+                "displayName": "Trillions",
+                "displayNameKey": "Enum_displayUnits_trillions"
+              }
+            ]
+          }
+        },
+        "valueDecimals": {
+          "displayName": "Value decimal places",
+          "displayNameKey": "Prop_center_valueDecimals",
+          "type": {
+            "numeric": true
           }
         }
       }
@@ -601,6 +691,58 @@
                 "color": true
               }
             }
+          }
+        },
+        "displayUnits": {
+          "displayName": "Display units",
+          "displayNameKey": "Prop_legend_displayUnits",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Auto",
+                "displayNameKey": "Enum_displayUnits_auto"
+              },
+              {
+                "value": "none",
+                "displayName": "None",
+                "displayNameKey": "Enum_displayUnits_none"
+              },
+              {
+                "value": "thousands",
+                "displayName": "Thousands",
+                "displayNameKey": "Enum_displayUnits_thousands"
+              },
+              {
+                "value": "millions",
+                "displayName": "Millions",
+                "displayNameKey": "Enum_displayUnits_millions"
+              },
+              {
+                "value": "billions",
+                "displayName": "Billions",
+                "displayNameKey": "Enum_displayUnits_billions"
+              },
+              {
+                "value": "trillions",
+                "displayName": "Trillions",
+                "displayNameKey": "Enum_displayUnits_trillions"
+              }
+            ]
+          }
+        },
+        "valueDecimals": {
+          "displayName": "Value decimal places",
+          "displayNameKey": "Prop_legend_valueDecimals",
+          "type": {
+            "numeric": true
+          }
+        },
+        "percentDecimals": {
+          "displayName": "Percentage decimal places",
+          "displayNameKey": "Prop_legend_percentDecimals",
+          "type": {
+            "numeric": true
           }
         }
       }
