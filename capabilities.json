@@ -43,12 +43,6 @@
       "description": "Text measure shown as a note under its row."
     },
     {
-      "displayName": "Center value",
-      "name": "centerValue",
-      "kind": "Measure",
-      "description": "Measure shown in the centre of the donut."
-    },
-    {
       "displayName": "Tooltips",
       "name": "tooltips",
       "kind": "Measure",
@@ -78,9 +72,6 @@
             "max": 1
           },
           "annotation": {
-            "max": 1
-          },
-          "centerValue": {
             "max": 1
           },
           "tooltips": {
@@ -133,11 +124,6 @@
             {
               "for": {
                 "in": "annotation"
-              }
-            },
-            {
-              "for": {
-                "in": "centerValue"
               }
             },
             {
