@@ -897,7 +897,7 @@ async def main():
         print("Caso a en filas Zona × Canal (agregación por clave)")
         pg = await page(b, dv_caso_a_filas(), 900, 480, name="a_filas_zona_canal")
         i = await info(pg)
-        filas = [r for r in i["rows"] if not r["header"] and not r["total"]]
+        filas = [r for r in i["rows"] if not r["header"] and not r["total"] and not r["seg"]]
         check("mismas 5 marcas + Otros que con una fila por marca", [r["name"] for r in filas[:5]] == MARCAS[:5], str([r["name"] for r in filas]))
         await pg.evaluate("() => { const p = document.querySelector('path.dn-slice[data-key*=\"other\"]'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); }")
         sel = await pg.evaluate("() => (window.__sel || []).map(s => s.key)")
@@ -976,7 +976,8 @@ async def main():
                 lbl = f"f {shape} {W}x{H}"
                 dv = dv_caso_f(30000, segmento=True)
                 dv["metadata"]["objects"]["slices"] = {"shape": shape}
-                pg = await page(b, dv, W, H)
+                # Lectura sin licencia: el donut total (Small multiples = SKU es Pro; con licencia, ver más abajo).
+                pg = await page(b, dv, W, H, plan=None)
                 pedidos = await pg.evaluate("() => __fetch")
                 full = dv_caso_f()
                 full["metadata"]["objects"]["slices"] = {"shape": shape}
@@ -991,6 +992,16 @@ async def main():
                     check("f: sin aviso de incompleto con todas las filas", "incomplete" not in i["notes"], "")
                 await eventos(pg, lbl)
                 await pg.close()
+        # Con licencia: 57 paneles (SKU) tras el Append; los que caben a tamaño legible y el aviso de cuántos.
+        pg = await page(b, dv_caso_f(30000, segmento=True), 1200, 640)
+        await upd(pg, dv_caso_f(), op=1)
+        await shot(pg, "f_sm_57_paneles")
+        i = await info(pg)
+        n57 = len(i["panels"])
+        check("f Pro: 57 paneles de SKU, o los que caben con 'Showing N of 57 panels'", n57 == 57 or (f"Showing {n57} of 57 panels" in i["smnote"]), f"{n57} {i['smnote']}")
+        comprobar_dibujo(i, 1200, 640, "f Pro 57 paneles")
+        await eventos(pg, "f Pro 57 paneles")
+        await pg.close()
         dv = dv_caso_f(30000, segmento=True)
         pg = await page(b, dv, 900, 480, fetch_ok=False, name="f_incompleto")
         i = await info(pg)
