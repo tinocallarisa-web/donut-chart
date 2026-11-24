@@ -34,7 +34,7 @@ import "./../style/visual.less";
 
 import { STRINGS } from "./strings";
 import { OBJECTS, PANE, PropSpec } from "./formatSpec";
-import { buildModel, groupEntries, largestRemainder, Model, Entry, Cat, OTHER_KEY } from "./model";
+import { buildModel, groupEntries, largestRemainder, computeChange, splitChange, Model, Entry, Cat, Change, Dim, OTHER_KEY } from "./model";
 import { createProWatermark, renderProWatermark } from "./comun/watermark";
 
 import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructorOptions;
@@ -108,11 +108,17 @@ function reportTemplate(host: IVisualHost): Settings {
 let instanceCounter = 0;
 
 /** Una parte de una etiqueta: se retiran en el orden valor → nombre → % (Tino, 24-11: el % es lo último). */
-interface LabelPart { kind: "pct" | "val" | "name"; text: string; }
+interface LabelPart { kind: "pct" | "val" | "name" | "chg"; text: string; }
 interface PlacedLabel { e: Entry; text: string; x: number; y: number; anchor: "middle" | "start" | "end"; inside: boolean; w: number; fs: number; leader?: [number, number][]; }
-interface Geo { cx: number; cy: number; R: number; ri: number; ringR: number; ax: number; ay: number; aw: number; ah: number; }
+/** Geometría de un panel: R = radio exterior (con el anillo de segmentos), Rin = radio exterior del anillo de categorías. */
+interface Geo { cx: number; cy: number; R: number; Rin: number; ri: number; ringR: number; ax: number; ay: number; aw: number; ah: number; ringSpace: number; iconSpace: number; }
 interface Arc { e: Entry; a0: number; a1: number; idx: number; }
-type FocusItem = { kind: "entry"; e: Entry } | { kind: "child"; e: Entry; c: Cat; i: number };
+/** Un arco del anillo exterior (Segment, Pro): el par categoría·segmento. */
+interface SegArc { e: Entry; sd: Dim; si: number; key: string; a0: number; a1: number; value: number; hl: number; pct: number; color: string; }
+/** Un donut dibujado: el total, o un panel de Small multiples con sus filas (mismo conjunto de "Otros" y colores). */
+interface PanelDraw { index: number; fkey: string | null; title: string; entries: Entry[]; total: number; arcs: Arc[]; segArcs: SegArc[]; geo: Geo | null; g: Sel<SVGGElement> | null; }
+interface TableOpts { fs: number; expanded: boolean; fold: number; compact: boolean; header: boolean; total: boolean; rounded: boolean; segRows: boolean; ann: boolean; bar: boolean; second: boolean; }
+type FocusItem = { kind: "entry"; e: Entry } | { kind: "child"; e: Entry; c: Cat; i: number } | { kind: "seg"; e: Entry; sd: Dim; si: number; key: string };
 
 export class Visual implements IVisual {
     private host: IVisualHost;
@@ -142,7 +148,13 @@ export class Visual implements IVisual {
     private dataView: DataView | null = null;
     private model: Model | null = null;
     private entries: Entry[] = [];
+    /** Categorías que salen (Compare with): solo en la tabla. */
+    private goneEntries: Entry[] = [];
+    private panels: PanelDraw[] = [];
     private arcs: Arc[] = [];
+    /** Orden por cabecera de la tabla: en memoria, nunca se guarda. */
+    private sortCol: string | null = null;
+    private sortDir = -1;
     private roundedNote = false;
     private settings: Settings = {};
     private tplVisto: string | null = null;
@@ -622,6 +634,8 @@ export class Visual implements IVisual {
         this.tableEl = null;
         this.geo = null;
         this.arcs = [];
+        d3.select(this.root).selectAll(".dn-sm-title, .dn-smnote").remove();
+        this.panels = [];
     }
 
     private render(options: VisualUpdateOptions): void {
@@ -655,6 +669,11 @@ export class Visual implements IVisual {
         this.entries = g.entries;
         this.roundedNote = g.adjusted || (this.entries.length > 0 && this.tablePct().adjusted);
         this.assignColors();
+        // Pro: cambio frente a Compare with, orden (cabecera / Sort by change) y paneles. Colores antes de ordenar: el
+        // color va con la categoría, no con la posición.
+        this.computeChanges();
+        this.applySort();
+        this.panels = this.buildPanels();
         if (this.pendingRestore) this.restoreSelection(this.pendingRestore);
         else if (!this.selKeys.size) {
             const ids = this.selectionManager.getSelectionIds?.() as ISelectionId[] | undefined;
@@ -755,6 +774,184 @@ export class Visual implements IVisual {
         other.otherPattern = dist(other.color) < 20;
     }
 
+    // ── Pro: comparación, objetivo, segmentos, paneles ────────────────────────
+
+    /** Funciones Pro que se dibujan: con licencia, o en la vista previa (editando) si el informe las pide. */
+    private get cmpOn(): boolean { return !!this.model?.compareCol && this.previewOf("comparison"); }
+    private get tgtOn(): boolean { return !!this.model?.targetCol && this.previewOf("targets"); }
+    private get segOn(): boolean { return !!this.model?.segmentCol && this.model.segments.length > 0 && this.previewOf("segments"); }
+    private get smOn(): boolean { return !!this.model?.facetCol && this.model.facets.length > 0 && this.previewOf("small multiples"); }
+    private get annOn(): boolean { return !!this.model?.annotationCol && this.settings.annotations?.show !== false && this.previewOf("annotations"); }
+    private get proColumns(): boolean { return this.cmpOn || this.tgtOn || this.annOn || this.segOn; }
+
+    private get cmpName(): string { return this.model?.compareCol?.source.displayName ?? ""; }
+    private get tgtName(): string { return this.model?.targetCol?.source.displayName ?? ""; }
+
+    /**
+     * Cambio frente a Compare with de las filas del donut y de las que salen (gone), con el mismo conjunto de "Otros".
+     * Los Δ pp se reparten por resto mayor y suman 0; los miembros de "Otros" reparten el suyo.
+     */
+    private computeChanges(): void {
+        this.goneEntries = [];
+        for (const e of this.entries) { e.ch = undefined; e.memberCh = undefined; }
+        const m = this.model;
+        if (!this.cmpOn || !m) return;
+        const gone: Entry[] = m.gone.map(c => ({ key: c.key, name: c.name, value: 0, hl: null, isOther: false, members: [c], pct: 0, color: "",
+            memberPct: [], cmp: c.cmp, tgt: null }));
+        const all = this.entries.concat(gone);
+        const ch = computeChange(all.map(e => e.value), all.map(e => e.cmp));
+        all.forEach((e, i) => { e.ch = ch[i]; });
+        for (const e of this.entries) if (e.isOther && e.ch) e.memberCh = splitChange(e.ch, e.members.map(c => c.value), e.members.map(c => c.cmp));
+        this.goneEntries = gone;
+    }
+
+    /** Orden: el de la cabecera pulsada (en memoria) > Sort by change > el de Slices. "Otros" siempre el último. */
+    private applySort(): void {
+        let col = this.sortCol, dir = this.sortDir;
+        if (!col && this.cmpOn && this.settings.compare?.sortByChange) { col = "dpp"; dir = -1; }
+        if (!col) return;
+        const loc = this.host.locale || "en-US";
+        const num = (e: Entry): number => {
+            switch (col) {
+                case "dpp": return e.ch ? e.ch.dpp10 : 0;
+                case "dval": return e.ch ? (e.ch.isNew ? Infinity : e.ch.dval === null ? -Infinity : e.ch.dval) : 0;
+                case "tgt": return e.tgt ? e.value / e.tgt : -Infinity;
+                default: return e.value;
+            }
+        };
+        const list = this.entries.filter(e => !e.isOther);
+        list.sort((a, b) => {
+            if (col === "name") return dir * a.name.localeCompare(b.name, loc);
+            const x = num(a), y = num(b);
+            if (x === y) return b.value - a.value;
+            return x > y ? dir : -dir;
+        });
+        this.entries = list.concat(this.entries.filter(e => e.isOther));
+    }
+
+    /**
+     * Paneles: uno con el donut total, o uno por valor de Small multiples con el MISMO conjunto de "Otros", orden y colores
+     * globales (las filas de cada panel salen de las partes de cada categoría). Vista previa sin licencia: 4 paneles.
+     */
+    private buildPanels(): PanelDraw[] {
+        const m = this.model;
+        if (!m || !this.smOn) return [{ index: 0, fkey: null, title: "", entries: this.entries, total: m ? m.total : 0, arcs: [], segArcs: [], geo: null, g: null }];
+        const facets = this.isPro ? m.facets : m.facets.slice(0, 4);
+        const d = this.pctDec("labels");
+        const units = 100 * Math.pow(10, d);
+        return facets.map((f, index) => {
+            const entries: Entry[] = this.entries.map(e => {
+                let v = 0, c = 0, t = 0, h = 0, nc = 0, tOk = true;
+                for (const mc of e.members) {
+                    const a = mc.byFacet.get(f.key);
+                    if (!a) { tOk = false; continue; }
+                    v += a.value; c += a.cmp; t += a.tgt; h += a.hl; nc += a.nc;
+                    if (!(a.nt > 0 && a.tgt > 0)) tOk = false;
+                }
+                return { key: e.key, name: e.name, value: Math.max(0, v), hl: m.hasHighlights ? h : null, isOther: e.isOther, members: e.members, pct: 0,
+                    color: e.color, otherPattern: e.otherPattern, memberPct: [], cmp: nc ? c : null, tgt: tOk && t > 0 ? t : null };
+            });
+            const lr = largestRemainder(entries.map(e => e.value), units);
+            entries.forEach((e, i) => {
+                e.pct = lr.out[i];
+                if (e.isOther) e.memberPct = largestRemainder(e.members.map(mc => Math.max(0, mc.byFacet.get(f.key)?.value ?? 0)), e.pct).out;
+            });
+            if (this.cmpOn) {
+                const goneV = m.gone.map(gc => gc.byFacet.get(f.key)?.cmp ?? 0).filter(x => x > 0);
+                const ch = computeChange(entries.map(e => e.value).concat(goneV.map(() => 0)), (entries.map(e => e.cmp) as (number | null)[]).concat(goneV));
+                entries.forEach((e, i) => { e.ch = ch[i]; });
+            }
+            return { index, fkey: f.key, title: f.name, entries, total: entries.reduce((s, e) => s + e.value, 0), arcs: [], segArcs: [], geo: null, g: null };
+        });
+    }
+
+    /** Valores de cada segmento de una fila (en un panel o en total) y sus % por resto mayor dentro de los de la fila. */
+    private segSplit(e: Entry, fkey: string | null, units: number): { sd: Dim; v: number; h: number; pct: number }[] {
+        const m = this.model;
+        const vals = m.segments.map(sd => {
+            let v = 0, h = 0;
+            for (const c of e.members) {
+                const a = fkey !== null ? c.parts.get(fkey + "␟" + sd.key) : c.bySeg.get(sd.key);
+                if (a) { v += a.value; h += a.hl; }
+            }
+            return { sd, v: Math.max(0, v), h, pct: 0 };
+        });
+        const lr = largestRemainder(vals.map(x => x.v), units).out;
+        vals.forEach((x, i) => { x.pct = lr[i]; });
+        return vals;
+    }
+
+    /** Tono de un segmento: el color de su categoría mezclado con el fondo, más claro cuanto más atrás va el segmento. */
+    private segColor(base: string, i: number, n: number): string {
+        if (this.hc) return this.hcBg;
+        const t = n <= 1 ? 0.3 : 0.18 + 0.5 * i / (n - 1);
+        const a = rgbOf(base), b = rgbOf(this.look ? this.look.bg : this.bgColor);
+        return "#" + a.map((x, k) => Math.round(x + (b[k] - x) * t).toString(16).padStart(2, "0")).join("").toUpperCase();
+    }
+
+    private static pairKey(entryKey: string, segKey: string): string { return entryKey + "␞" + segKey; }
+
+    private pairOf(key: string | null): { e: Entry; sd: Dim; si: number } | null {
+        if (!key || key.indexOf("␞") < 0 || !this.model) return null;
+        const i = key.indexOf("␞");
+        const e = this.entryOf(key.slice(0, i));
+        const sk = key.slice(i + 1);
+        const si = this.model.segments.findIndex(s => s.key === sk);
+        return e && si >= 0 ? { e, sd: this.model.segments[si], si } : null;
+    }
+
+    /** Estado frente al objetivo: ✓ (≥ Met at) · ≈ (≥ Close at) · ✕; forma y color. null sin objetivo. */
+    private tgtStatus(v: number, t: number | null): { pct: number; glyph: string; color: string; word: string } | null {
+        if (t === null || !(t > 0)) return null;
+        const met = Number(this.settings.target?.metAt) || 100;
+        const close = Math.min(met, Number(this.settings.target?.closeAt) || 90);
+        const pct = v / t * 100;
+        const look = this.look;
+        if (pct >= met) return { pct, glyph: "✓", color: this.hc ? this.hcFg : (look ? look.up : "#107C10"), word: this.t("UI_Met", "met") };
+        if (pct >= close) return { pct, glyph: "≈", color: this.hc ? this.hcFg : "#B86E00", word: this.t("UI_Close", "close") };
+        return { pct, glyph: "✕", color: this.hc ? this.hcFg : (look ? look.down : "#C4314B"), word: this.t("UI_Miss", "below") };
+    }
+
+    private fmtPP(d10: number): string {
+        const s = d10 > 0 ? "+" : d10 < 0 ? "−" : "±";
+        try {
+            return s + new Intl.NumberFormat(this.host.locale || "en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(d10) / 10);
+        } catch { return s + (Math.abs(d10) / 10).toFixed(1); }
+    }
+
+    private fmtSignedPct(x: number): string {
+        const r = Math.round(x * 1000);
+        const s = r > 0 ? "+" : r < 0 ? "−" : "±";
+        try {
+            return s + new Intl.NumberFormat(this.host.locale || "en-US", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(r) / 1000);
+        } catch { return s + (Math.abs(r) / 10).toFixed(1) + "%"; }
+    }
+
+    private chgText(ch: Change, which: "pp" | "val"): string {
+        if (ch.isNew) return this.t("UI_New", "new");
+        if (ch.isGone) return this.t("UI_Gone", "gone");
+        if (which === "pp") return this.fmtPP(ch.dpp10);
+        return ch.dval === null ? "—" : this.fmtSignedPct(ch.dval);
+    }
+
+    private mixText(ch: Change): string {
+        return ch.dpp10 < 0 ? this.t("UI_MixUp", "Value up but share down: the total grew faster")
+            : this.t("UI_MixDown", "Value down but share up: the total fell faster");
+    }
+
+    /** Total del objetivo (todas las categorías con objetivo) y si no coincide con el real (más de un 0,5 %). */
+    private targetTotals(): { tgt: number; mismatch: boolean } {
+        const m = this.model;
+        const tgt = m ? m.cats.reduce((s, c) => s + (c.tgt !== null && c.tgt > 0 ? c.tgt : 0), 0) : 0;
+        return { tgt, mismatch: !!m && tgt > 0 && m.total > 0 && Math.abs(tgt - m.total) / m.total > 0.005 };
+    }
+
+    private cmpTotal(): number {
+        const m = this.model;
+        if (!m) return 0;
+        return m.cats.concat(m.gone).reduce((s, c) => s + (c.cmp !== null && c.cmp > 0 ? c.cmp : 0), 0);
+    }
+
     // ── Notas bajo la tabla ──────────────────────────────────────────────────
 
     private notesList(withRounded = true): string[] {
@@ -770,6 +967,21 @@ export class Visual implements IVisual {
         if (this.moreState === "incomplete") out.push(this.tf("UI_Incomplete", "Showing {0} rows; Other is incomplete", this.int(m.rowCount)));
         else if (this.moreState === "loading") out.push(this.tf("UI_Loading", "Loading more rows: {0} so far", this.int(m.rowCount)));
         if (withRounded && this.roundedNote) out.push(this.t("UI_Rounded", "Percentages rounded to add up to 100%"));
+        if (this.cmpOn) {
+            const chs: Change[] = [];
+            for (const e of this.entries.concat(this.goneEntries)) { if (e.ch) chs.push(e.ch); if (e.memberCh && this.otherExpanded) chs.push(...e.memberCh); }
+            if (chs.some(c => c.mix)) out.push(this.t("UI_MixNote", "⚠ Share and value move in opposite directions"));
+            if (chs.some(c => c.isNew || c.isGone)) out.push(this.tf("UI_NewNote", "new: no value in {0} · gone: no value now", this.cmpName));
+        }
+        if (this.tgtOn) {
+            const tt = this.targetTotals();
+            if (tt.mismatch) {
+                let a = this.fmtCompact(tt.tgt, m.format), b = this.fmtCompact(m.total, m.format);
+                if (a === b) { a = this.fmtFull(tt.tgt, m.format); b = this.fmtFull(m.total, m.format); }
+                out.push(this.tf("UI_TargetMismatch", "Target total {0} ≠ actual {1}", a, b));
+            }
+        }
+        if (this.editing && m.annotationCol && m.annotationNotText > 0) out.push(this.t("UI_NotesNotText", "Annotations expects text: set the field to First"));
         return out;
     }
 
@@ -779,10 +991,19 @@ export class Visual implements IVisual {
         const s = this.settings;
         const pad = Math.max(2, Math.round(4 * this.k));
         let pos = String(s.legend.position);
-        if (pos === "auto") pos = W / Math.max(1, H) >= 1.3 ? "right" : "bottom";
-        let ax = pad, ay = pad, aw = W - 2 * pad, ah = H - 2 * pad;
+        const auto = pos === "auto";
+        if (auto) pos = W / Math.max(1, H) >= 1.3 ? "right" : "bottom";
+        const ax = pad, ay = pad;
+        let aw = W - 2 * pad, ah = H - 2 * pad;
         if (pos !== "off") {
-            const t = this.fitTable(pos, W, H, pad);
+            let t = this.fitTable(pos, W, H, pad);
+            // Con columnas Pro, en Automático se prueba también la otra posición y gana la que menos recorta.
+            if (auto && this.proColumns && (!t || t.score > 0)) {
+                const otra = pos === "right" ? "bottom" : "right";
+                const alt = this.fitTable(otra, W, H, pad);
+                if (alt && (!t || alt.score < t.score)) { if (t) t.el.remove(); t = alt; pos = otra; }
+                else if (alt) alt.el.remove();
+            }
             if (t) {
                 this.tableEl = t.el;
                 if (pos === "right") {
@@ -808,7 +1029,12 @@ export class Visual implements IVisual {
                 ah -= h + pad;
             }
         }
-        this.drawDonut(Math.max(0, ax), Math.max(0, ay), Math.max(0, aw), Math.max(0, ah));
+        const defs = this.svg.append("defs") as unknown as Sel<SVGDefsElement>;
+        this.ensurePatterns(defs);
+        if (this.smOn) this.drawGrid(Math.max(0, ax), Math.max(0, ay), Math.max(0, aw), Math.max(0, ah));
+        else this.drawDonut(this.panels[0], Math.max(0, ax), Math.max(0, ay), Math.max(0, aw), Math.max(0, ah));
+        this.geo = this.panels[0]?.geo ?? null;
+        this.arcs = this.panels[0]?.arcs ?? [];
     }
 
     private get mutedInk(): string {
@@ -819,22 +1045,25 @@ export class Visual implements IVisual {
 
     /**
      * La leyenda-tabla en su sitio y con todo su texto: baja la letra hasta el mínimo, quita la nota de redondeo, pliega
-     * "Otros", pasa las cifras a compacto, quita cabecera y total y, solo si aun así no caben, pliega las últimas filas en
-     * "+N more · x %" (suma 100, sin "…").
+     * "Otros", pasa las cifras a compacto, quita las filas de segmento, la minibarra, las notas y la segunda columna de
+     * cambio, quita cabecera y total y, solo si aun así no caben, pliega las últimas filas en "+N more · x %" (suma 100,
+     * sin "…"). score = cuánto se ha recortado (para elegir posición en Automático).
      */
-    private fitTable(pos: string, W: number, H: number, pad: number): { el: HTMLDivElement; w: number; h: number } | null {
+    private fitTable(pos: string, W: number, H: number, pad: number): { el: HTMLDivElement; w: number; h: number; score: number } | null {
         const s = this.settings;
         const mini = W < 200 || H < 140;
-        const maxW = pos === "right" ? Math.floor(W * (mini ? 0.55 : 0.5)) : W - 2 * pad;
+        const maxW = pos === "right" ? Math.floor(W * (mini ? 0.55 : this.proColumns ? 0.58 : 0.5)) : W - 2 * pad;
         const maxH = pos === "right" ? H - 2 * pad : Math.floor(H * (mini ? 0.6 : 0.5));
         if (maxW < 40 || maxH < 12) return null;
-        const o = {
-            fs: this.fz(Number(s.legend.fontSize)), expanded: this.otherExpanded, fold: 0, compact: false,
+        const fs0 = this.fz(Number(s.legend.fontSize));
+        const o: TableOpts = {
+            fs: fs0, expanded: this.otherExpanded, fold: 0, compact: false,
             header: !!s.legend.header, total: s.legend.totalRow === "on" || (s.legend.totalRow === "auto" && s.slices.shape === "pie"),
-            rounded: true,
+            rounded: true, segRows: true, ann: true, bar: true, second: true,
         };
+        let steps = 0;
         let el: HTMLDivElement | null = null;
-        for (let iter = 0; iter < 80; iter++) {
+        for (let iter = 0; iter < 90; iter++) {
             el = this.buildTable(o);
             el.style.visibility = "hidden";
             el.style.left = "0px"; el.style.top = "0px";
@@ -847,13 +1076,18 @@ export class Visual implements IVisual {
             if (h <= maxH && fitsW) {
                 el.style.visibility = "";
                 el.style.width = w + "px";
-                return { el, w, h };
+                return { el, w, h, score: steps * 10 + (fs0 - o.fs) };
             }
             el.remove();
             if (o.fs > this.minFs) { o.fs = Math.max(this.minFs, o.fs - 0.5); continue; }
+            steps++;
             if (o.rounded && this.roundedNote) { o.rounded = false; continue; }
             if (o.expanded) { o.expanded = false; continue; }
             if (!o.compact) { o.compact = true; continue; }
+            if (o.segRows && this.segOn) { o.segRows = false; continue; }
+            if (o.bar && this.cmpOn) { o.bar = false; continue; }
+            if (o.ann && this.annOn) { o.ann = false; continue; }
+            if (o.second && this.cmpOn && s.compare.changeShown === "both") { o.second = false; continue; }
             if (mini && o.header) { o.header = false; continue; }
             if (o.total) { o.total = false; continue; }
             if (o.header) { o.header = false; continue; }
@@ -863,7 +1097,7 @@ export class Visual implements IVisual {
         return null;
     }
 
-    private buildTable(o: { fs: number; expanded: boolean; fold: number; compact: boolean; header: boolean; total: boolean; rounded: boolean }): HTMLDivElement {
+    private buildTable(o: TableOpts): HTMLDivElement {
         const m = this.model;
         const s = this.settings;
         const el = document.createElement("div");
@@ -872,8 +1106,19 @@ export class Visual implements IVisual {
         el.setAttribute("aria-label", this.t("Obj_legend", "Legend table"));
         const color = this.hc ? this.hcFg : String(s.legend.color || this.ink);
         Object.assign(el.style, { fontSize: o.fs + "px", color });
+        const cmp = this.cmpOn, tgt = this.tgtOn;
+        const shown = String(s.compare?.changeShown ?? "both");
+        const showPP = cmp && shown !== "value";
+        const showDV = cmp && (shown === "value" || (shown === "both" && o.second));
+        const showBar = showPP && o.bar;
+        const cols: string[] = ["sw", "name", "val", "pct"];
+        if (showBar) cols.push("bar");
+        if (showPP) cols.push("dpp");
+        if (showDV) cols.push("dval");
+        if (tgt) cols.push("tgt");
         const grid = document.createElement("div");
         grid.className = "dn-grid";
+        grid.style.gridTemplateColumns = "auto minmax(0, 1fr)" + " auto".repeat(cols.length - 2);
         el.appendChild(grid);
         const units = String(s.legend.displayUnits), dec = this.numOpt("legend");
         // Auto = cifra completa; en tamaño mini (o si no cabe) la tabla pasa a unidades automáticas.
@@ -881,31 +1126,130 @@ export class Visual implements IVisual {
         const tp = this.tablePct();
         const dT = this.pctDec("legend");
         const pctOf = (key: string) => this.fmtPct(tp.pct.get(key) ?? 0, dT);
-        const cell = (row: HTMLElement[], cls: string, text: string, key?: string): HTMLDivElement => {
+        const muted = this.mutedInk;
+        let ri = 0;
+        const colCls = (c: string) => (c === "sw" ? "dn-sw" : c === "name" ? "dn-name" : c === "bar" ? "dn-num dn-bar" : "dn-num");
+        type Content = Record<string, string | Node | undefined>;
+        const row = (cls: string, key: string | undefined, rowKey: string | null, content: Content, extra?: (c: HTMLDivElement, col: string) => void): HTMLDivElement[] => {
+            const r: HTMLDivElement[] = [];
+            for (const col of cols) {
+                const c = document.createElement("div");
+                c.className = ("dn-c " + cls + " " + colCls(col)).replace(/\s+/g, " ").trim();
+                const v = content[col];
+                if (typeof v === "string") c.textContent = v; else if (v) c.appendChild(v);
+                if (key !== undefined) c.setAttribute("data-key", key);
+                if (rowKey) c.setAttribute("data-row", rowKey);
+                c.setAttribute("data-col", col);
+                c.setAttribute("data-ri", String(ri));
+                if (extra) extra(c, col);
+                grid.appendChild(c);
+                r.push(c);
+            }
+            ri++;
+            return r;
+        };
+        const spanRow = (cls: string, text: string, rowKey: string | null, from: number, colName: string): HTMLDivElement => {
             const c = document.createElement("div");
             c.className = "dn-c " + cls;
             c.textContent = text;
-            if (key !== undefined) c.setAttribute("data-key", key);
+            c.style.gridColumn = from + " / -1";
+            c.setAttribute("data-col", colName);
+            c.setAttribute("data-ri", String(ri++));
+            if (rowKey) { c.setAttribute("data-row", rowKey); c.setAttribute("data-key", rowKey); }
             grid.appendChild(c);
-            row.push(c);
             return c;
         };
-        if (o.header) {
-            const r: HTMLElement[] = [];
-            cell(r, "dn-h dn-sw", "");
-            cell(r, "dn-h dn-name", m.categoryName);
-            cell(r, "dn-h dn-num", m.measureName);
-            cell(r, "dn-h dn-num", "%");
-            r.forEach(c => { c.style.color = this.mutedInk; c.style.borderBottomColor = this.hc ? this.hcFg : this.gridLine; });
+        // Escala común de las minibarras: el mayor |Δ pp| visible (nuevas y salientes no cuentan: no tienen Δ).
+        const chsVisible: Change[] = [];
+        for (const e of this.entries.concat(this.goneEntries)) {
+            if (e.ch) chsVisible.push(e.ch);
+            if (e.memberCh && o.expanded) chsVisible.push(...e.memberCh);
         }
+        const maxAbs = Math.max(0, ...chsVisible.filter(c => !c.isNew && !c.isGone).map(c => Math.abs(c.dpp10)));
+        const chg = (ch: Change | undefined): Content => {
+            if (!ch) return {};
+            const out: Content = {};
+            const warn = (text: string, mix: boolean): Node => {
+                const sp = document.createElement("span");
+                if (mix) {
+                    const w = document.createElement("span");
+                    w.className = "dn-warn";
+                    w.textContent = "⚠ ";
+                    w.setAttribute("aria-hidden", "true");
+                    if (!this.hc) w.style.color = this.look ? this.look.plan : "#B86E00";
+                    sp.appendChild(w);
+                }
+                const t = document.createElement("span");
+                t.textContent = text;
+                if (ch.isNew || ch.isGone) t.className = "dn-tag";
+                sp.appendChild(t);
+                return sp;
+            };
+            if (showBar) out.bar = ch.isNew || ch.isGone ? "" : this.miniBar(ch.dpp10, maxAbs, o.fs);
+            if (showPP) out.dpp = warn(this.chgText(ch, "pp"), ch.mix && !showDV);
+            if (showDV) out.dval = warn(this.chgText(ch, "val"), ch.mix);
+            return out;
+        };
+        const tgtCell = (v: number, t: number | null): string | Node => {
+            const st = this.tgtStatus(v, t);
+            if (!st) return "—";
+            const sp = document.createElement("span");
+            const g = document.createElement("span");
+            g.className = "dn-glyph";
+            g.textContent = st.glyph;
+            g.style.color = st.color;
+            g.setAttribute("aria-label", st.word);
+            sp.appendChild(g);
+            sp.appendChild(document.createTextNode(" " + this.fmtPct(Math.round(st.pct), 0)));
+            return sp;
+        };
+        const mark = (ch: Change | undefined) => (c: HTMLDivElement, col: string) => {
+            if (!ch) return;
+            if (col === "dpp" || (col === "name" && !showPP)) c.setAttribute("data-dpp10", String(ch.dpp10));
+            if (ch.mix) c.setAttribute("data-mix", "1");
+            if (ch.isNew) c.setAttribute("data-new", "1");
+            if (ch.isGone) c.setAttribute("data-gone", "1");
+        };
+        if (o.header) {
+            if (cmp) {
+                const tc = this.cmpTotal();
+                const cap = tc > 0 ? this.tf("UI_TotalVs", "Total {0} vs {1}", this.fmtSignedPct(m.total / tc - 1), this.cmpName) : "";
+                if (cap) { const c = spanRow("dn-cap", cap, null, 1, "cap"); c.style.color = muted; }
+            }
+            const hb = (col: string, text: string): Node => {
+                const b = document.createElement("button");
+                b.type = "button";
+                b.className = "dn-sort";
+                b.setAttribute("data-sort", col);
+                const active = this.sortCol === col;
+                b.textContent = text + (active ? (this.sortDir > 0 ? " ▲" : " ▼") : "");
+                b.setAttribute("aria-label", this.tf("UI_SortCol", "Sort by {0}", text));
+                b.style.color = muted;
+                return b;
+            };
+            const r = row("dn-h", undefined, null, {
+                sw: "", name: hb("name", m.categoryName), val: hb("val", m.measureName), pct: hb("pct", "%"), bar: "",
+                dpp: hb("dpp", this.t("UI_DeltaPP", "Δ pp")), dval: hb("dval", this.t("UI_DeltaPct", "Δ %")), tgt: hb("tgt", this.t("UI_OfTarget", "% of target")),
+            }, (c, col) => {
+                c.setAttribute("role", "columnheader");
+                if (this.sortCol === col) c.setAttribute("aria-sort", this.sortDir > 0 ? "ascending" : "descending");
+            });
+            r.forEach(c => { c.style.color = muted; c.style.borderBottomColor = this.hc ? this.hcFg : this.gridLine; });
+        }
+        const noteRows = (notes: string[], rowKey: string, prefix?: string) => {
+            if (!o.ann || !this.annOn) return;
+            for (const n of notes) {
+                const c = spanRow("dn-ann", (prefix ? prefix + ": " : "") + n, rowKey, 2, "ann");
+                c.style.color = muted;
+            }
+        };
         const n = this.entries.length;
         const fold = o.fold >= 2 ? Math.min(o.fold, n - 1) : 0;
         const visible = this.entries.slice(0, n - fold);
+        const segUnitsT = (e: Entry) => tp.pct.get(e.key) ?? 0;
         visible.forEach((e, idx) => {
-            const r: HTMLElement[] = [];
-            const sw = cell(r, "dn-sw", "", e.key);
-            sw.appendChild(this.swatch(e, this.arcIndexOf(e, idx), o.fs));
-            const nm = cell(r, "dn-name", e.isOther ? "" : e.name, e.key);
+            const sw = this.swatch(e, this.arcIndexOf(e, idx), o.fs);
+            let nameNode: string | Node = e.name;
             if (e.isOther) {
                 const b = document.createElement("button");
                 b.type = "button";
@@ -914,38 +1258,53 @@ export class Visual implements IVisual {
                 b.setAttribute("aria-expanded", String(o.expanded));
                 b.textContent = e.name + " " + (o.expanded ? "▾" : "▸");
                 b.style.color = color;
-                nm.appendChild(b);
+                nameNode = b;
             }
-            cell(r, "dn-num", val(e.value, e.members[0].fmt), e.key);
-            cell(r, "dn-num", pctOf(e.key), e.key);
-            r.forEach(c => c.setAttribute("data-row", e.key));
+            row("", e.key, e.key, { sw, name: nameNode, val: val(e.value, e.members[0].fmt), pct: pctOf(e.key), ...chg(e.ch), tgt: tgtCell(e.value, e.tgt) }, mark(e.ch));
+            if (!e.isOther) noteRows(e.members[0].notes, e.key);
+            else if (!o.expanded) e.members.forEach(c => noteRows(c.notes, e.key, c.name));
             if (e.isOther && o.expanded) {
                 e.members.forEach((c, i) => {
-                    const rr: HTMLElement[] = [];
-                    cell(rr, "dn-sw", "", c.key);
-                    const cn = cell(rr, "dn-name dn-child", c.name, c.key);
-                    cn.style.color = this.mutedInk;
-                    cell(rr, "dn-num dn-child", val(c.value, c.fmt), c.key);
-                    cell(rr, "dn-num dn-child", pctOf(c.key), c.key);
-                    rr.forEach(x => { x.setAttribute("data-row", c.key); x.setAttribute("data-child", "1"); });
+                    const ch = e.memberCh ? e.memberCh[i] : undefined;
+                    const rr = row("dn-child", c.key, c.key, { sw: "", name: c.name, val: val(c.value, c.fmt), pct: pctOf(c.key), ...chg(ch),
+                        tgt: tgtCell(c.value, c.tgt !== null && c.tgt > 0 ? c.tgt : null) }, mark(ch));
+                    rr.forEach(x => x.setAttribute("data-child", "1"));
+                    rr[1].style.color = muted;
+                    noteRows(c.notes, c.key);
+                });
+            }
+            if (o.segRows && this.segOn) {
+                const split = this.segSplit(e, null, segUnitsT(e));
+                split.forEach((x, si) => {
+                    const key = Visual.pairKey(e.key, x.sd.key);
+                    const ssw = this.segSwatch(this.segColor(e.color, si, split.length), si, o.fs);
+                    const rr = row("dn-seg", key, key, { sw: ssw, name: x.sd.name, val: val(x.v, e.members[0].fmt), pct: this.fmtPct(x.pct, dT) });
+                    rr.forEach(c => c.setAttribute("data-seg", "1"));
+                    rr[1].style.color = muted;
                 });
             }
         });
         if (fold) {
             const rest = this.entries.slice(n - fold);
-            const r: HTMLElement[] = [];
-            cell(r, "dn-sw", "");
-            cell(r, "dn-name", this.tf("UI_More", "+{0} more", String(rest.reduce((a, e) => a + (e.isOther ? e.members.length : 1), 0))));
-            cell(r, "dn-num", val(rest.reduce((a, e) => a + e.value, 0), m.format));
-            cell(r, "dn-num", this.fmtPct(rest.reduce((a, e) => a + (tp.pct.get(e.key) ?? 0), 0), dT));
-            r.forEach(c => { c.style.color = this.mutedInk; });
+            const r = row("", undefined, null, {
+                sw: "", name: this.tf("UI_More", "+{0} more", String(rest.reduce((a, e) => a + (e.isOther ? e.members.length : 1), 0))),
+                val: val(rest.reduce((a, e) => a + e.value, 0), m.format), pct: this.fmtPct(rest.reduce((a, e) => a + (tp.pct.get(e.key) ?? 0), 0), dT),
+            });
+            r.forEach(c => { c.style.color = muted; });
+        }
+        // Las que salen: con su cuota anterior en el cambio, sin sector (no tienen valor actual).
+        for (const e of cmp ? this.goneEntries : []) {
+            const gsw = this.swatch({ ...e, color: "transparent" }, -1, o.fs);
+            const r = row("dn-gone", undefined, null, { sw: gsw, name: e.name, val: "—", pct: this.fmtPct(0, dT), ...chg(e.ch), tgt: "" }, mark(e.ch));
+            r.forEach(c => { c.style.color = muted; });
         }
         if (o.total) {
-            const r: HTMLElement[] = [];
-            cell(r, "dn-t dn-sw", "");
-            cell(r, "dn-t dn-name", this.t("UI_Total", "Total"));
-            cell(r, "dn-t dn-num", val(m.total, m.format));
-            cell(r, "dn-t dn-num", this.fmtPct(100 * Math.pow(10, dT), dT));
+            const tc = this.cmpTotal();
+            const tt = this.targetTotals();
+            const totCh: Content = {};
+            if (showDV && tc > 0) totCh.dval = this.fmtSignedPct(m.total / tc - 1);
+            const r = row("dn-t", undefined, null, { sw: "", name: this.t("UI_Total", "Total"), val: val(m.total, m.format), pct: this.fmtPct(100 * Math.pow(10, dT), dT),
+                ...totCh, tgt: tgt ? tgtCell(m.total, tt.tgt > 0 ? tt.tgt : null) : undefined });
             r.forEach(c => { c.style.borderTopColor = this.hc ? this.hcFg : this.gridLine; });
         }
         const notes = this.notesList(o.rounded);
@@ -953,13 +1312,39 @@ export class Visual implements IVisual {
             const nd = document.createElement("div");
             nd.className = "dn-note";
             nd.style.fontSize = Math.max(this.minFs, o.fs * 0.85) + "px";
-            nd.style.color = this.mutedInk;
+            nd.style.color = muted;
             for (const t of notes) { const d = document.createElement("div"); d.textContent = t; nd.appendChild(d); }
             el.appendChild(nd);
         }
         el.setAttribute("data-fold", String(fold));
         el.setAttribute("data-expanded", String(o.expanded));
+        el.setAttribute("data-segrows", String(o.segRows && this.segOn));
         return el;
+    }
+
+    /** Minibarra divergente lineal del Δ pp: cero en el centro, longitud proporcional (escala común), sentido = signo. */
+    private miniBar(d10: number, maxAbs: number, fs: number): SVGSVGElement {
+        const NS = "http://www.w3.org/2000/svg";
+        const w = Math.max(16, Math.round(fs * 2.6)), h = Math.max(6, Math.round(fs * 0.7));
+        const svg = document.createElementNS(NS, "svg") as SVGSVGElement;
+        svg.setAttribute("width", String(w)); svg.setAttribute("height", String(h)); svg.setAttribute("aria-hidden", "true");
+        svg.setAttribute("class", "dn-mbar");
+        const mid = w / 2;
+        if (maxAbs > 0 && d10 !== 0) {
+            const len = Math.max(1, (mid - 1) * Math.abs(d10) / maxAbs);
+            const r = document.createElementNS(NS, "rect");
+            r.setAttribute("x", String(d10 > 0 ? mid : mid - len)); r.setAttribute("y", "1");
+            r.setAttribute("width", String(len)); r.setAttribute("height", String(h - 2));
+            const look = this.look;
+            r.setAttribute("fill", this.hc ? this.hcFg : d10 > 0 ? (look ? look.up : "#2E7D5B") : (look ? look.down : "#C4314B"));
+            r.setAttribute("data-sign", d10 > 0 ? "+" : "-");
+            svg.appendChild(r);
+        }
+        const z = document.createElementNS(NS, "line");
+        z.setAttribute("x1", String(mid)); z.setAttribute("x2", String(mid)); z.setAttribute("y1", "0"); z.setAttribute("y2", String(h));
+        z.setAttribute("stroke", this.mutedInk); z.setAttribute("stroke-width", "1");
+        svg.appendChild(z);
+        return svg;
     }
 
     private get gridLine(): string {
@@ -968,7 +1353,7 @@ export class Visual implements IVisual {
     }
 
     private arcIndexOf(e: Entry, fallback: number): number {
-        const i = this.entries.indexOf(e);
+        const i = this.entries.findIndex(x => x.key === e.key);
         return i >= 0 ? i : fallback;
     }
 
@@ -980,9 +1365,10 @@ export class Visual implements IVisual {
         svg.setAttribute("width", String(sz)); svg.setAttribute("height", String(sz)); svg.setAttribute("aria-hidden", "true");
         const r = document.createElementNS(NS, "rect");
         r.setAttribute("x", "0.5"); r.setAttribute("y", "0.5"); r.setAttribute("width", String(sz - 1)); r.setAttribute("height", String(sz - 1)); r.setAttribute("rx", "1.5");
-        r.setAttribute("fill", e.color);
-        if (this.hc) { r.setAttribute("stroke", this.hcFg); r.setAttribute("stroke-width", "1"); }
+        r.setAttribute("fill", e.color === "transparent" ? "none" : e.color);
+        if (this.hc || e.color === "transparent") { r.setAttribute("stroke", this.hc ? this.hcFg : this.mutedInk); r.setAttribute("stroke-width", "1"); r.setAttribute("stroke-dasharray", e.color === "transparent" ? "2 1.5" : ""); }
         svg.appendChild(r);
+        if (idx < 0) return svg;
         if (e.otherPattern && !(this.patternsOn && idx > 0)) {
             const p = document.createElementNS(NS, "rect");
             p.setAttribute("x", "0.5"); p.setAttribute("y", "0.5"); p.setAttribute("width", String(sz - 1)); p.setAttribute("height", String(sz - 1));
@@ -993,6 +1379,27 @@ export class Visual implements IVisual {
             const p = document.createElementNS(NS, "rect");
             p.setAttribute("x", "0.5"); p.setAttribute("y", "0.5"); p.setAttribute("width", String(sz - 1)); p.setAttribute("height", String(sz - 1));
             p.setAttribute("fill", "url(#" + this.patternId(idx, e) + ")");
+            svg.appendChild(p);
+        }
+        return svg;
+    }
+
+    /** Muestra de un segmento: su tono y, con tramas o alto contraste, la trama del segmento. */
+    private segSwatch(color: string, si: number, fs: number): SVGSVGElement {
+        const NS = "http://www.w3.org/2000/svg";
+        const sz = Math.max(6, Math.round(fs * 0.65));
+        const svg = document.createElementNS(NS, "svg") as SVGSVGElement;
+        svg.setAttribute("width", String(sz)); svg.setAttribute("height", String(sz)); svg.setAttribute("aria-hidden", "true");
+        svg.style.marginLeft = Math.round(fs * 0.5) + "px";
+        const r = document.createElementNS(NS, "rect");
+        r.setAttribute("x", "0.5"); r.setAttribute("y", "0.5"); r.setAttribute("width", String(sz - 1)); r.setAttribute("height", String(sz - 1));
+        r.setAttribute("fill", color);
+        if (this.hc) { r.setAttribute("stroke", this.hcFg); r.setAttribute("stroke-width", "1"); }
+        svg.appendChild(r);
+        if (this.patternsOn && si > 0) {
+            const p = document.createElementNS(NS, "rect");
+            p.setAttribute("x", "0.5"); p.setAttribute("y", "0.5"); p.setAttribute("width", String(sz - 1)); p.setAttribute("height", String(sz - 1));
+            p.setAttribute("fill", "url(#" + this.segPatternId(si) + ")");
             svg.appendChild(p);
         }
         return svg;
@@ -1010,6 +1417,8 @@ export class Visual implements IVisual {
         return "dn-pat-" + this.instance + "-other" + (luminance(e.color) > 0.45 ? "d" : "l");
     }
 
+    private segPatternId(si: number): string { return "dn-segpat-" + this.instance + "-" + si; }
+
     /** Tramas (Accessibility → Patterns, y siempre en alto contraste): una por posición, la primera lisa. */
     private ensurePatterns(defs: Sel<SVGDefsElement>): void {
         // Trama ligera de "Otros" cuando su gris queda cerca de un gris de la paleta (Editorial).
@@ -1022,11 +1431,7 @@ export class Visual implements IVisual {
         }
         if (!this.patternsOn) return;
         const kinds = ["", "d45", "h", "d135", "v", "dots", "cross", "grid"];
-        this.entries.forEach((e, i) => {
-            if (i === 0) return;
-            const id = this.patternId(i, e);
-            const stroke = this.hc ? this.hcFg : (luminance(e.color) > 0.45 ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.75)");
-            const kind = kinds[1 + ((i - 1) % (kinds.length - 1))];
+        const mk = (id: string, kind: string, stroke: string) => {
             const p = defs.append("pattern").attr("id", id).attr("patternUnits", "userSpaceOnUse").attr("width", 6).attr("height", 6);
             if (kind === "d45") p.attr("patternTransform", "rotate(45)");
             if (kind === "d135") p.attr("patternTransform", "rotate(-45)");
@@ -1037,64 +1442,86 @@ export class Visual implements IVisual {
             else if (kind === "dots") p.append("circle").attr("cx", 3).attr("cy", 3).attr("r", 1.2).attr("fill", stroke);
             else if (kind === "cross") { ln(0, 0, 6, 6); ln(6, 0, 0, 6); }
             else { ln(0, 3, 6, 3); ln(3, 0, 3, 6); }
+        };
+        this.entries.forEach((e, i) => {
+            if (i === 0) return;
+            const stroke = this.hc ? this.hcFg : (luminance(e.color) > 0.45 ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.75)");
+            mk(this.patternId(i, e), kinds[1 + ((i - 1) % (kinds.length - 1))], stroke);
         });
+        if (this.segOn) {
+            // Segmentos: tramas propias (puntos, rayas…) para distinguirlos sin color.
+            const sk = ["", "dots", "v", "d135", "cross", "h", "grid", "d45"];
+            this.model.segments.forEach((_s, si) => { if (si > 0) mk(this.segPatternId(si), sk[1 + ((si - 1) % (sk.length - 1))], this.hc ? this.hcFg : "rgba(0,0,0,0.45)"); });
+        }
     }
 
-    private drawDonut(ax: number, ay: number, aw: number, ah: number): void {
+    private makeArcs(entries: Entry[], sa: number): Arc[] {
+        // Ángulos: d3.pie con el orden ya decidido (el de la tabla), en sentido horario desde el ángulo de inicio.
+        const pieGen = d3.pie<Entry>().sort(null).value(e => e.value).startAngle(sa).endAngle(sa + 2 * Math.PI);
+        return pieGen(entries).map((p, i) => ({ e: p.data, a0: p.startAngle, a1: p.endAngle, idx: i }));
+    }
+
+    /** Hueco para los iconos del objetivo en el borde exterior (solo con Target y radio suficiente). */
+    private iconSpaceFor(R: number): number {
+        if (!this.tgtOn || R < 40) return 0;
+        return Math.max(9, Math.min(16, Math.round(this.fz(8.5)))) + 3;
+    }
+
+    /** Radio exterior del anillo de categorías (con Segment, el anillo exterior ocupa el resto) y radio interior. */
+    private rinOf(R: number): number { return this.segOn ? Math.round(R * 0.74) : R; }
+    private riOf(R: number): number { return this.settings.slices.shape === "pie" ? 0 : this.rinOf(R) * Number(this.settings.slices.innerRadius) / 100; }
+
+    private drawDonut(p: PanelDraw, ax: number, ay: number, aw: number, ah: number): void {
         const s = this.settings;
-        const pie = s.slices.shape === "pie";
-        const defs = this.svg.append("defs") as unknown as Sel<SVGDefsElement>;
-        this.ensurePatterns(defs);
         const ringOn = s.scaleRing.mode !== "off";
         const R0full = Math.max(0, Math.min(aw, ah) / 2 - 2);
         if (R0full < 8) return;
         const ringSpace = ringOn ? Math.max(4, Math.round(R0full * 0.06)) + 2 : 0;
-        const R0 = R0full - ringSpace;
+        const iconSpace = this.iconSpaceFor(R0full);
+        const R0 = R0full - ringSpace - iconSpace;
         const cx = ax + aw / 2, cy = ay + ah / 2;
         const sa = (Number(s.slices.startAngle) || 0) * Math.PI / 180;
-        // Ángulos: d3.pie con el orden ya decidido (el de la tabla), en sentido horario desde el ángulo de inicio.
-        const pieGen = d3.pie<Entry>().sort(null).value(e => e.value).startAngle(sa).endAngle(sa + 2 * Math.PI);
-        this.arcs = pieGen(this.entries).map((p, i) => ({ e: p.data, a0: p.startAngle, a1: p.endAngle, idx: i }));
+        p.arcs = this.makeArcs(p.entries, sa);
         const labelsOn = !!s.labels.show;
         const fsL = this.fz(Number(s.labels.fontSize));
-        const riOf = (r: number) => (pie ? 0 : r * Number(s.slices.innerRadius) / 100);
         let R = R0;
         let labels: PlacedLabel[] = [];
-        if (labelsOn && this.arcs.length) {
+        const outSpace = ringSpace + iconSpace;
+        if (labelsOn && p.arcs.length) {
             // Todas las etiquetas con el mismo contenido y la misma letra (Tino, 24-11). Con la tabla visible, siempre
             // dentro: se encoge la letra de todas a la vez hasta el mínimo y luego se recorta el contenido de todas
-            // (valor → nombre → %); el sector que no admite ni la mínima se queda sin etiqueta (el dato está en la tabla).
+            // (Δ → valor → nombre → %); el sector que no admite ni la mínima se queda sin etiqueta (el dato está en la tabla).
             // Fuera con guía solo con la tabla en Off, donde la etiqueta es lo único que nombra el sector.
             const tableOn = !!this.tableEl;
             const pmode = String(s.labels.position);
             const mode: "inside" | "auto" | "outside" = tableOn || pmode === "inside" ? "inside" : pmode === "outside" ? "outside" : "auto";
-            const levels = Math.max(...this.arcs.map(a => this.variants(this.labelParts(a.e)).length));
+            const levels = Math.max(...p.arcs.map(a => this.variants(this.labelParts(a.e)).length));
             const sizes: number[] = [];
             for (let f = fsL; f > this.minFs; f -= 0.5) sizes.push(f);
             sizes.push(this.minFs);
             const planAt = (level: number, f: number) => {
-                let p = this.planLabels(R0, riOf(R0), cx, cy, ax, ay, aw, ah, f, ringSpace, level, mode);
+                let pl = this.planLabels(p.arcs, R0, this.rinOf(R0), this.riOf(R0), cx, cy, ax, ay, aw, ah, f, outSpace, level, mode);
                 let r = R0;
-                if (mode !== "inside" && p.needW > 0) {
+                if (mode !== "inside" && pl.needW > 0) {
                     const e = Math.max(6, f * 0.8);
-                    const nr = Math.min(R0, aw / 2 - ringSpace - e - 6 - p.needW - 2);
+                    const nr = Math.min(R0, aw / 2 - outSpace - e - 6 - pl.needW - 2);
                     if (nr < R0 && nr >= Math.max(R0 * 0.6, 24)) {
                         r = Math.floor(nr);
-                        p = this.planLabels(r, riOf(r), cx, cy, ax, ay, aw, ah, f, ringSpace, level, mode);
+                        pl = this.planLabels(p.arcs, r, this.rinOf(r), this.riOf(r), cx, cy, ax, ay, aw, ah, f, outSpace, level, mode);
                     }
                 }
-                return { p, r };
+                return { p: pl, r };
             };
             // La letra común la deciden los sectores legibles (los que admiten su etiqueta mínima a ≥ 0,75 × la letra base),
             // no el más pequeño: con esa letra, la etiqueta que no cabe en su sector se oculta (el dato está en la tabla).
             const fsLeg = Math.max(this.minFs, fsL * 0.75);
-            const legible = new Set(planAt(levels - 1, fsLeg).p.placed.map(l => l.e));
+            const legible = new Set(planAt(levels - 1, fsLeg).p.placed.map(l => l.e.key));
             const floor = planAt(levels - 1, this.minFs);
             let best = floor;
             const fitsAll = (c: { p: { placed: PlacedLabel[] } }) => {
                 if (!legible.size) return c.p.placed.length >= floor.p.placed.length;
-                const got = new Set(c.p.placed.map(l => l.e));
-                for (const e of legible) if (!got.has(e)) return false;
+                const got = new Set(c.p.placed.map(l => l.e.key));
+                for (const k of legible) if (!got.has(k)) return false;
                 return true;
             };
             search: for (let level = 0; level < levels; level++) {
@@ -1107,50 +1534,230 @@ export class Visual implements IVisual {
             R = best.r;
             labels = best.p.placed;
         }
-        const ri = pie ? 0 : R * Number(s.slices.innerRadius) / 100;
-        const ringR = R + (ringOn ? 2 : 0);
-        this.geo = { cx, cy, R, ri, ringR, ax, ay, aw, ah };
+        p.geo = { cx, cy, R, Rin: this.rinOf(R), ri: this.riOf(R), ringR: R + (ringOn ? 2 : 0), ax, ay, aw, ah, ringSpace, iconSpace };
+        this.drawPanelShapes(p, labels, ringOn, sa);
+    }
 
+    /**
+     * Small multiples (Pro): rejilla con las 9 opciones comunes. Mismo radio en todos los paneles (o radio ∝ √total con
+     * Size by total), mismo conjunto de "Otros", orden y colores que la tabla compartida, centro con el total de cada
+     * panel y etiquetas uniformes también ENTRE paneles (misma letra y contenido; la que no cabe se oculta).
+     */
+    private drawGrid(ax: number, ay: number, aw: number, ah: number): void {
+        const s = this.settings, sm = s.smallMultiples;
+        const m = this.model;
+        const totalPanels = m.facets.length;
+        let panels = this.panels;
+        const noteFs = Math.max(this.minFs, this.fz(8.5));
+        const gap = Math.max(0, Math.min(40, Number(sm.gap))) * Math.min(1, this.k);
+        const boxed = !!sm.border || !!sm.background;
+        const pad = boxed ? Math.max(3, Math.round(5 * Math.min(1, this.k))) : 0;
+        const tbase = Math.max(7, Number(sm.titleFontSize));
+        const tfs = Math.max(this.minFs, Math.min(tbase, Math.round(tbase * Math.min(1, this.k) * 2) / 2));
+        const titleH = Math.ceil(tfs * 1.35) + pad;
+        const MIN = 36;
+        const layout = (n: number, top: number) => {
+            const h = ah - top;
+            let best = { cols: 1, rows: n, side: -1 };
+            const fixed = Number(sm.columns) >= 1 ? Math.min(n, Math.round(Number(sm.columns))) : 0;
+            for (let c = fixed || 1; c <= (fixed || n); c++) {
+                const rows = Math.ceil(n / c);
+                const cw = (aw - gap * (c - 1)) / c, ch = (h - gap * (rows - 1)) / rows;
+                const side = Math.min(cw - 2 * pad, ch - titleH - pad);
+                if (side > best.side) best = { cols: c, rows, side };
+            }
+            return best;
+        };
+        const notes: string[] = [];
+        if (!this.isPro && totalPanels > panels.length) notes.push(this.tf("UI_SmPreview", "Pro preview: the first {0} of {1} panels", String(panels.length), String(totalPanels)));
+        let top = notes.length ? Math.ceil(noteFs * 1.5) : 0;
+        let L = layout(panels.length, top);
+        if (L.side < MIN && panels.length > 1) {
+            // Paneles demasiado pequeños: se enseñan los que caben a un tamaño legible, y se dice cuántos.
+            if (!top) top = Math.ceil(noteFs * 1.5);
+            let n = panels.length;
+            while (n > 1 && layout(n, top).side < MIN) n--;
+            notes.length = 0;
+            notes.push(this.tf("UI_SmShowing", "Showing {0} of {1} panels", String(n), String(totalPanels)));
+            panels = panels.slice(0, n);
+            this.panels = panels;
+            L = layout(n, top);
+        }
+        if (notes.length) {
+            const nd = document.createElement("div");
+            nd.className = "dn-smnote";
+            Object.assign(nd.style, { left: ax + "px", top: ay + "px", width: aw + "px", fontSize: noteFs + "px", color: this.mutedInk });
+            nd.textContent = notes.join(" · ");
+            this.root.appendChild(nd);
+        }
+        const cw = (aw - gap * (L.cols - 1)) / L.cols, ch = (ah - top - gap * (L.rows - 1)) / L.rows;
+        const dw = Math.max(0, cw - 2 * pad), dh = Math.max(0, ch - titleH - pad);
+        const ringOn0 = s.scaleRing.mode !== "off";
+        const Rcell = Math.max(0, Math.min(dw, dh) / 2 - 2);
+        const ringOn = ringOn0 && Rcell >= 28;
+        const ringSpace = ringOn ? Math.max(3, Math.round(Rcell * 0.06)) + 2 : 0;
+        const iconSpace = this.iconSpaceFor(Rcell);
+        const R0 = Math.max(4, Rcell - ringSpace - iconSpace);
+        const maxT = Math.max(0, ...panels.map(p => p.total));
+        const sa = (Number(s.slices.startAngle) || 0) * Math.PI / 180;
+        const hc = this.hc;
+        const cells: { x: number; y: number }[] = [];
+        panels.forEach((p, i) => {
+            const x = ax + (i % L.cols) * (cw + gap), y = ay + top + Math.floor(i / L.cols) * (ch + gap);
+            cells.push({ x, y });
+            if (boxed) {
+                this.svg.append("rect").attr("class", "dn-sm-box").attr("x", x + 0.5).attr("y", y + 0.5).attr("width", Math.max(0, cw - 1)).attr("height", Math.max(0, ch - 1))
+                    .attr("rx", 2).attr("fill", hc ? "none" : (sm.background || "none")).attr("stroke", sm.border ? (hc ? this.hcFg : String(sm.borderColor)) : "none")
+                    .style("pointer-events", "none");
+            }
+            const t = document.createElement("div");
+            t.className = "dn-sm-title";
+            t.textContent = p.title;
+            Object.assign(t.style, { left: (x + pad + 2) + "px", top: (y + pad) + "px", width: Math.max(0, cw - 2 * pad - 4) + "px", fontSize: tfs + "px",
+                fontWeight: sm.titleBold ? "600" : "400", color: hc ? this.hcFg : String(sm.titleColor || this.ink), textAlign: sm.titleAlign === "center" ? "center" : "left",
+                lineHeight: "1.3" });
+            this.root.appendChild(t);
+            const R = sm.sizeByTotal && maxT > 0 ? Math.max(4, R0 * Math.sqrt(p.total / maxT)) : R0;
+            const cx = x + cw / 2, cy = y + titleH + dh / 2;
+            p.arcs = this.makeArcs(p.entries, sa);
+            p.geo = { cx, cy, R, Rin: this.rinOf(R), ri: this.riOf(R), ringR: R + (ringOn ? 2 : 0), ax: x + pad, ay: y + titleH, aw: dw, ah: dh, ringSpace, iconSpace };
+        });
+        // Etiquetas comunes a todos los paneles: siempre dentro (la tabla compartida nombra los sectores).
+        const labelsByPanel: PlacedLabel[][] = panels.map(() => []);
+        if (s.labels.show) {
+            const fsL = this.fz(Number(s.labels.fontSize));
+            const levels = Math.max(1, ...panels.map(p => Math.max(0, ...p.arcs.map(a => this.variants(this.labelParts(a.e)).length))));
+            const sizes: number[] = [];
+            for (let f = fsL; f > this.minFs; f -= 0.5) sizes.push(f);
+            sizes.push(this.minFs);
+            const planAll = (level: number, f: number) => panels.map(p => this.planLabels(p.arcs, p.geo.R, p.geo.Rin, p.geo.ri, p.geo.cx, p.geo.cy, p.geo.ax, p.geo.ay,
+                p.geo.aw, p.geo.ah, f, ringSpace + iconSpace, level, "inside").placed);
+            const keys = (pl: PlacedLabel[][]) => { const out = new Set<string>(); pl.forEach((x, i) => x.forEach(l => out.add(i + "|" + l.e.key))); return out; };
+            const fsLeg = Math.max(this.minFs, fsL * 0.75);
+            const legible = keys(planAll(levels - 1, fsLeg));
+            const floor = planAll(levels - 1, this.minFs);
+            let best = floor;
+            const nFloor = keys(floor).size;
+            search: for (let level = 0; level < levels; level++) {
+                for (const f of sizes) {
+                    if (legible.size && f < fsLeg) break;
+                    const c = planAll(level, f);
+                    const got = keys(c);
+                    let ok = legible.size ? true : got.size >= nFloor;
+                    if (legible.size) for (const k of legible) if (!got.has(k)) { ok = false; break; }
+                    if (ok) { best = c; break search; }
+                }
+            }
+            best.forEach((pl, i) => { labelsByPanel[i] = pl; });
+        }
+        panels.forEach((p, i) => this.drawPanelShapes(p, labelsByPanel[i], ringOn, sa));
+    }
+
+    /** Dibuja un panel: sectores, anillo de segmentos, anillo de escala, iconos del objetivo, foco, etiquetas y centro. */
+    private drawPanelShapes(p: PanelDraw, labels: PlacedLabel[], ringOn: boolean, sa: number): void {
+        const s = this.settings;
+        const g0 = p.geo;
+        const { cx, cy, R, Rin, ri } = g0;
+        const pg = this.svg.append("g").attr("class", "dn-panel").attr("data-panel", String(p.index)) as unknown as Sel<SVGGElement>;
+        p.g = pg;
         const gap = Number(s.slices.gap) || 0;
-        const arcGen = d3.arc<any>().innerRadius(ri).outerRadius(R).padRadius(R).padAngle(this.arcs.length > 1 ? gap / Math.max(R, 1) : 0)
-            .cornerRadius(0);
-        const g = this.svg.append("g").attr("class", "dn-slices");
+        const pad = (r: number) => (p.arcs.length > 1 ? gap / Math.max(r, 1) : 0);
+        const arcGen = d3.arc<any>().innerRadius(ri).outerRadius(Rin).padRadius(Rin).padAngle(pad(Rin)).cornerRadius(0);
+        const g = pg.append("g").attr("class", "dn-slices");
         const hasHl = !!this.model.hasHighlights;
-        for (const a of this.arcs) {
+        const pidx = String(p.index);
+        for (const a of p.arcs) {
             const e = a.e;
-            const sg = g.append("g").attr("class", "dn-sg").attr("data-key", e.key);
+            const gi = this.arcIndexOf(e, a.idx);
+            const sg = g.append("g").attr("class", "dn-sg").attr("data-key", e.key).attr("data-panel", pidx);
             const d = arcGen({ startAngle: a.a0, endAngle: a.a1 });
-            const base = sg.append("path").attr("class", "dn-slice").attr("data-key", e.key).attr("d", d).attr("fill", e.color);
+            const base = sg.append("path").attr("class", "dn-slice").attr("data-key", e.key).attr("data-panel", pidx).attr("d", d).attr("fill", e.color);
             if (this.hc) base.attr("stroke", this.hcFg).attr("stroke-width", 1.5);
-            if (e.otherPattern && !(this.patternsOn && a.idx > 0)) {
+            if (e.otherPattern && !(this.patternsOn && gi > 0)) {
                 sg.append("path").attr("class", "dn-pat dn-pat-other").attr("d", d).attr("fill", "url(#" + this.otherPatternId(e) + ")").style("pointer-events", "none");
             }
-            if (this.patternsOn && a.idx > 0) sg.append("path").attr("class", "dn-pat").attr("d", d).attr("fill", "url(#" + this.patternId(a.idx, e) + ")").style("pointer-events", "none");
+            if (this.patternsOn && gi > 0) sg.append("path").attr("class", "dn-pat").attr("d", d).attr("fill", "url(#" + this.patternId(gi, e) + ")").style("pointer-events", "none");
             if (hasHl) {
                 // Resaltado parcial: la parte resaltada con área proporcional (radio en √), el resto atenuado.
                 const ratio = e.value > 0 ? Math.max(0, Math.min(1, (e.hl || 0) / e.value)) : 0;
                 base.attr("fill-opacity", 0.35);
                 if (ratio > 0) {
-                    const rh = Math.sqrt(ri * ri + ratio * (R * R - ri * ri));
-                    const hd = d3.arc<any>().innerRadius(ri).outerRadius(rh).padRadius(R).padAngle(this.arcs.length > 1 ? gap / Math.max(R, 1) : 0)({ startAngle: a.a0, endAngle: a.a1 });
+                    const rh = Math.sqrt(ri * ri + ratio * (Rin * Rin - ri * ri));
+                    const hd = d3.arc<any>().innerRadius(ri).outerRadius(rh).padRadius(Rin).padAngle(pad(Rin))({ startAngle: a.a0, endAngle: a.a1 });
                     sg.append("path").attr("class", "dn-hl").attr("d", hd).attr("fill", e.color).style("pointer-events", "none");
                 }
             }
             sg.attr("transform", "translate(" + cx + "," + cy + ")");
         }
-        if (ringOn) this.drawScaleRing(cx, cy, ringR, sa);
-        this.svg.append("g").attr("class", "dn-focus").attr("transform", "translate(" + cx + "," + cy + ")");
-        if (labelsOn) this.drawLabels(labels);
-        this.svg.append("g").attr("class", "dn-center");
-        this.drawCenter(null);
+        // Anillo exterior de segmentos (Pro): el desglose de cada categoría, en el mismo ángulo que su sector.
+        p.segArcs = [];
+        if (this.segOn) {
+            const r0 = Rin + Math.max(1.5, Math.min(3, R * 0.02)), r1 = R;
+            const sgen = d3.arc<any>().innerRadius(r0).outerRadius(r1).padRadius(r1).padAngle(gap > 0 ? Math.min(gap, 1.5) / Math.max(r1, 1) : 0);
+            const gs = pg.append("g").attr("class", "dn-segs").attr("transform", "translate(" + cx + "," + cy + ")");
+            for (const a of p.arcs) {
+                const split = this.segSplit(a.e, p.fkey, a.e.pct);
+                const tot = split.reduce((x, y) => x + y.v, 0);
+                let ang = a.a0;
+                split.forEach((x, si) => {
+                    const span = tot > 0 ? (a.a1 - a.a0) * x.v / tot : 0;
+                    const sgA: SegArc = { e: a.e, sd: x.sd, si, key: Visual.pairKey(a.e.key, x.sd.key), a0: ang, a1: ang + span, value: x.v, hl: x.h, pct: x.pct,
+                        color: this.segColor(a.e.color, si, split.length) };
+                    ang += span;
+                    p.segArcs.push(sgA);
+                    if (span <= 0) return;
+                    const sgg = gs.append("g").attr("class", "dn-segg").attr("data-key", sgA.key).attr("data-parent", a.e.key);
+                    const d = sgen({ startAngle: sgA.a0, endAngle: sgA.a1 });
+                    const path = sgg.append("path").attr("class", "dn-seg").attr("data-key", sgA.key).attr("data-panel", pidx).attr("d", d).attr("fill", sgA.color);
+                    if (this.hc) path.attr("stroke", this.hcFg).attr("stroke-width", 1);
+                    else path.attr("stroke", this.bgColor).attr("stroke-width", 0.5);
+                    if (this.patternsOn && si > 0) sgg.append("path").attr("class", "dn-pat").attr("d", d).attr("fill", "url(#" + this.segPatternId(si) + ")").style("pointer-events", "none");
+                    if (hasHl) {
+                        const ratio = x.v > 0 ? Math.max(0, Math.min(1, x.h / x.v)) : 0;
+                        path.attr("fill-opacity", 0.35);
+                        if (ratio > 0) {
+                            const rh = Math.sqrt(r0 * r0 + ratio * (r1 * r1 - r0 * r0));
+                            sgg.append("path").attr("class", "dn-hl").attr("d", d3.arc<any>().innerRadius(r0).outerRadius(rh)({ startAngle: sgA.a0, endAngle: sgA.a1 }))
+                                .attr("fill", sgA.color).style("pointer-events", "none");
+                        }
+                    }
+                });
+            }
+        }
+        if (ringOn) this.drawScaleRing(pg, cx, cy, g0.ringR, sa);
+        if (this.tgtOn && g0.iconSpace > 0) this.drawTargetIcons(pg, p);
+        pg.append("g").attr("class", "dn-focus").attr("transform", "translate(" + cx + "," + cy + ")");
+        if (labels.length) this.drawLabels(pg, labels);
+        pg.append("g").attr("class", "dn-center");
+        this.drawCenter(p, null);
+    }
+
+    /** Icono de estado del objetivo en el borde exterior de cada sector (✓ ≈ ✕), solo donde cabe sin pisar al vecino. */
+    private drawTargetIcons(pg: Sel<SVGGElement>, p: PanelDraw): void {
+        const g0 = p.geo;
+        const d = g0.iconSpace - 3;
+        const r = g0.R + g0.ringSpace + g0.iconSpace / 2;
+        const gi = pg.append("g").attr("class", "dn-ticons").attr("transform", "translate(" + g0.cx + "," + g0.cy + ")");
+        for (const a of p.arcs) {
+            const st = this.tgtStatus(a.e.value, a.e.tgt);
+            if (!st) continue;
+            if ((a.a1 - a.a0) * r < d * 1.15) continue;
+            const am = (a.a0 + a.a1) / 2;
+            const x = Math.sin(am) * r, y = -Math.cos(am) * r;
+            const ig = gi.append("g").attr("class", "dn-ticon").attr("data-key", a.e.key).attr("data-panel", String(p.index)).attr("data-status", st.glyph)
+                .attr("transform", "translate(" + x.toFixed(1) + "," + y.toFixed(1) + ")");
+            ig.append("circle").attr("r", d / 2).attr("fill", this.hc ? this.hcBg : st.color).attr("stroke", this.hc ? this.hcFg : this.bgColor).attr("stroke-width", 1);
+            ig.append("text").attr("text-anchor", "middle").attr("dy", "0.35em").attr("font-size", Math.max(6, d * 0.72)).attr("font-weight", 700)
+                .attr("fill", this.hc ? this.hcFg : "#FFFFFF").style("pointer-events", "none").text(st.glyph);
+        }
     }
 
     /** Anillo de escala: marcas a 25/50/75 % (o cada 10 %) desde el ángulo de inicio real, contraste ≥ 3:1. */
-    private drawScaleRing(cx: number, cy: number, r: number, sa: number): void {
+    private drawScaleRing(pg: Sel<SVGGElement>, cx: number, cy: number, r: number, sa: number): void {
         const s = this.settings;
         let color = this.hc ? this.hcFg : String(s.scaleRing.color || this.mutedInk);
         if (!this.hc && contrast(color, this.bgColor) < 3) color = this.ink;
-        const g = this.svg.append("g").attr("class", "dn-ring").attr("transform", "translate(" + cx + "," + cy + ")").style("pointer-events", "none");
+        const g = pg.append("g").attr("class", "dn-ring").attr("transform", "translate(" + cx + "," + cy + ")").style("pointer-events", "none");
         g.append("circle").attr("r", r).attr("fill", "none").attr("stroke", color).attr("stroke-width", 1).attr("opacity", 0.55);
         const tick = Math.max(3, Math.round(r * 0.05));
         const marks = s.scaleRing.mode === "tens" ? [1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => i / 10) : [0.25, 0.5, 0.75];
@@ -1171,24 +1778,29 @@ export class Visual implements IVisual {
         const pct: LabelPart = { kind: "pct", text: this.fmtPct(e.pct) };
         const val: LabelPart = { kind: "val", text: this.fmtValue(e.value, e.members[0].fmt ?? this.model.format, String(s.labels.displayUnits), this.numOpt("labels"), "compact") };
         const name: LabelPart = { kind: "name", text: e.name };
+        let parts: LabelPart[];
         switch (c) {
-            case "value": return [val];
-            case "name": return [name];
-            case "namePercent": return [name, pct];
-            case "valuePercent": return [val, pct];
-            case "all": return [name, val, pct];
-            default: return [pct];
+            case "value": parts = [val]; break;
+            case "name": parts = [name]; break;
+            case "namePercent": parts = [name, pct]; break;
+            case "valuePercent": parts = [val, pct]; break;
+            case "all": parts = [name, val, pct]; break;
+            default: parts = [pct];
         }
+        // "36 % +2,1": el Δ pp detrás del %, solo si cabe en TODAS (es lo primero que se retira).
+        if (this.cmpOn && e.ch && parts.some(x => x.kind === "pct")) parts.push({ kind: "chg", text: e.ch.isNew ? this.t("UI_New", "new") : this.fmtPP(e.ch.dpp10) });
+        return parts;
     }
 
-    /** Variantes de una etiqueta, de la completa a la mínima: se retira valor → nombre → % (el % es lo último que se quita). */
+    /** Variantes de una etiqueta, de la completa a la mínima: se retira Δ → valor → nombre → % (el % es lo último que se quita). */
     private variants(parts: LabelPart[]): string[] {
+        const join = (ps: LabelPart[]) => ps.filter(p => p.kind !== "chg").map(p => p.text).join(" · ") + ps.filter(p => p.kind === "chg").map(p => " " + p.text).join("");
         const out: string[] = [];
         let cur = parts.slice();
-        out.push(cur.map(p => p.text).join(" · "));
-        for (const kind of ["val", "name", "pct"] as const) {
+        out.push(join(cur));
+        for (const kind of ["chg", "val", "name", "pct"] as const) {
             if (cur.length <= 1) break;
-            if (cur.some(p => p.kind === kind)) { cur = cur.filter(p => p.kind !== kind); out.push(cur.map(p => p.text).join(" · ")); }
+            if (cur.some(p => p.kind === kind)) { cur = cur.filter(p => p.kind !== kind); out.push(join(cur)); }
         }
         return out;
     }
@@ -1213,10 +1825,10 @@ export class Visual implements IVisual {
 
     /**
      * Coloca TODAS las etiquetas con el mismo contenido (nivel de recorte `level`) y la misma letra `fs`: dentro del
-     * sector si cabe; si no, y se permite (tabla en Off), fuera con guía en dos columnas sin solapes; si no, retirada
-     * entera. Nunca se recorta un texto. needW = ancho que pedirían las de fuera (para encoger el radio).
+     * sector (entre ri y Rin) si cabe; si no, y se permite (tabla en Off), fuera con guía en dos columnas sin solapes; si
+     * no, retirada entera. Nunca se recorta un texto. needW = ancho que pedirían las de fuera (para encoger el radio).
      */
-    private planLabels(R: number, ri: number, cx: number, cy: number, ax: number, ay: number, aw: number, ah: number, fs: number, ringSpace: number,
+    private planLabels(arcs: Arc[], R: number, Rin: number, ri: number, cx: number, cy: number, ax: number, ay: number, aw: number, ah: number, fs: number, ringSpace: number,
         level: number, mode: "inside" | "auto" | "outside"): { placed: PlacedLabel[]; retired: number; needW: number } {
         const h = fs * 1.2;
         const gap = Number(this.settings.slices.gap) || 0;
@@ -1225,19 +1837,20 @@ export class Visual implements IVisual {
         let retired = 0;
         const tryInside = (a: Arc, text: string): boolean => {
             const am = (a.a0 + a.a1) / 2;
-            const radii = ri > 0 ? [(ri + R) / 2] : [R * 0.62, R * 0.72, R * 0.5];
-            if (a.a1 - a.a0 >= 2 * Math.PI - 1e-6) radii.unshift(ri > 0 ? (ri + R) / 2 : 0);
+            const radii = ri > 0 ? [(ri + Rin) / 2] : [Rin * 0.62, Rin * 0.72, Rin * 0.5];
+            if (a.a1 - a.a0 >= 2 * Math.PI - 1e-6) radii.unshift(ri > 0 ? (ri + Rin) / 2 : 0);
             const w = this.measure(text, fs) + 2;
             for (const rm of radii) {
                 const x = rm * Math.sin(am), y = -rm * Math.cos(am);
-                if (this.fitsInSlice(x, y, w, h, a.a0, a.a1, ri, R, gap / 2 + 1)) {
+                if (this.fitsInSlice(x, y, w, h, a.a0, a.a1, ri, Rin, gap / 2 + 1)) {
                     placed.push({ e: a.e, text, x: cx + x, y: cy + y, anchor: "middle", inside: true, w, fs });
                     return true;
                 }
             }
             return false;
         };
-        for (const a of this.arcs) {
+        for (const a of arcs) {
+            if (!(a.a1 > a.a0)) continue;
             const vars = this.variants(this.labelParts(a.e));
             const text = vars[Math.min(level, vars.length - 1)];
             if (mode !== "outside" && tryInside(a, text)) continue;
@@ -1281,9 +1894,9 @@ export class Visual implements IVisual {
         return { placed, retired, needW };
     }
 
-    private drawLabels(labels: PlacedLabel[]): void {
+    private drawLabels(pg: Sel<SVGGElement>, labels: PlacedLabel[]): void {
         const s = this.settings;
-        const g = this.svg.append("g").attr("class", "dn-labels").style("pointer-events", "none");
+        const g = pg.append("g").attr("class", "dn-labels").style("pointer-events", "none");
         const outColor = this.hc ? this.hcFg : String(s.labels.color || this.ink);
         for (const l of labels) {
             if (l.leader) {
@@ -1304,15 +1917,34 @@ export class Visual implements IVisual {
         }
     }
 
+    /** Lo que enseña el centro de un panel para una clave (sector, miembro de "Otros" o par categoría·segmento). */
+    private infoIn(p: PanelDraw, key: string | null): { name: string; value: number; pct: number; fmt?: string } | null {
+        if (!key) return null;
+        const e = p.entries.find(x => x.key === key);
+        if (e) return { name: e.name, value: e.value, pct: e.pct, fmt: e.members[0].fmt };
+        const sa = p.segArcs.find(x => x.key === key);
+        if (sa) return { name: sa.e.name + " · " + sa.sd.name, value: sa.value, pct: sa.pct, fmt: sa.e.members[0].fmt };
+        for (const o of p.entries) if (o.isOther) {
+            const i = o.members.findIndex(c => c.key === key);
+            if (i < 0) continue;
+            const c = o.members[i];
+            const v = p.fkey !== null ? Math.max(0, c.byFacet.get(p.fkey)?.value ?? 0) : c.value;
+            return { name: c.name, value: v, pct: o.memberPct[i] ?? 0, fmt: c.fmt };
+        }
+        return null;
+    }
+
     /**
-     * Centro del donut: título + total de Values. Al pasar, seleccionar o enfocar: "Nombre · valor · %". Se ajusta al
-     * hueco bajando la letra; si no cabe, se retira el título y luego todo (nunca "…"). En el queso no hay centro.
+     * Centro del donut: título + total de Values (en small multiples, el total de cada panel). Al pasar, seleccionar o
+     * enfocar: "Nombre · valor · %". Se ajusta al hueco bajando la letra; si no cabe, se retira el título y luego todo
+     * (nunca "…"). En el queso no hay centro.
      */
-    private drawCenter(focus: { name: string; value: number; pct: number; fmt?: string } | null): void {
-        const g0 = this.geo;
+    private drawCenter(p: PanelDraw, focus: { name: string; value: number; pct: number; fmt?: string } | null): void {
+        const g0 = p.geo;
         const m = this.model;
         const s = this.settings;
-        const gc = this.svg.select<SVGGElement>(".dn-center");
+        if (!p.g) return;
+        const gc = p.g.select<SVGGElement>(".dn-center");
         gc.selectAll("*").remove();
         if (!g0 || !m || s.slices.shape === "pie" || !s.center.show || g0.ri < 12) return;
         const color = this.hc ? this.hcFg : String(s.center.color || this.ink);
@@ -1320,7 +1952,7 @@ export class Visual implements IVisual {
         const custom = String(s.center.title || "").trim();
         const title = focus ? focus.name : (custom || m.measureName);
         const cu = String(s.center.displayUnits), cd = this.numOpt("center");
-        const v0 = focus ? focus.value : m.total, f0 = focus ? (focus.fmt ?? m.format) : m.format;
+        const v0 = focus ? focus.value : p.total, f0 = focus ? (focus.fmt ?? m.format) : m.format;
         // Auto = unidades automáticas; con unidades elegidas, solo esas.
         const values = [this.fmtValue(v0, f0, cu, cd, "compact")];
         const sub = focus ? this.fmtPct(focus.pct) : "";
@@ -1373,12 +2005,16 @@ export class Visual implements IVisual {
 
     // ── Interacción ──────────────────────────────────────────────────────────
 
-    private keyAt(e: Event): { key: string | null; toggle: boolean } {
+    private keyAt(e: Event): { key: string | null; toggle: boolean; sort: string | null; panel: number | null } {
         const t = e.target as Element | null;
-        if (!t || !(t as any).closest) return { key: null, toggle: false };
-        if (t.closest("[data-toggle]")) return { key: OTHER_KEY, toggle: true };
+        if (!t || !(t as any).closest) return { key: null, toggle: false, sort: null, panel: null };
+        const so = t.closest("[data-sort]");
+        if (so) return { key: null, toggle: false, sort: so.getAttribute("data-sort"), panel: null };
+        if (t.closest("[data-toggle]")) return { key: OTHER_KEY, toggle: true, sort: null, panel: null };
         const el = t.closest("[data-key]");
-        return { key: el ? el.getAttribute("data-key") : null, toggle: false };
+        const pe = t.closest("[data-panel]");
+        const pi = pe ? Number(pe.getAttribute("data-panel")) : NaN;
+        return { key: el ? el.getAttribute("data-key") : null, toggle: false, sort: null, panel: this.smOn && isFinite(pi) ? pi : null };
     }
 
     private entryOf(key: string | null): Entry | null {
@@ -1394,27 +2030,48 @@ export class Visual implements IVisual {
         return null;
     }
 
+    /** ¿La clave es algo seleccionable (sector, miembro de "Otros" o par categoría·segmento)? */
+    private known(key: string | null): boolean {
+        return !!key && (!!this.entryOf(key) || !!this.catOf(key) || (this.segOn && !!this.pairOf(key)));
+    }
+
     private onMove(e: MouseEvent): void {
         if (!this.model || !this.entries.length) return;
-        const { key } = this.keyAt(e);
-        const hk = key && (this.entryOf(key) || this.catOf(key)) ? key : null;
+        const { key, panel } = this.keyAt(e);
+        const hk = this.known(key) ? key : null;
         if (hk !== this.hoverKey) { this.hoverKey = hk; this.paintState(); }
-        if (hk) this.showTip(hk, e.clientX, e.clientY); else this.hideTip();
+        if (hk) this.showTip(hk, e.clientX, e.clientY, panel); else this.hideTip();
     }
 
     private onClick(e: MouseEvent): void {
         if (this.guideEl && this.guideEl.contains(e.target as Node)) return;
         if (!this.model || !this.entries.length) return;
-        const { key, toggle } = this.keyAt(e);
+        const { key, toggle, sort } = this.keyAt(e);
+        if (sort) { e.stopPropagation(); if (!this.formatMode) this.setSort(sort); return; }
         if (toggle) { e.stopPropagation(); this.setExpanded(!this.otherExpanded); return; }
         if (!this.canInteract) return;
-        if (key && (this.entryOf(key) || this.catOf(key))) {
+        if (this.known(key)) {
             this.toggle(key, e.ctrlKey || e.metaKey);
         } else {
             this.selKeys.clear();
             this.selectionManager.clear();
             this.paintState();
         }
+    }
+
+    /** Orden por cabecera de la tabla: solo en memoria (no se guarda en el informe ni llama a persistProperties). */
+    private setSort(col: string): void {
+        if (this.sortCol === col) this.sortDir = -this.sortDir;
+        else { this.sortCol = col; this.sortDir = col === "name" ? 1 : -1; }
+        const had = !!(document.activeElement && (document.activeElement as Element).closest && (document.activeElement as Element).closest("[data-sort]"));
+        this.paint();
+        if (had) {
+            const b = this.root.querySelector<HTMLButtonElement>("[data-sort=\"" + col + "\"]");
+            if (b) b.focus();
+        }
+        const lab = this.root.querySelector("[data-sort=\"" + col + "\"]");
+        this.live.textContent = this.tf("UI_SortedBy", "Sorted by {0}", lab ? String(lab.textContent).replace(/[▲▼]/g, "").trim() : col)
+            + ", " + (this.sortDir > 0 ? this.t("UI_Ascending", "ascending") : this.t("UI_Descending", "descending"));
     }
 
     private onContext(e: MouseEvent): void {
@@ -1433,27 +2090,96 @@ export class Visual implements IVisual {
         if (this.hasFocus) this.root.focus();
     }
 
-    private tipItems(key: string): VisualTooltipDataItem[] {
+    /** Líneas de comparación y objetivo para el tooltip. */
+    private proTipLines(items: VisualTooltipDataItem[], value: number, cmp: number | null, ch: Change | undefined, tgt: number | null, fmt: string | undefined): void {
+        if (this.cmpOn && ch) {
+            if (ch.isNew) items.push({ displayName: this.t("UI_Change", "Change"), value: this.tf("UI_NewTip", "New: no value in {0}", this.cmpName) });
+            else if (ch.isGone) items.push({ displayName: this.t("UI_Change", "Change"), value: this.tf("UI_GoneTip", "Gone: no value now, {0} in {1}", this.fmtFull(cmp ?? 0, fmt), this.cmpName) });
+            else {
+                items.push({ displayName: this.cmpName, value: this.fmtFull(cmp ?? 0, fmt) });
+                items.push({ displayName: this.t("UI_ShareChange", "Share change"), value: this.tf("UI_PP", "{0} pp", this.fmtPP(ch.dpp10)) });
+                if (ch.dval !== null) items.push({ displayName: this.t("UI_Change", "Change"), value: this.fmtSignedPct(ch.dval) + " (" + (value - (cmp ?? 0) >= 0 ? "+" : "−") + this.fmtFull(Math.abs(value - (cmp ?? 0)), fmt) + ")" });
+                if (ch.mix) items.push({ displayName: "⚠", value: this.mixText(ch) });
+            }
+        }
+        if (this.tgtOn) {
+            const st = this.tgtStatus(value, tgt);
+            if (st) {
+                items.push({ displayName: this.tgtName, value: this.fmtFull(tgt, fmt) });
+                items.push({ displayName: this.t("UI_OfTarget", "% of target"), value: st.glyph + " " + this.fmtPct(Math.round(st.pct), 0) + " · " + st.word });
+            }
+        }
+    }
+
+    private tipItems(key: string, panel: number | null): VisualTooltipDataItem[] {
         const m = this.model;
         const items: VisualTooltipDataItem[] = [];
-        const e = this.entryOf(key);
-        const ch = e ? null : this.catOf(key);
-        const name = e ? e.name : ch ? ch.c.name : "";
-        const value = e ? e.value : ch ? ch.c.value : 0;
-        const pct = e ? e.pct : ch ? ch.e.memberPct[ch.i] : 0;
-        const fmt = e ? e.members[0].fmt : ch ? ch.c.fmt : m.format;
-        const color = e ? e.color : ch ? ch.e.color : undefined;
+        const P = panel !== null ? this.panels.find(p => p.index === panel) ?? null : null;
+        if (P && this.smOn) items.push({ displayName: m.facetCol.source.displayName, value: P.title });
+        const pr = this.segOn ? this.pairOf(key) : null;
+        if (pr) {
+            const scope = P ?? this.panels[0];
+            const sa = scope.segArcs.find(x => x.key === key);
+            const split = sa ? null : this.segSplit(pr.e, P ? P.fkey : null, 0)[pr.si];
+            const v = sa ? sa.value : split ? split.v : 0;
+            const base = P ? P.total : m.total;
+            const ee = P ? P.entries.find(x => x.key === pr.e.key) : pr.e;
+            items.push({ displayName: m.categoryName, value: pr.e.name, color: this.hc ? this.hcFg : pr.e.color });
+            items.push({ displayName: m.segmentCol.source.displayName, value: pr.sd.name, color: this.hc ? this.hcFg : this.segColor(pr.e.color, pr.si, m.segments.length) });
+            items.push({ displayName: m.measureName, value: this.fmtFull(v, pr.e.members[0].fmt) });
+            items.push({ displayName: this.t("UI_Share", "Share"), value: this.fmtPctRaw(base > 0 ? v / base : 0) });
+            items.push({ displayName: this.tf("UI_ShareOf", "Share of {0}", pr.e.name), value: this.fmtPctRaw(ee && ee.value > 0 ? v / ee.value : 0) });
+            return items;
+        }
+        const src = P ? P.entries : this.entries;
+        const e = src.find(x => x.key === key) ?? null;
+        const ch0 = e ? null : this.catOf(key);
+        const name = e ? e.name : ch0 ? ch0.c.name : "";
+        let value = e ? e.value : ch0 ? ch0.c.value : 0;
+        let pct = e ? e.pct : ch0 ? ch0.e.memberPct[ch0.i] : 0;
+        let cmp: number | null = e ? e.cmp : ch0 ? ch0.c.cmp : null;
+        let tgt: number | null = e ? e.tgt : ch0 && ch0.c.tgt !== null && ch0.c.tgt > 0 ? ch0.c.tgt : null;
+        let chg: Change | undefined = e ? e.ch : ch0 && ch0.e.memberCh ? ch0.e.memberCh[ch0.i] : undefined;
+        if (!e && ch0 && P) {
+            const pe = P.entries.find(x => x.isOther);
+            const a = ch0.c.byFacet.get(P.fkey);
+            value = Math.max(0, a?.value ?? 0);
+            pct = pe ? pe.memberPct[ch0.i] ?? 0 : 0;
+            cmp = a && a.nc ? a.cmp : null;
+            tgt = a && a.nt && a.tgt > 0 ? a.tgt : null;
+            chg = undefined;
+        }
+        const fmt = e ? e.members[0].fmt : ch0 ? ch0.c.fmt : m.format;
+        const color = e ? e.color : ch0 ? ch0.e.color : undefined;
         items.push({ displayName: m.categoryName, value: name, color: this.hc ? this.hcFg : color });
         items.push({ displayName: m.measureName, value: this.fmtFull(value, fmt) });
         items.push({ displayName: this.t("UI_Share", "Share"), value: this.fmtPct(pct) });
-        const hl = e ? e.hl : ch ? ch.c.hl : null;
-        if (m.hasHighlights && hl !== null) items.push({ displayName: this.t("UI_Highlighted", "Highlighted"), value: this.fmtFull(hl, fmt) });
+        const hl = e ? e.hl : ch0 ? ch0.c.hl : null;
+        if (m.hasHighlights && hl !== null && !P) items.push({ displayName: this.t("UI_Highlighted", "Highlighted"), value: this.fmtFull(hl, fmt) });
+        this.proTipLines(items, value, cmp, chg, tgt, fmt);
         if (e && e.isOther) {
-            e.members.slice(0, 10).forEach((c, i) => items.push({ displayName: c.name, value: this.fmtFull(c.value, c.fmt) + " · " + this.fmtPct(e.memberPct[i]) }));
+            const mp = e.memberPct;
+            e.members.slice(0, 10).forEach((c, i) => {
+                const v = P ? Math.max(0, c.byFacet.get(P.fkey)?.value ?? 0) : c.value;
+                items.push({ displayName: c.name, value: this.fmtFull(v, c.fmt) + " · " + this.fmtPct(mp[i] ?? 0) });
+            });
             if (e.members.length > 10) items.push({ displayName: this.tf("UI_More", "+{0} more", String(e.members.length - 10)), value: "" });
         }
+        // Anotaciones (Pro): el texto completo también en el tooltip.
+        if (this.annOn) {
+            const cats = e ? (e.isOther ? [] : e.members) : ch0 ? [ch0.c] : [];
+            for (const c of cats) for (const n of c.notes) items.push({ displayName: m.annotationCol.source.displayName, value: n });
+        }
+        // Small multiples: desde la tabla compartida, el detalle por panel.
+        if (this.smOn && !P && (e || ch0)) {
+            this.panels.slice(0, 12).forEach(pp => {
+                const inf = this.infoIn(pp, key);
+                if (inf) items.push({ displayName: pp.title, value: this.fmtFull(inf.value, fmt) + " · " + this.fmtPct(inf.pct) });
+            });
+            if (this.panels.length > 12) items.push({ displayName: this.tf("UI_More", "+{0} more", String(this.panels.length - 12)), value: "" });
+        }
         // Medidas de Tooltips: solo si la categoría es una fila (sumar una media o un % entre filas daría un dato falso).
-        const cat = e && !e.isOther ? e.members[0] : ch ? ch.c : null;
+        const cat = e && !e.isOther ? e.members[0] : ch0 ? ch0.c : null;
         if (cat && cat.rows.length === 1) {
             for (const c of m.tooltipCols) {
                 const v = c.values[cat.rows[0]];
@@ -1463,11 +2189,16 @@ export class Visual implements IVisual {
         return items;
     }
 
-    private showTip(key: string, clientX: number, clientY: number): void {
+    private fmtPctRaw(x: number): string {
+        const d = this.pctDec("labels");
+        return this.fmtPct(Math.round(x * 100 * Math.pow(10, d)), d);
+    }
+
+    private showTip(key: string, clientX: number, clientY: number, panel: number | null = null): void {
         const ts: any = this.host.tooltipService;
         if (!ts || (ts.enabled && !ts.enabled())) return;
         const r = this.root.getBoundingClientRect();
-        ts.show({ dataItems: this.tipItems(key), identities: this.idsOf(key), coordinates: [clientX - r.left, clientY - r.top], isTouchEvent: false });
+        ts.show({ dataItems: this.tipItems(key, panel), identities: this.idsOf(key), coordinates: [clientX - r.left, clientY - r.top], isTouchEvent: false });
     }
 
     private hideTip(): void {
@@ -1488,8 +2219,27 @@ export class Visual implements IVisual {
         return id;
     }
 
-    /** "Otros" pasa TODAS sus identidades (regla filtros-todas-las-filas). */
+    /** Identidad de un par categoría·segmento: las columnas de Category y la de Segment de una de sus filas (todos los paneles). */
+    private pairId(c: Cat, sk: string): ISelectionId | null {
+        const ck = c.key + "␞" + sk;
+        let id = this.idCache.get(ck);
+        if (!id) {
+            const a = c.bySeg.get(sk);
+            if (!a || !a.rows.length) return null;
+            const r = a.rows[0];
+            let b = this.host.createSelectionIdBuilder();
+            for (const col of this.model.catCols) b = b.withCategory(col, r);
+            b = b.withCategory(this.model.segmentCol, r);
+            id = b.createSelectionId();
+            this.idCache.set(ck, id);
+        }
+        return id;
+    }
+
+    /** "Otros" y los pares de segmento pasan TODAS sus identidades (regla filtros-todas-las-filas). */
     private idsOf(key: string): ISelectionId[] {
+        const pr = this.segOn ? this.pairOf(key) : null;
+        if (pr) return pr.e.members.map(c => this.pairId(c, pr.sd.key)).filter((x): x is ISelectionId => !!x);
         const e = this.entryOf(key);
         if (e) return e.members.map(c => this.catId(c));
         const ch = this.catOf(key);
@@ -1515,86 +2265,111 @@ export class Visual implements IVisual {
         this.selKeys.clear();
         if (!ids.length) return;
         const eq = (a: ISelectionId, b: ISelectionId) => { try { return a.equals(b) || b.equals(a); } catch { return false; } };
-        const hit = (c: Cat) => { const id = this.catId(c); return ids.some(x => eq(x, id)); };
+        const hitId = (id: ISelectionId | null) => !!id && ids.some(x => eq(x, id));
+        const hit = (c: Cat) => hitId(this.catId(c));
         for (const e of this.entries) {
             if (e.isOther) {
                 const sel = e.members.filter(hit);
                 if (sel.length === e.members.length) this.selKeys.add(e.key);
                 else for (const c of sel) this.selKeys.add(c.key);
             } else if (hit(e.members[0])) this.selKeys.add(e.key);
+            if (this.segOn && !this.selKeys.has(e.key)) {
+                for (const sd of this.model.segments) {
+                    const pids = e.members.map(c => this.pairId(c, sd.key)).filter(x => !!x);
+                    if (pids.length && pids.every(hitId)) this.selKeys.add(Visual.pairKey(e.key, sd.key));
+                }
+            }
         }
     }
 
     private pruneSelection(): void {
         if (!this.selKeys.size) return;
         const valid = new Set<string>();
-        for (const e of this.entries) { valid.add(e.key); for (const c of e.members) valid.add(c.key); }
+        for (const e of this.entries) {
+            valid.add(e.key);
+            for (const c of e.members) valid.add(c.key);
+            if (this.segOn) for (const sd of this.model.segments) valid.add(Visual.pairKey(e.key, sd.key));
+        }
         for (const k of Array.from(this.selKeys)) if (!valid.has(k)) this.selKeys.delete(k);
     }
 
     private isSelected(e: Entry): boolean {
         if (this.selKeys.has(e.key)) return true;
-        return e.isOther && e.members.some(c => this.selKeys.has(c.key));
+        if (e.isOther && e.members.some(c => this.selKeys.has(c.key))) return true;
+        const pre = e.key + "␞";
+        for (const k of this.selKeys) if (k.indexOf(pre) === 0) return true;
+        return false;
     }
 
     /** Opacidades, foco y centro: sin redibujar ni emitir rendering events. */
     private paintState(): void {
-        if (!this.geo || !this.entries.length) return;
+        if (!this.panels.length || !this.panels.some(p => p.geo) || !this.entries.length) return;
         const any = this.selKeys.size > 0;
         const hover = this.hoverKey;
         const focus = this.hasFocus ? this.focusItems()[this.focusIdx] : undefined;
-        const hoverEntry = hover ? (this.entryOf(hover) ?? this.catOf(hover)?.e ?? null) : null;
+        const hoverPair = hover ? this.pairOf(hover) : null;
+        const hoverEntry = hover ? (this.entryOf(hover) ?? this.catOf(hover)?.e ?? hoverPair?.e ?? null) : null;
         this.svg.selectAll<SVGGElement, unknown>(".dn-sg").each((_d, i, nodes) => {
             const el = nodes[i];
             const e = this.entryOf(el.getAttribute("data-key"));
             if (!e) return;
             let op = any && !this.isSelected(e) ? 0.35 : 1;
-            if (hoverEntry && hoverEntry !== e) op = Math.min(op, 0.6);
+            if (hoverEntry && hoverEntry.key !== e.key) op = Math.min(op, 0.6);
+            el.setAttribute("opacity", String(op));
+        });
+        this.svg.selectAll<SVGGElement, unknown>(".dn-segg").each((_d, i, nodes) => {
+            const el = nodes[i];
+            const k = el.getAttribute("data-key"), parent = el.getAttribute("data-parent");
+            const sel = this.selKeys.has(k) || this.selKeys.has(parent) || (parent === OTHER_KEY && false);
+            let op = any && !sel ? 0.35 : 1;
+            if (hover && hover !== k && hover !== parent) op = Math.min(op, 0.6);
             el.setAttribute("opacity", String(op));
         });
         this.svg.selectAll<SVGTextElement, unknown>(".dn-label").each((_d, i, nodes) => {
             const e = this.entryOf(nodes[i].getAttribute("data-key"));
             nodes[i].setAttribute("opacity", any && e && !this.isSelected(e) ? "0.45" : "1");
         });
+        const focusKey = focus ? (focus.kind === "entry" ? focus.e.key : focus.kind === "child" ? focus.c.key : focus.key) : null;
         if (this.tableEl) {
             this.tableEl.querySelectorAll<HTMLElement>("[data-row]").forEach(c => {
                 const key = c.getAttribute("data-row");
                 const e = this.entryOf(key);
-                const ch = e ? null : this.catOf(key);
-                const sel = e ? this.isSelected(e) : ch ? (this.selKeys.has(key) || this.selKeys.has(OTHER_KEY)) : false;
+                const pr = e ? null : this.pairOf(key);
+                const ch = e || pr ? null : this.catOf(key);
+                const sel = e ? this.isSelected(e) : pr ? (this.selKeys.has(key) || this.selKeys.has(pr.e.key)) : ch ? (this.selKeys.has(key) || this.selKeys.has(OTHER_KEY)) : false;
                 c.style.opacity = any && !sel ? "0.45" : "1";
-                const isFocus = !!focus && ((focus.kind === "entry" && focus.e.key === key) || (focus.kind === "child" && focus.c.key === key));
+                const isFocus = focusKey === key && c.getAttribute("data-col") !== "ann";
                 c.classList.toggle("dn-focusrow", isFocus);
                 c.style.outlineColor = this.focusColor;
                 c.style.backgroundColor = hover === key ? (this.hc ? "transparent" : "rgba(127,127,127,0.12)") : "";
             });
             this.tableEl.style.setProperty("--dn-focus-w", Number(this.settings.accessibility.focusWidth) + "px");
         }
-        // Anillo de foco sobre el sector (o sobre "Otros" si el foco está en uno de sus miembros).
-        const fg = this.svg.select<SVGGElement>(".dn-focus");
-        fg.selectAll("*").remove();
-        if (focus && this.geo) {
-            const a = this.arcs.find(x => x.e === focus.e);
-            if (a) {
-                const gap = Number(this.settings.slices.gap) || 0;
-                const d = d3.arc<any>().innerRadius(this.geo.ri).outerRadius(this.geo.R).padRadius(this.geo.R).padAngle(this.arcs.length > 1 ? gap / Math.max(this.geo.R, 1) : 0)({ startAngle: a.a0, endAngle: a.a1 });
-                fg.append("path").attr("d", d).attr("fill", "none").attr("stroke", this.focusColor)
+        // Anillo de foco sobre el sector (o sobre "Otros" si el foco está en uno de sus miembros), en cada panel.
+        const gap = Number(this.settings.slices.gap) || 0;
+        for (const p of this.panels) {
+            if (!p.g || !p.geo) continue;
+            const fg = p.g.select<SVGGElement>(".dn-focus");
+            fg.selectAll("*").remove();
+            if (focus) {
+                let d: string | null = null;
+                if (focus.kind === "seg") {
+                    const sa = p.segArcs.find(x => x.key === focus.key);
+                    if (sa && sa.a1 > sa.a0) d = d3.arc<any>().innerRadius(p.geo.Rin + 2).outerRadius(p.geo.R)({ startAngle: sa.a0, endAngle: sa.a1 });
+                } else {
+                    const a = p.arcs.find(x => x.e.key === focus.e.key);
+                    if (a && a.a1 > a.a0) d = d3.arc<any>().innerRadius(p.geo.ri).outerRadius(p.geo.Rin).padRadius(p.geo.Rin).padAngle(p.arcs.length > 1 ? gap / Math.max(p.geo.Rin, 1) : 0)({ startAngle: a.a0, endAngle: a.a1 });
+                }
+                if (d) fg.append("path").attr("d", d).attr("fill", "none").attr("stroke", this.focusColor)
                     .attr("stroke-width", Number(this.settings.accessibility.focusWidth) + 1).style("pointer-events", "none");
             }
         }
-        // Centro: el elemento enfocado, el del puntero o una única selección; si no, el total.
-        let show: { name: string; value: number; pct: number; fmt?: string } | null = null;
-        const pick = (key: string | null) => {
-            if (!key) return null;
-            const e = this.entryOf(key);
-            if (e) return { name: e.name, value: e.value, pct: e.pct, fmt: e.members[0].fmt };
-            const ch = this.catOf(key);
-            return ch ? { name: ch.c.name, value: ch.c.value, pct: ch.e.memberPct[ch.i], fmt: ch.c.fmt } : null;
-        };
-        if (focus) show = pick(focus.kind === "entry" ? focus.e.key : focus.c.key);
-        else if (hover) show = pick(hover);
-        else if (this.selKeys.size === 1) show = pick(Array.from(this.selKeys)[0]);
-        this.drawCenter(show);
+        // Centro: el elemento enfocado, el del puntero o una única selección; si no, el total (de cada panel).
+        let showKey: string | null = null;
+        if (focusKey) showKey = focusKey;
+        else if (hover) showKey = hover;
+        else if (this.selKeys.size === 1) showKey = Array.from(this.selKeys)[0];
+        for (const p of this.panels) if (p.g && p.geo) this.drawCenter(p, this.infoIn(p, showKey));
     }
 
     // ── Teclado: una parada de Tab; flechas por sectores y filas; Enter selecciona ──
@@ -1606,8 +2381,24 @@ export class Visual implements IVisual {
             if (e.isOther && this.otherExpanded && this.tableEl && this.tableEl.getAttribute("data-expanded") === "true") {
                 e.members.forEach((c, i) => out.push({ kind: "child", e, c, i }));
             }
+            if (this.segOn) this.model.segments.forEach((sd, si) => out.push({ kind: "seg", e, sd, si, key: Visual.pairKey(e.key, sd.key) }));
         }
         return out;
+    }
+
+    /** Lo que la región viva añade a una fila: cambio (Δ pp, Δ %, aviso de mezcla) y estado frente al objetivo. */
+    private announcePro(value: number, ch: Change | undefined, tgt: number | null): string {
+        let txt = "";
+        if (this.cmpOn && ch) {
+            if (ch.isNew) txt += ". " + this.tf("UI_NewTip", "New: no value in {0}", this.cmpName);
+            else txt += ". " + this.tf("UI_AnnChange", "Share {0} points, value {1} vs {2}", this.fmtPP(ch.dpp10), ch.dval === null ? "—" : this.fmtSignedPct(ch.dval), this.cmpName);
+            if (ch.mix) txt += ". " + this.mixText(ch);
+        }
+        if (this.tgtOn) {
+            const st = this.tgtStatus(value, tgt);
+            if (st) txt += ". " + this.tf("UI_AnnTarget", "{0} of target, {1}", this.fmtPct(Math.round(st.pct), 0), st.word);
+        }
+        return txt;
     }
 
     private announce(): void {
@@ -1618,29 +2409,42 @@ export class Visual implements IVisual {
         if (it.kind === "entry") {
             const e = it.e;
             let txt = e.name + ", " + this.fmtFull(e.value, e.members[0].fmt) + ", " + this.fmtPct(e.pct) + ", " + pos;
+            txt += this.announcePro(e.value, e.ch, e.tgt);
+            if (this.annOn && !e.isOther && e.members[0].notes.length) txt += ". " + e.members[0].notes.join(". ");
             if (e.isOther) txt += ". " + (this.otherExpanded ? this.t("UI_Collapse", "Left arrow collapses the list") : this.t("UI_Expand", "Right arrow expands the list"));
             if (this.isSelected(e)) txt += ". " + this.t("UI_Selected", "Selected");
             this.live.textContent = txt;
+        } else if (it.kind === "child") {
+            const ch = it.e.memberCh ? it.e.memberCh[it.i] : undefined;
+            this.live.textContent = it.c.name + ", " + this.fmtFull(it.c.value, it.c.fmt) + ", " + this.fmtPct(it.e.memberPct[it.i]) + ", " + pos
+                + this.announcePro(it.c.value, ch, it.c.tgt !== null && it.c.tgt > 0 ? it.c.tgt : null) + (this.annOn && it.c.notes.length ? ". " + it.c.notes.join(". ") : "");
         } else {
-            this.live.textContent = it.c.name + ", " + this.fmtFull(it.c.value, it.c.fmt) + ", " + this.fmtPct(it.e.memberPct[it.i]) + ", " + pos;
+            const x = this.segSplit(it.e, null, it.e.pct)[it.si];
+            this.live.textContent = it.e.name + " · " + it.sd.name + ", " + this.fmtFull(x.v, it.e.members[0].fmt) + ", " + this.fmtPct(x.pct) + ", " + pos
+                + (this.selKeys.has(it.key) ? ". " + this.t("UI_Selected", "Selected") : "");
         }
     }
 
     private onKey(e: KeyboardEvent): void {
         if (this.guideEl && this.guideEl.contains(e.target as Node)) return;
+        // Botones de la tabla (ordenar por cabecera, desplegar "Otros"): su propio Enter/Espacio.
+        const tgt = e.target as HTMLElement | null;
+        if (tgt && tgt !== this.root && tgt.tagName === "BUTTON") return;
         const items = this.focusItems();
         if (!items.length) return;
         let handled = true;
         const cur = items[this.focusIdx] ?? items[0];
+        const curKey = cur.kind === "entry" ? cur.e.key : cur.kind === "child" ? cur.c.key : cur.key;
         switch (e.key) {
             case "ArrowRight":
                 if (cur.kind === "entry" && cur.e.isOther && !this.otherExpanded) { this.setExpanded(true); break; }
                 this.focusIdx = Math.min(items.length - 1, this.focusIdx + 1); break;
             case "ArrowDown": this.focusIdx = Math.min(items.length - 1, this.focusIdx + 1); break;
             case "ArrowLeft":
-                if ((cur.kind === "child" || (cur.e.isOther && this.otherExpanded))) {
+                if ((cur.kind === "child" || (cur.kind === "entry" && cur.e.isOther && this.otherExpanded))) {
                     this.focusIdx = this.entries.indexOf(cur.e);
                     this.setExpanded(false);
+                    this.focusIdx = Math.max(0, this.focusItems().findIndex(x => x.kind === "entry" && x.e.key === cur.e.key));
                     break;
                 }
                 this.focusIdx = Math.max(0, this.focusIdx - 1); break;
@@ -1648,7 +2452,7 @@ export class Visual implements IVisual {
             case "Home": this.focusIdx = 0; break;
             case "End": this.focusIdx = this.focusItems().length - 1; break;
             case "Enter": case " ":
-                if (this.canInteract) this.toggle(cur.kind === "entry" ? cur.e.key : cur.c.key, e.ctrlKey || e.metaKey);
+                if (this.canInteract) this.toggle(curKey, e.ctrlKey || e.metaKey);
                 break;
             case "Escape":
                 if (this.canInteract) { this.selKeys.clear(); this.selectionManager.clear(); }
@@ -1658,10 +2462,10 @@ export class Visual implements IVisual {
                 if (!this.canInteract) break;
                 const r = this.root.getBoundingClientRect();
                 const g = this.geo;
-                const a = this.arcs.find(x => x.e === cur.e);
+                const a = this.arcs.find(x => x.e.key === cur.e.key);
                 let x = r.left + (g ? g.cx : 0), y = r.top + (g ? g.cy : 0);
                 if (a && g) { const am = (a.a0 + a.a1) / 2; x += Math.sin(am) * g.R * 0.8; y -= Math.cos(am) * g.R * 0.8; }
-                this.selectionManager.showContextMenu(this.idsOf(cur.kind === "entry" ? cur.e.key : cur.c.key)[0] ?? ({} as ISelectionId), { x, y });
+                this.selectionManager.showContextMenu(this.idsOf(curKey)[0] ?? ({} as ISelectionId), { x, y });
                 break;
             }
             default: handled = false;

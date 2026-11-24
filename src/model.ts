@@ -9,6 +9,11 @@
  *  - una columna sumada sin formato llega con format = undefined: el visual pone uno propio.
  *
  * Las categorías con total negativo, cero o en blanco no entran en el donut: se cuentan para la nota bajo la tabla.
+ *
+ * Bloque 2 (Pro): Compare with, Target y Annotation se leen igual (categorical.values por rol, fila a fila) y se suman
+ * por categoría; cada categoría guarda además sus partes por panel (Small multiples) y por segmento (Segment), para que
+ * los paneles y el anillo exterior salgan de las mismas filas que el donut total. Una categoría sin valor actual pero
+ * con valor de comparación "sale" (gone): va a la tabla, no al donut, y no cuenta como excluida.
  */
 import powerbi from "powerbi-visuals-api";
 import DataView = powerbi.DataView;
@@ -17,6 +22,19 @@ import DataViewValueColumn = powerbi.DataViewValueColumn;
 import PrimitiveValue = powerbi.PrimitiveValue;
 
 export interface TipCol { name: string; format?: string; values: PrimitiveValue[]; }
+
+/** Suma de filas (valor, comparación, objetivo, resaltado) con cuántas traían número. */
+export interface Agg { value: number; cmp: number; tgt: number; hl: number; rows: number[]; nv: number; nc: number; nt: number; }
+
+/** Un valor de Small multiples o de Segment, en orden de llegada. */
+export interface Dim { key: string; name: string; }
+
+export function emptyAgg(): Agg { return { value: 0, cmp: 0, tgt: 0, hl: 0, rows: [], nv: 0, nc: 0, nt: 0 }; }
+
+export function addAgg(a: Agg, b: Agg): void {
+    a.value += b.value; a.cmp += b.cmp; a.tgt += b.tgt; a.hl += b.hl; a.nv += b.nv; a.nc += b.nc; a.nt += b.nt;
+    for (const r of b.rows) a.rows.push(r);
+}
 
 export interface Cat {
     key: string;
@@ -33,6 +51,15 @@ export interface Cat {
     /** Color guardado para esta categoría (selector de categoría) y regla fx evaluada en su fila. */
     fill?: string;
     rule?: string;
+    /** Compare with / Target sumados (null si ninguna fila trae número). */
+    cmp: number | null;
+    tgt: number | null;
+    /** Textos de Annotation (distintos, en orden). */
+    notes: string[];
+    /** Partes por panel y por segmento ("panel␟segmento"; "" si no hay campo), por panel y por segmento. */
+    parts: Map<string, Agg>;
+    byFacet: Map<string, Agg>;
+    bySeg: Map<string, Agg>;
 }
 
 export interface Entry {
@@ -50,6 +77,30 @@ export interface Entry {
     otherPattern?: boolean;
     /** Porcentajes de los miembros de "Otros", repartiendo los suyos por resto mayor (suman lo de "Otros"). */
     memberPct: number[];
+    /** Compare with sumado (null si ningún miembro trae comparación) y objetivo (null si algún miembro no lo tiene). */
+    cmp: number | null;
+    tgt: number | null;
+    /** Comparación ya calculada (Pro): ver computeChange. */
+    ch?: Change;
+    /** Cambio de cada miembro de "Otros" (suman el de "Otros"). */
+    memberCh?: Change[];
+}
+
+/**
+ * Cambio frente a Compare with. Las cuotas se reparten por resto mayor con 1 decimal (1000 unidades = 100 %), las
+ * actuales y las anteriores por separado: así los Δ pp de todas las filas (nuevas y salientes incluidas) suman 0.
+ */
+export interface Change {
+    cur10: number;
+    prev10: number;
+    /** Δ pp en décimas de punto. */
+    dpp10: number;
+    /** Variación relativa del valor (0,076 = +7,6 %); null si no hay comparación. */
+    dval: number | null;
+    isNew: boolean;
+    isGone: boolean;
+    /** Cuota y valor se mueven en sentidos opuestos (paradoja de mezcla). */
+    mix: boolean;
 }
 
 export interface Excluded { negative: number; negativeSum: number; blank: number; zero: number; }
@@ -59,6 +110,15 @@ export interface Model {
     facetCol: DataViewCategoryColumn | null;
     segmentCol: DataViewCategoryColumn | null;
     valuesCol: DataViewValueColumn;
+    compareCol: DataViewValueColumn | null;
+    targetCol: DataViewValueColumn | null;
+    annotationCol: DataViewValueColumn | null;
+    /** Annotation con valores que no son texto (Count en vez de First): aviso al autor. */
+    annotationNotText: number;
+    facets: Dim[];
+    segments: Dim[];
+    /** Categorías sin valor actual pero con comparación: "gone". */
+    gone: Cat[];
     measureName: string;
     categoryName: string;
     format?: string;
@@ -99,12 +159,27 @@ export function buildModel(dv: DataView | null, blank: string, label: LabelFn): 
     if (!catCols.length || !valuesCol) return null;
     const facetCol = cat.categories.find(c => roleOf(c.source, "facet")) || null;
     const segmentCol = cat.categories.find(c => roleOf(c.source, "segment")) || null;
+    const vcols = cat.values as DataViewValueColumn[];
+    const compareCol = vcols.find(c => roleOf(c.source, "compare")) || null;
+    const targetCol = vcols.find(c => roleOf(c.source, "target")) || null;
+    const annotationCol = vcols.find(c => roleOf(c.source, "annotation")) || null;
     const N = catCols[0].values.length;
     const vals = valuesCol.values;
+    const cvals = compareCol ? compareCol.values : null;
+    const tvals = targetCol ? targetCol.values : null;
+    const avals = annotationCol ? annotationCol.values : null;
     const hls = valuesCol.highlights;
     const hasHighlights = !!(hls && hls.length);
     const byKey = new Map<string, Cat>();
     const cats: Cat[] = [];
+    const facets: Dim[] = [], segments: Dim[] = [];
+    const facetSeen = new Set<string>(), segSeen = new Set<string>();
+    const dimName = (col: DataViewCategoryColumn, r: number) => {
+        const v = col.values[r];
+        return v === null || v === undefined || v === "" ? blank : label(v, col);
+    };
+    let annotationNotText = 0;
+    const num = (v: PrimitiveValue) => (typeof v === "number" && isFinite(v) ? v : null);
     for (let r = 0; r < N; r++) {
         const key = catCols.map(c => keyOf(c.values[r])).join("␟");
         let c = byKey.get(key);
@@ -116,16 +191,39 @@ export function buildModel(dv: DataView | null, blank: string, label: LabelFn): 
             const o = valuesCol.objects && valuesCol.objects[r];
             const dyn = o && o.general && (o.general as Record<string, unknown>).formatString;
             c = { key, name, value: NaN, hl: hasHighlights ? 0 : null, rows: [], order: cats.length,
-                fmt: typeof dyn === "string" && dyn ? dyn : valuesCol.source.format };
+                fmt: typeof dyn === "string" && dyn ? dyn : valuesCol.source.format,
+                cmp: null, tgt: null, notes: [], parts: new Map(), byFacet: new Map(), bySeg: new Map() };
             byKey.set(key, c);
             cats.push(c);
         }
         c.rows.push(r);
         const v = vals[r];
         if (typeof v === "number" && isFinite(v)) c.value = (isNaN(c.value) ? 0 : c.value) + v;
+        let hv = 0;
         if (hasHighlights) {
             const h = hls[r];
-            if (typeof h === "number" && isFinite(h)) c.hl = (c.hl || 0) + h;
+            if (typeof h === "number" && isFinite(h)) { c.hl = (c.hl || 0) + h; hv = h; }
+        }
+        const nv = num(v), nc = cvals ? num(cvals[r]) : null, nt = tvals ? num(tvals[r]) : null;
+        if (nc !== null) c.cmp = (c.cmp || 0) + nc;
+        if (nt !== null) c.tgt = (c.tgt || 0) + nt;
+        if (avals) {
+            const a = avals[r];
+            if (typeof a === "string") { const t = a.trim(); if (t && c.notes.indexOf(t) < 0) c.notes.push(t); }
+            else if (a !== null && a !== undefined) annotationNotText++;
+        }
+        // Partes por panel y segmento (solo si hay campo: sin ellos, una única parte).
+        if (facetCol || segmentCol) {
+            const fk = facetCol ? keyOf(facetCol.values[r]) : "";
+            const sk = segmentCol ? keyOf(segmentCol.values[r]) : "";
+            if (facetCol && !facetSeen.has(fk)) { facetSeen.add(fk); facets.push({ key: fk, name: dimName(facetCol, r) }); }
+            if (segmentCol && !segSeen.has(sk)) { segSeen.add(sk); segments.push({ key: sk, name: dimName(segmentCol, r) }); }
+            const one: Agg = { value: nv ?? 0, cmp: nc ?? 0, tgt: nt ?? 0, hl: hv, rows: [r], nv: nv === null ? 0 : 1, nc: nc === null ? 0 : 1, nt: nt === null ? 0 : 1 };
+            for (const [map, k] of [[c.parts, fk + "␟" + sk], [c.byFacet, fk], [c.bySeg, sk]] as [Map<string, Agg>, string][]) {
+                let a = map.get(k);
+                if (!a) { a = emptyAgg(); map.set(k, a); }
+                addAgg(a, one);
+            }
         }
         // Colores guardados con el selector de la categoría (primera columna) y regla fx por fila.
         const co = catCols[catCols.length - 1].objects && catCols[catCols.length - 1].objects[r];
@@ -137,8 +235,11 @@ export function buildModel(dv: DataView | null, blank: string, label: LabelFn): 
     }
     const excluded: Excluded = { negative: 0, negativeSum: 0, blank: 0, zero: 0 };
     const kept: Cat[] = [];
+    const gone: Cat[] = [];
     for (const c of cats) {
-        if (isNaN(c.value)) excluded.blank++;
+        // Sin valor actual y con comparación: sale (gone). Se ve en la tabla con su cuota anterior, no en el donut.
+        if (compareCol && (isNaN(c.value) || c.value === 0) && c.cmp !== null && c.cmp > 0) gone.push(c);
+        else if (isNaN(c.value)) excluded.blank++;
         else if (c.value < 0) { excluded.negative++; excluded.negativeSum += c.value; }
         else if (c.value === 0) excluded.zero++;
         else kept.push(c);
@@ -149,7 +250,7 @@ export function buildModel(dv: DataView | null, blank: string, label: LabelFn): 
         .map(c => ({ name: c.source.displayName, format: c.source.format, values: c.values }));
     const cols = dv.metadata && dv.metadata.columns || [];
     return {
-        catCols, facetCol, segmentCol, valuesCol,
+        catCols, facetCol, segmentCol, valuesCol, compareCol, targetCol, annotationCol, annotationNotText, facets, segments, gone,
         measureName: valuesCol.source.displayName,
         categoryName: catCols.map(c => c.source.displayName).join(" · "),
         format: valuesCol.source.format,
@@ -196,12 +297,14 @@ export function groupEntries(m: Model, o: GroupOptions): { entries: Entry[]; adj
     let rest = list.filter(c => !keep.has(c));
     // Con una sola categoría sobrante no hay "Otros": se ve mejor con su nombre.
     if (rest.length < 2) { shown = list; rest = []; }
-    const entries: Entry[] = shown.map(c => ({ key: c.key, name: c.name, value: c.value, hl: c.hl, isOther: false, members: [c], pct: 0, color: "", memberPct: [] }));
+    const entries: Entry[] = shown.map(c => ({ key: c.key, name: c.name, value: c.value, hl: c.hl, isOther: false, members: [c], pct: 0, color: "", memberPct: [],
+        cmp: c.cmp, tgt: c.tgt !== null && c.tgt > 0 ? c.tgt : null }));
     if (rest.length) {
         rest.sort((a, b) => b.value - a.value);
         const v = rest.reduce((s, c) => s + c.value, 0);
         const hl = m.hasHighlights ? rest.reduce((s, c) => s + Math.max(0, c.hl || 0), 0) : null;
-        entries.push({ key: OTHER_KEY, name: o.otherName + " (" + rest.length + ")", value: v, hl, isOther: true, members: rest, pct: 0, color: "", memberPct: [] });
+        entries.push({ key: OTHER_KEY, name: o.otherName + " (" + rest.length + ")", value: v, hl, isOther: true, members: rest, pct: 0, color: "", memberPct: [],
+            ...sumCmpTgt(rest) });
     }
     const units = 100 * Math.pow(10, o.decimals);
     const lr = largestRemainder(entries.map(e => e.value), units);
@@ -216,3 +319,45 @@ export function groupEntries(m: Model, o: GroupOptions): { entries: Entry[]; adj
 }
 
 export const OTHER_KEY = "␟other";
+
+/** Compare with sumado (null si ningún miembro lo trae) y objetivo (null si algún miembro no lo tiene: nunca un % falso). */
+export function sumCmpTgt(members: Cat[]): { cmp: number | null; tgt: number | null } {
+    const anyCmp = members.some(c => c.cmp !== null);
+    const allTgt = members.every(c => c.tgt !== null && c.tgt > 0);
+    return {
+        cmp: anyCmp ? members.reduce((s, c) => s + (c.cmp || 0), 0) : null,
+        tgt: allTgt ? members.reduce((s, c) => s + (c.tgt || 0), 0) : null,
+    };
+}
+
+/**
+ * Cambio frente a Compare with de una lista de filas (las del donut + las que salen). Cuota anterior = c_i / Σc con el
+ * mismo conjunto (Otros incluido). Una fila con valor y comparación 0 o vacía es "new"; con comparación y sin valor,
+ * "gone": nunca un Δ % inventado. Las cuotas, por resto mayor a 1 decimal: los Δ pp suman exactamente 0.
+ */
+export function computeChange(values: number[], cmps: (number | null)[]): Change[] {
+    const cur = largestRemainder(values.map(v => Math.max(0, v)), 1000).out;
+    const cpos = cmps.map(c => (c !== null && c > 0 ? c : 0));
+    const prevOk = cpos.some(c => c > 0);
+    const prev = prevOk ? largestRemainder(cpos, 1000).out : cpos.map(() => 0);
+    return values.map((v, i) => changeOf(v, cmps[i], cur[i], prev[i]));
+}
+
+export function changeOf(v: number, c: number | null, cur10: number, prev10: number): Change {
+    const isNew = v > 0 && !(c !== null && c > 0);
+    const isGone = !(v > 0) && c !== null && c > 0;
+    const dval = !isNew && !isGone && c !== null && c > 0 ? v / c - 1 : null;
+    const dpp10 = cur10 - prev10;
+    // Paradoja de mezcla: solo con cambios visibles (±0,1 pp y ±0,1 %), no por ruido de redondeo.
+    const dvr = dval === null ? 0 : Math.round(dval * 1000);
+    const mix = !isNew && !isGone && dpp10 !== 0 && dvr !== 0 && (dpp10 > 0) !== (dvr > 0);
+    return { cur10, prev10, dpp10, dval, isNew, isGone, mix };
+}
+
+/** Reparte el cambio de "Otros" entre sus miembros (resto mayor dentro de sus unidades: suman lo de "Otros"). */
+export function splitChange(parent: Change, values: number[], cmps: (number | null)[]): Change[] {
+    const cur = largestRemainder(values.map(v => Math.max(0, v)), parent.cur10).out;
+    const cpos = cmps.map(c => (c !== null && c > 0 ? c : 0));
+    const prev = cpos.some(c => c > 0) ? largestRemainder(cpos, parent.prev10).out : cpos.map(() => 0);
+    return values.map((v, i) => changeOf(v, cmps[i], cur[i], prev[i]));
+}
