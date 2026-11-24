@@ -1,0 +1,41 @@
+{
+  "visual": {
+    "name": "donutChartTCViz",
+    "displayName": "Donut & Pie Chart by TCViz",
+    "guid": "donutChartTCViz5449856DE5A343AFB84B575BC5FDB5E8",
+    "visualClassName": "Visual",
+    "version": "1.0.0.0",
+    "description": "Donut and pie chart that reads at any size: a legend table always visible, labels that never truncate, honest Other and percentages that add up to 100; Pro adds share and value change, targets, nested ring, small multiples and annotations.",
+    "supportUrl": "https://tinocallarisa-web.github.io/donut-chart/support.html",
+    "privacyTermsLink": "https://tinocallarisa-web.github.io/donut-chart/privacy.html",
+    "gitHubUrl": "https://github.com/tinocallarisa-web/donut-chart"
+  },
+  "author": {
+    "name": "TCViz",
+    "email": "support@tcviz.com"
+  },
+  "apiVersion": "5.11.1",
+  "assets": {
+    "icon": "assets/icon.png"
+  },
+  "externalJS": [],
+  "stringResources": [
+    "stringResources/en-US/resources.resjson",
+    "stringResources/es-ES/resources.resjson",
+    "stringResources/pt-BR/resources.resjson",
+    "stringResources/pt-PT/resources.resjson",
+    "stringResources/fr-FR/resources.resjson",
+    "stringResources/de-DE/resources.resjson",
+    "stringResources/it-IT/resources.resjson",
+    "stringResources/nl-NL/resources.resjson",
+    "stringResources/pl-PL/resources.resjson",
+    "stringResources/ja-JP/resources.resjson",
+    "stringResources/zh-CN/resources.resjson",
+    "stringResources/ko-KR/resources.resjson"
+  ],
+  "style": "style/visual.less",
+  "capabilities": "capabilities.json",
+  "privacyTerms": {
+    "link": "https://tinocallarisa-web.github.io/donut-chart/privacy.html"
+  }
+}
