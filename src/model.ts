@@ -46,6 +46,8 @@ export interface Entry {
     /** % redondeado por resto mayor (en unidades de 10^-decimales). */
     pct: number;
     color: string;
+    /** "Otros" lleva una trama ligera cuando su gris queda cerca de un color de la paleta. */
+    otherPattern?: boolean;
     /** Porcentajes de los miembros de "Otros", repartiendo los suyos por resto mayor (suman lo de "Otros"). */
     memberPct: number[];
 }

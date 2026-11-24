@@ -686,66 +686,73 @@ export class Visual implements IVisual {
 
     /** Color por clave: lo guardado para la categoría > regla fx de su fila > "All slices" fijo > paleta. */
     /**
-     * Color por clave: lo guardado para la categoría > regla fx de su fila > "All slices" fijo > paleta. Los colores
-     * automáticos no se repiten entre sectores visibles: si la paleta del tema (o del estilo) se queda corta, se
-     * generan tonos más claros u oscuros del mismo color hasta que se distingan. "Otros" va siempre en un gris neutro,
-     * fuera de la paleta y distinto de cualquier sector.
+     * Color por clave: lo guardado para la categoría > regla fx de su fila > "All slices" fijo > paleta del estilo.
+     * La paleta del estilo (o del tema del informe) se usa TAL CUAL y en su orden para los primeros sectores (identidad
+     * de los estilos, Tino 24-11). Solo cuando se agota, o un color repetiría uno ya usado o al vecino, se generan tonos
+     * nuevos (luminosidad primero, tono después) con ΔE2000 ≥ 12 frente a todos y ≥ 20 frente a sus vecinos, nunca grises.
+     * "Otros": el gris neutro más alejado de los colores visibles; si aun así queda cerca, lleva una trama ligera.
      */
     private assignColors(): void {
         const s = this.settings;
         const pal: any = this.host.colorPalette;
         const look = this.look;
         const styleCols = look ? Array.from(new Set(look.series.concat([look.plan, look.up, look.down]))) : null;
-        const all = this.model.cats.slice().sort((a, b) => b.value - a.value);
         const fixedAll = String(s.dataColors.rule || "");
-        const used: string[] = [];
-        const auto: Entry[] = [];
-        for (const e of this.entries) {
-            if (e.isOther) continue;
+        const near = (x: string, y: string, d: number) => deltaE2000(toLab(x), toLab(y)) < d;
+        const slices = this.entries.filter(e => !e.isOther);
+        const isUser = new Set<Entry>();
+        const generate: Entry[] = [];
+        let k = 0;
+        for (const e of slices) {
             const c = e.members[0];
-            const i = all.indexOf(c);
+            e.otherPattern = false;
             if (this.hc) { e.color = this.hcBg; continue; }
-            if (c.fill) e.color = c.fill;
-            else if (c.rule) e.color = c.rule;
-            else if (fixedAll) e.color = fixedAll;
-            else {
-                if (styleCols) e.color = styleCols[i % styleCols.length];
-                else if (this.tplEfectiva === "classic") e.color = CLASSIC[i % CLASSIC.length];
-                else e.color = pal?.getColor?.(c.name)?.value ?? CLASSIC[i % CLASSIC.length];
-                auto.push(e);
-                continue;
-            }
-            used.push(e.color);
+            if (c.fill || c.rule || fixedAll) { e.color = c.fill || c.rule || fixedAll; isUser.add(e); continue; }
+            const idx = k++;
+            let base: string | null;
+            if (styleCols) base = idx < styleCols.length ? styleCols[idx] : null;
+            else if (this.tplEfectiva === "classic") base = idx < CLASSIC.length ? CLASSIC[idx] : null;
+            else base = pal?.getColor?.(c.name)?.value ?? null;
+            // La paleta se respeta salvo que el color repita uno ya puesto o al vecino anterior (paleta agotada o cíclica).
+            const prevC = this.entries[this.entries.indexOf(e) - 1];
+            const taken = slices.slice(0, slices.indexOf(e)).map(x => x.color);
+            if (base && !taken.some(t => near(t, base, 8)) && !(prevC && !prevC.isOther && near(prevC.color, base, 8))) e.color = base.toUpperCase();
+            else { e.color = base || (styleCols ? styleCols[idx % styleCols.length] : CLASSIC[idx % CLASSIC.length]); generate.push(e); }
         }
-        // Otros: gris neutro (el del ajuste, o el del tema), distinto de los sectores.
         const other = this.entries.find(e => e.isOther);
-        const grays = [String(s.slices.otherColor || "#A19F9D"), "#A19F9D", "#8A8886", "#C8C6C4", "#6E6E6E", "#D9D9D9", "#5A5A5A"];
-        const otherColor = this.hc ? this.hcBg : grays.find(g => !used.some(u => deltaE2000(toLab(u), toLab(g)) < 12)) ?? grays[0];
-        if (other) other.color = otherColor;
-        if (this.hc) return;
-        // Tonos automáticos perceptiblemente distintos: ΔE2000 ≥ 12 con cualquier sector visible y ≥ 20 con sus vecinos;
-        // si variar la luminosidad no basta, se rota el tono. Ningún automático en gris (el gris es solo de "Otros").
-        const fixed = this.entries.filter(e => !e.isOther && auto.indexOf(e) < 0).map(e => e.color).concat(other ? [otherColor] : []);
-        const chosen = new Map<Entry, string>();
-        const order = this.entries;
-        for (const e of auto) {
-            const idx = order.indexOf(e);
-            const prev = idx > 0 ? order[idx - 1] : null;
-            const next = idx === order.length - 1 ? order[0] : order[idx + 1];
-            const neigh = [prev, next].filter(x => x && (x.isOther || auto.indexOf(x) < 0 || chosen.has(x))).map(x => chosen.get(x) ?? x.color);
-            const others = fixed.concat(Array.from(chosen.values()));
+        if (this.hc) { if (other) other.color = this.hcBg; return; }
+        // Tonos generados: distinguibles de todo lo visible y de sus vecinos.
+        const done = new Set<Entry>(slices.filter(e => generate.indexOf(e) < 0));
+        for (const e of generate) {
+            const idx = this.entries.indexOf(e);
+            const prev = idx > 0 ? this.entries[idx - 1] : null;
+            const next = idx < this.entries.length - 1 ? this.entries[idx + 1] : this.entries[0];
+            const neigh = [prev, next].filter(x => x && !x.isOther && done.has(x)).map(x => x.color);
+            const others = Array.from(done).map(x => x.color);
             let bestC = e.color, bestScore = -Infinity;
             for (const c of colorCandidates(e.color)) {
                 const lab = toLab(c);
                 const minAll = others.length ? Math.min(...others.map(o => deltaE2000(lab, toLab(o)))) : 99;
                 const minNb = neigh.length ? Math.min(...neigh.map(o => deltaE2000(lab, toLab(o)))) : 99;
-                if (minAll >= 12 && minNb >= 20) { bestC = c; bestScore = Infinity; break; }
+                if (minAll >= 12 && minNb >= 20) { bestC = c; break; }
                 const score = Math.min(minAll / 12, minNb / 20);
                 if (score > bestScore) { bestScore = score; bestC = c; }
             }
-            chosen.set(e, bestC);
             e.color = bestC;
+            done.add(e);
         }
+        if (!other) return;
+        // "Otros": el gris del ajuste si el autor lo eligió; si no, el gris neutro más alejado (ΔE) de los sectores.
+        const saved = (this.dataView?.metadata?.objects as any)?.slices?.otherColor?.solid?.color;
+        const cols = slices.map(e => e.color);
+        const dist = (g: string) => (cols.length ? Math.min(...cols.map(c => deltaE2000(toLab(g), toLab(c)))) : 99);
+        if (saved) other.color = String(saved);
+        else {
+            const pref = String(s.slices.otherColor || "#A19F9D");
+            const grays = [pref, "#A19F9D", "#C8C6C4", "#8A8886", "#D9D9D9", "#E6E6E6", "#6E6E6E", "#B3B3B3"];
+            other.color = dist(pref) >= 20 ? pref : grays.reduce((a, g) => (dist(g) > dist(a) ? g : a), pref);
+        }
+        other.otherPattern = dist(other.color) < 20;
     }
 
     // ── Notas bajo la tabla ──────────────────────────────────────────────────
@@ -976,6 +983,12 @@ export class Visual implements IVisual {
         r.setAttribute("fill", e.color);
         if (this.hc) { r.setAttribute("stroke", this.hcFg); r.setAttribute("stroke-width", "1"); }
         svg.appendChild(r);
+        if (e.otherPattern && !(this.patternsOn && idx > 0)) {
+            const p = document.createElementNS(NS, "rect");
+            p.setAttribute("x", "0.5"); p.setAttribute("y", "0.5"); p.setAttribute("width", String(sz - 1)); p.setAttribute("height", String(sz - 1));
+            p.setAttribute("fill", "url(#" + this.otherPatternId(e) + ")");
+            svg.appendChild(p);
+        }
         if (this.patternsOn && idx > 0) {
             const p = document.createElementNS(NS, "rect");
             p.setAttribute("x", "0.5"); p.setAttribute("y", "0.5"); p.setAttribute("width", String(sz - 1)); p.setAttribute("height", String(sz - 1));
@@ -993,8 +1006,20 @@ export class Visual implements IVisual {
         return "dn-pat-" + this.instance + "-" + idx + (this.hc ? "h" : (luminance(e.color) > 0.45 ? "d" : "l"));
     }
 
+    private otherPatternId(e: Entry): string {
+        return "dn-pat-" + this.instance + "-other" + (luminance(e.color) > 0.45 ? "d" : "l");
+    }
+
     /** Tramas (Accessibility → Patterns, y siempre en alto contraste): una por posición, la primera lisa. */
     private ensurePatterns(defs: Sel<SVGDefsElement>): void {
+        // Trama ligera de "Otros" cuando su gris queda cerca de un gris de la paleta (Editorial).
+        const ot = this.entries.find(e => e.isOther && e.otherPattern);
+        if (ot) {
+            const p = defs.append("pattern").attr("id", this.otherPatternId(ot)).attr("patternUnits", "userSpaceOnUse").attr("width", 5).attr("height", 5)
+                .attr("patternTransform", "rotate(45)");
+            p.append("line").attr("x1", 0).attr("y1", 2.5).attr("x2", 5).attr("y2", 2.5)
+                .attr("stroke", luminance(ot.color) > 0.45 ? "rgba(0,0,0,0.28)" : "rgba(255,255,255,0.45)").attr("stroke-width", 1);
+        }
         if (!this.patternsOn) return;
         const kinds = ["", "d45", "h", "d135", "v", "dots", "cross", "grid"];
         this.entries.forEach((e, i) => {
@@ -1097,6 +1122,9 @@ export class Visual implements IVisual {
             const d = arcGen({ startAngle: a.a0, endAngle: a.a1 });
             const base = sg.append("path").attr("class", "dn-slice").attr("data-key", e.key).attr("d", d).attr("fill", e.color);
             if (this.hc) base.attr("stroke", this.hcFg).attr("stroke-width", 1.5);
+            if (e.otherPattern && !(this.patternsOn && a.idx > 0)) {
+                sg.append("path").attr("class", "dn-pat dn-pat-other").attr("d", d).attr("fill", "url(#" + this.otherPatternId(e) + ")").style("pointer-events", "none");
+            }
             if (this.patternsOn && a.idx > 0) sg.append("path").attr("class", "dn-pat").attr("d", d).attr("fill", "url(#" + this.patternId(a.idx, e) + ")").style("pointer-events", "none");
             if (hasHl) {
                 // Resaltado parcial: la parte resaltada con área proporcional (radio en √), el resto atenuado.
@@ -2104,15 +2132,18 @@ function colorCandidates(base: string): string[] {
     const gray = chroma(base) < 15;
     const out: { c: string; cost: number }[] = [];
     if (!gray) out.push({ c: base.toUpperCase(), cost: 0 });
-    const sat = Math.max(gray ? 0.55 : s0, 0.45);
-    const hues = gray ? [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map(x => [x, 1]) : [0, 30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180].map(x => [x, Math.abs(x) / 30]);
-    for (const [dh, hc] of hues) {
-        for (const dl of [0, 0.15, -0.15, 0.28, -0.28]) {
-            if (!gray && dh === 0 && dl === 0) continue;
-            const l = Math.max(0.25, Math.min(0.8, (gray ? Math.max(0.35, Math.min(0.7, l0)) : l0) + dl));
-            const c = fromHsl((gray ? 0 : h0) + dh, sat, l);
-            if (chroma(c) < 15) continue;
-            out.push({ c, cost: hc + Math.abs(dl) / 0.15 });
+    const sats = gray ? [0.55, 0.75] : [Math.max(s0, 0.45), Math.max(0.75, s0)];
+    const hues: number[] = [0];
+    for (let d = 20; d <= 180; d += 20) { hues.push(d); if (d < 180) hues.push(-d); }
+    for (const dh of gray ? hues.filter(x => x >= 0).concat(hues.filter(x => x < 0).map(x => x + 360)) : hues) {
+        for (const dl of [0, 0.12, -0.12, 0.24, -0.24, 0.36, -0.36]) {
+            for (let si = 0; si < sats.length; si++) {
+                if (!gray && dh === 0 && dl === 0 && si === 0) continue;
+                const l = Math.max(0.2, Math.min(0.85, (gray ? Math.max(0.35, Math.min(0.7, l0)) : l0) + dl));
+                const c = fromHsl((gray ? 0 : h0) + dh, sats[si], l);
+                if (chroma(c) < 15) continue;
+                out.push({ c, cost: (gray ? 1 : Math.abs(dh) / 30) + Math.abs(dl) / 0.12 + si * 0.5 });
+            }
         }
     }
     return out.sort((a, b) => a.cost - b.cost).map(x => x.c);

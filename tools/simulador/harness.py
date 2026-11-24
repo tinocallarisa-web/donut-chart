@@ -215,7 +215,7 @@ INFO = r"""() => {
   return { labels, tb, rows, allText, center, slices, minFont: sizes.length ? Math.min(...sizes) : 0, maxFont: sizes.length ? Math.max(...sizes) : 0,
     tableOverflow: table ? (table.scrollHeight > table.clientHeight + 1 || table.scrollWidth > table.clientWidth + 1) : false,
     bg: root.style.background, wm: wm && wm.style.display !== 'none' ? wm.textContent : null, notes: allText,
-    leaders: root.querySelectorAll('.dn-leader').length,
+    leaders: root.querySelectorAll('.dn-leader').length, otherPattern: !!root.querySelector('.dn-pat-other'),
     ring: (() => { const g = root.querySelector('.dn-slices'); return g ? R(g) : null; })(),
     labelSizes: Array.from(root.querySelectorAll('text.dn-label')).map(t => +t.getAttribute('font-size')),
     focusRing: !!root.querySelector('.dn-focus path'), live: (root.querySelector('.dn-live') || {}).textContent || '' };
@@ -322,20 +322,47 @@ def de2000(c1, c2):
     return sqrt((dL / Sl) ** 2 + (dC / Sc) ** 2 + (dH / Sh) ** 2 + Rt * (dC / Sc) * (dH / Sh))
 
 
-def comprobar_colores(i, label):
-    sl = i["slices"]
+ESTILOS = {
+    "boardroom": ["#C9A45C", "#8FB8E8", "#EB8A7B", "#6FCF97", "#C5D3E3"],
+    "ledger": ["#7A1F1F", "#3A3528", "#2F6B3B", "#946A10", "#B7AD92", "#A32A2A"],   # + su color "down"
+    "editorial": ["#D7263D", "#111111", "#5F5F5F", "#BDBDBD", "#8C1C2B"],
+    "signal": ["#1F7A4D", "#14202B", "#B7791F", "#C0392B", "#9AA5B1"],
+    "aurora": ["#7CE7D0", "#FFD27D", "#FF9DB0", "#9DB7FF", "#C5D3E3"],
+    "terrace": ["#B5532A", "#5E7128", "#B5782A", "#B5372A", "#C9A77E"],
+    "classic": ["#118DFF", "#12239E", "#E66C37", "#6B007B", "#E044A7", "#744EC2", "#D9B300", "#D64550", "#197278", "#1AAB40"],
+}
+# Paleta efectiva de cada estilo = serie + plan/up/down sin repetir (en los seis, ya están en la serie).
+
+
+def comprobar_colores(i, label, paleta=None):
+    """Paleta del estilo tal cual para los primeros sectores; los generados, distinguibles (ΔE); Otros distinguible."""
+    sl = [s for s in i["slices"] if "other" not in s["key"]]
     fills = [s["fill"].upper() for s in sl]
     check(f"{label}: colores de sectores únicos", len(set(fills)) == len(fills), str(fills))
-    otro = next((s["fill"].upper() for s in sl if "other" in s["key"]), None)
+    n_pal = 0
+    if paleta:
+        n_pal = min(len(paleta), len(fills))
+        check(f"{label}: los primeros {n_pal} sectores con la paleta del estilo tal cual", fills[:n_pal] == [c.upper() for c in paleta[:n_pal]], str(fills[:n_pal]))
+    gen = list(range(n_pal, len(fills))) if paleta else []
+    todos = [s["fill"].upper() for s in i["slices"]]
+    if gen:
+        pares = min(de2000(fills[g], fills[j]) for g in gen for j in range(len(fills)) if j != g)
+        check(f"{label}: generados con ΔE2000 ≥ 12 frente a todos", pares >= 12, f"{pares:.1f}")
+        vec = []
+        for g in gen:
+            k = next(n for n, s in enumerate(i["slices"]) if s["fill"].upper() == fills[g])
+            for v in (k - 1, (k + 1) % len(todos)):
+                if "other" not in i["slices"][v]["key"]:
+                    vec.append(de2000(todos[k], todos[v]))
+        check(f"{label}: generados con ΔE2000 ≥ 20 frente a sus vecinos", min(vec) >= 20, f"{min(vec):.1f}")
+        grises = [fills[g] for g in gen if (lambda L: (L[1] ** 2 + L[2] ** 2) ** 0.5)(_lab(fills[g])) < 15]
+        check(f"{label}: ningún generado en gris", not grises, str(grises))
+    otro = next((s for s in i["slices"] if "other" in s["key"]), None)
     if otro:
-        r, g, b_ = int(otro[1:3], 16), int(otro[3:5], 16), int(otro[5:7], 16)
-        check(f"{label}: Otros en gris neutro distinto", max(r, g, b_) - min(r, g, b_) <= 12 and fills.count(otro) == 1, otro)
-    pares = min((de2000(a, b) for k, a in enumerate(fills) for b in fills[k + 1:]), default=99)
-    vec = min((de2000(fills[k], fills[(k + 1) % len(fills)]) for k in range(len(fills))) if len(fills) > 1 else [99])
-    check(f"{label}: ΔE2000 ≥ 12 entre cualquier par", pares >= 12, f"{pares:.1f}")
-    check(f"{label}: ΔE2000 ≥ 20 entre vecinos", vec >= 20, f"{vec:.1f}")
-    grises = [s["fill"] for s in sl if "other" not in s["key"] and (lambda L: (L[1] ** 2 + L[2] ** 2) ** 0.5)(_lab(s["fill"])) < 15]
-    check(f"{label}: ningún sector automático en gris", not grises, str(grises))
+        oc = otro["fill"].upper()
+        r, g_, b_ = int(oc[1:3], 16), int(oc[3:5], 16), int(oc[5:7], 16)
+        d = min(de2000(oc, f) for f in fills) if fills else 99
+        check(f"{label}: Otros en gris neutro distinguible (ΔE ≥ 20, o ≥ 8 con trama)", max(r, g_, b_) - min(r, g_, b_) <= 12 and (d >= 20 or (d >= 8 and i["otherPattern"])), f"{oc} ΔE={d:.1f} trama={i['otherPattern']}")
 
 
 TAMANOS = [(1200, 640), (500, 320), (300, 200), (160, 120)]
@@ -388,15 +415,15 @@ async def main():
                     i = await info(pg)
                     comprobar_dibujo(i, W, H, lbl)
                     comprobar_etiquetas(i, lbl, cont)
-                    comprobar_colores(i, lbl)
+                    comprobar_colores(i, lbl, TEMA6 if tema == "tema6" else ESTILOS["classic"])
                     await eventos(pg, lbl)
                     await pg.close()
         for est in ["classic", "boardroom", "ledger", "editorial", "signal", "aurora", "terrace"]:
-            pg = await page(b, dv_caso_a({"style": {"template": est}, "slices": {"maxSlices": 12, "groupBelow": 0}}), 700, 400, name=f"colores_{est}")
-            comprobar_colores(await info(pg), f"{est} 10 sectores")
+            pg = await page(b, dv_caso_a({"style": {"template": est}, "slices": {"maxSlices": 12, "groupBelow": 0}}), 700, 400, name=f"colores_{est}_10")
+            comprobar_colores(await info(pg), f"{est} 10 sectores", ESTILOS[est])
             await pg.close()
-            pg = await page(b, dv_caso_a({"style": {"template": est}}), 700, 400)
-            comprobar_colores(await info(pg), f"{est} con Otros")
+            pg = await page(b, dv_caso_a({"style": {"template": est}}), 700, 400, name=f"colores_{est}_6")
+            comprobar_colores(await info(pg), f"{est} 5 + Otros", ESTILOS[est])
             await pg.close()
         for est in ["report", "classic", "boardroom", "ledger", "editorial", "signal", "aurora", "terrace"]:
             for tema, tc in [("tema10", None), ("tema6", TEMA6)] if est == "report" else [("", None)]:
@@ -405,7 +432,8 @@ async def main():
                 base = 18   # 10 px × k (k = 640/300 → tope 1,8)
                 check(f"{est}{tema} 10 sectores (dos del 2%): letra común ≥ 0,75 × base", i["labelSizes"] and min(i["labelSizes"]) >= 0.75 * base - 1e-6, str(sorted(set(i["labelSizes"]))))
                 comprobar_etiquetas(i, f"{est}{tema} 10 sectores", "auto")
-                comprobar_colores(i, f"{est}{tema} 10 sectores")
+                pal = ESTILOS.get(est) or ((TEMA6 if tema == "tema6" else ESTILOS["classic"]))
+                comprobar_colores(i, f"{est}{tema} 10 sectores", pal)
                 await pg.close()
         for W, H in [(900, 640), (500, 320)]:
             pg = await page(b, dv_caso_a({"legend": {"position": "off"}, "labels": {"content": "all"}}), W, H, name=f"etq_off_all_{W}x{H}")
