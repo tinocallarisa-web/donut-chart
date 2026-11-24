@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * build-test.js — Line Chart by TCViz
+ * build-test.js — Donut & Pie Chart by TCViz
  *
  * Empaqueta una build de PRUEBA y restaura los fuentes al salir, pase lo que pase:
  *   node build-test.js          -> _test     (Pro forzado cuando exista licencia)
@@ -70,7 +70,7 @@ fs.writeFileSync(VISUAL, vsrc, "utf8");
 
 console.log("Build TEST — " + json.visual.displayName + "  guid " + json.visual.guid + "  v" + json.visual.version + "  [" + stamp + "]");
 try {
-    execSync("npx pbiviz package", { stdio: "inherit", cwd: __dirname });
+    execSync("npx pbiviz package" + (process.argv.includes("--verbose") ? " --verbose" : ""), { stdio: "inherit", cwd: __dirname });
     console.log("  Test build: dist/" + json.visual.guid + "." + json.visual.version + ".pbiviz");
 } catch (e) {
     console.error("ERROR: la build ha fallado.");

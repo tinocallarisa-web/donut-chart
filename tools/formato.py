@@ -1,17 +1,30 @@
 # -*- coding: utf-8 -*-
-"""Tabla ÚNICA del panel de formato de Line Chart by TCViz.
+"""Tabla ÚNICA del panel de formato de Donut & Pie Chart by TCViz.
 
 De aquí salen, sin copiar a mano:
-  - capabilities.json → "objects" (los dataRoles y el mapeo NO se tocan: están validados en Desktop),
+  - capabilities.json → "dataRoles" (nombres y claves; el mapeo NO se toca: validado en Desktop el 24-11) y "objects",
   - src/formatSpec.ts → la tabla que lee el visual (valores por defecto, panel y on-object),
-  - stringResources/en-US → las claves Obj_/Prop_/Enum_ en inglés.
+  - stringResources/en-US → las claves Role_/Obj_/Prop_/Enum_ en inglés.
 Ejecutar desde la raíz:  python tools/formato.py   (tools/i18n.py lo llama antes de traducir)
 
 Regla de la cartera: los nombres internos (objeto y propiedad) no se renombran nunca una vez publicados.
+Los objetos `legend` (la leyenda-tabla) y `accessibility` se llaman así a propósito: OKviz los detecta por el nombre.
 """
 import io, json, os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# (nombre interno, clave, nombre visible, descripción) — en el orden en que salen en el panel de campos.
+ROLES = [
+    ("category", "Role_Category", "Category", "One slice per value of this field."),
+    ("values", "Role_Values", "Values", "The measure the slices share."),
+    ("segment", "Role_Segment", "Segment (Pro)", "Outer ring: each slice split by this field."),
+    ("compare", "Role_Compare", "Compare with (Pro)", "Prior period or plan: change of share and value."),
+    ("target", "Role_Target", "Target (Pro)", "Target per slice."),
+    ("annotation", "Role_Annotation", "Annotation (Pro)", "Text measure shown as a note under its row."),
+    ("facet", "Role_Facet", "Small multiples (Pro)", "One donut per value of this field."),
+    ("tooltips", "Role_Tooltips", "Tooltips", "Extra measures in the tooltip."),
+]
 
 TEMPLATES = [("report", "Report theme"), ("classic", "Classic"),
              ("boardroom", "Boardroom (Pro)"), ("ledger", "Ledger (Pro)"), ("editorial", "Editorial (Pro)"),
@@ -23,118 +36,62 @@ OBJECTS = [
         ("template", "Template", "enum", "report", {"items": TEMPLATES}),
         ("guide", "Setup guide", "bool", True, {}),
     ]),
-    ("lines", "Lines", [
-        ("width", "Line width", "num", 2, {"min": 0.5, "max": 8}),
-        ("markers", "Markers", "enum", "auto", {"items": [("auto", "Automatic"), ("on", "On"), ("off", "Off")]}),
-        ("markerSize", "Marker size", "num", 3, {"min": 1, "max": 10}),
-        ("missing", "Missing values", "enum", "break",
-         {"items": [("break", "Break the line"), ("connect", "Connect the points"), ("zero", "Treat as zero")]}),
-        # Fase OKviz (FT.LINE02): curva monótona, nunca se pasa de los datos.
-        ("smooth", "Smooth lines", "bool", False, {}),
-        # Fase 3 (Pro): mostrar como índice, % de cambio o acumulado, sobre los puntos visibles.
-        ("valueMode", "Show values as (Pro)", "enum", "value", {"items": [("value", "Value"), ("index", "Index (first = 100)"),
-                                                                          ("pctChange", "% change vs first"), ("runningTotal", "Running total")]}),
+    ("slices", "Slices", [
+        ("shape", "Shape", "enum", "donut", {"items": [("donut", "Donut"), ("pie", "Pie")]}),
+        ("innerRadius", "Inner radius (%)", "num", 58, {"min": 20, "max": 85}),
+        ("startAngle", "Start angle (°)", "num", 0, {"min": 0, "max": 359}),
+        ("gap", "Space between slices", "num", 1, {"min": 0, "max": 8}),
+        ("sort", "Order", "enum", "valueDesc", {"items": [("valueDesc", "By value"), ("data", "Data order")]}),
+        ("maxSlices", "Show at most", "num", 6, {"min": 2, "max": 20}),
+        ("groupBelow", "Group below (%)", "num", 3, {"min": 0, "max": 20}),
+        ("otherColor", "Other color", "fill", "#A19F9D", {}),
     ]),
-    ("endLabels", "End labels", [
-        ("show", "Show end labels", "bool", True, {}),
-        ("content", "Content", "enum", "nameValue",
-         {"items": [("nameValue", "Name and value"), ("value", "Value"), ("name", "Name")]}),
-        ("maxLabels", "Maximum labels", "num", 8, {"min": 1, "max": 50}),
-        ("fontSize", "Text size", "num", 10, {"min": 7, "max": 24}),
-        ("seriesColor", "Use the series color", "bool", True, {}),
+    # Color por categoría (gratis): se guarda con el selector de la categoría; "All slices (fx)" con selector comodín.
+    # El panel lo construye el visual dentro de la tarjeta Slices. Sin tarjeta propia en PANE.
+    ("dataColors", "Slice colors", [
+        ("fill", "Color", "fill", "", {}),
+        ("rule", "All slices (fx)", "fill", "", {}),
+    ]),
+    ("labels", "Data labels", [
+        ("show", "Show data labels", "bool", True, {}),
+        ("content", "Content", "enum", "auto",
+         {"items": [("auto", "Automatic"), ("percent", "Percent"), ("value", "Value"), ("name", "Name"),
+                    ("namePercent", "Name and percent"), ("valuePercent", "Value and percent"), ("all", "All")]}),
+        ("position", "Position", "enum", "auto", {"items": [("auto", "Inside, then outside"), ("inside", "Inside only"), ("outside", "Outside")]}),
+        ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
+        ("color", "Text color (outside)", "fill", "#252423", {}),
+        ("decimals", "Percent decimals", "num", 0, {"min": 0, "max": 2}),
+    ]),
+    ("center", "Center", [
+        ("show", "Show total in the center", "bool", True, {}),
+        ("title", "Title (blank = measure name)", "text", "", {}),
+        ("fontSize", "Value size", "num", 20, {"min": 8, "max": 48}),
         ("color", "Text color", "fill", "#252423", {}),
-        # Bloque 2 (Pro): desvío contra el plan, o contra el año anterior si no hay plan.
-        ("variance", "Variance vs plan or PY (Pro)", "enum", "off",
-         {"items": [("off", "Off"), ("pct", "Percentage"), ("abs", "Absolute")]}),
     ]),
-    ("references", "Plan, prior year and forecast", [
-        ("show", "Show reference lines", "bool", True, {}),
-        ("colorMode", "Line color", "enum", "gray", {"items": [("gray", "Gray"), ("series", "Color of its series")]}),
-        ("color", "Gray", "fill", "#8A8886", {}),
-        ("width", "Line width", "num", 1.5, {"min": 0.5, "max": 6}),
-        ("legend", "Show in legend", "bool", True, {}),
-        # Bloque 2 (Pro): banda entre la serie real y su referencia (plan, o año anterior), partida en el cruce.
-        ("gapShading", "Gap shading", "bool", False, {}),
-        ("aboveColor", "Above the reference", "fill", "#2E7D32", {}),
-        ("belowColor", "Below the reference", "fill", "#C62828", {}),
-        ("gapOpacity", "Shading opacity (%)", "num", 18, {"min": 5, "max": 30}),
-        # Fase 3: el plan o la previsión que siguen tras el último real, en el color de la serie y con la marca Actual | Plan.
-        ("actualSplit", "Split actual and plan", "bool", True, {}),
+    ("scaleRing", "Scale ring", [
+        ("mode", "Marks", "enum", "quarters", {"items": [("off", "Off"), ("quarters", "Quarters (25 %)"), ("tens", "Every 10 %")]}),
+        ("color", "Color", "fill", "#605E5C", {}),
     ]),
-    # Línea de objetivo (gratis): rol targetLine; plana si el valor no cambia, en escalones si cambia por periodo.
-    ("targetLine", "Target line", [
-        ("show", "Show target line", "bool", True, {}),
-        ("color", "Line color", "fill", "", {}),
-        ("width", "Line width", "num", 1.5, {"min": 0.5, "max": 6}),
-        ("lineStyle", "Line style", "enum", "dashed", {"items": [("solid", "Solid"), ("dashed", "Dashed"), ("dotted", "Dotted")]}),
-        ("showLabel", "Show label", "bool", True, {}),
-        ("fontSize", "Text size", "num", 10, {"min": 7, "max": 24}),
+    ("legend", "Legend table", [
+        ("position", "Position", "enum", "auto", {"items": [("auto", "Automatic"), ("right", "Right"), ("bottom", "Bottom"), ("off", "Off")]}),
+        ("header", "Show header", "bool", True, {}),
+        ("totalRow", "Show total row", "enum", "auto", {"items": [("auto", "Automatic (pie)"), ("on", "On"), ("off", "Off")]}),
+        ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
+        ("color", "Text color", "fill", "#252423", {}),
     ]),
-    # Tendencia (gratis, FC.CART08): lineal (mínimos cuadrados) o media móvil; nunca más allá del último dato.
-    ("trendLine", "Trend line", [
-        ("show", "Show trend line", "bool", False, {}),
-        ("type", "Type", "enum", "linear", {"items": [("linear", "Linear"), ("movingAverage", "Moving average")]}),
-        ("window", "Periods (moving average)", "num", 3, {"min": 2, "max": 24}),
-        ("scope", "Apply to", "enum", "all", {"items": [("all", "All series"), ("first", "First series only")]}),
-        ("width", "Line width", "num", 1.5, {"min": 0.5, "max": 6}),
-        ("opacity", "Opacity (%)", "num", 70, {"min": 20, "max": 100}),
+    # Pro (bloque 2): existen en el panel con su campo puesto; en el bloque 1 aún no dibujan nada.
+    ("compare", "Compare with (Pro)", [
+        ("changeShown", "Change shown", "enum", "both", {"items": [("pp", "Share points"), ("value", "Value"), ("both", "Both")]}),
+        ("sortByChange", "Sort by change", "bool", False, {}),
     ]),
-    # Máximo y mínimo (gratis, fase 3).
-    ("peaks", "Peaks & lows", [
-        ("show", "Show peaks & lows", "bool", False, {}),
-        ("mode", "Mark", "enum", "both", {"items": [("both", "Maximum and minimum"), ("max", "Maximum"), ("min", "Minimum")]}),
-        ("scope", "Apply to", "enum", "first", {"items": [("first", "First series only"), ("all", "All series")]}),
-        ("fontSize", "Text size", "num", 9, {"min": 7, "max": 18}),
+    ("target", "Target (Pro)", [
+        ("metAt", "Met at (%)", "num", 100, {"min": 1, "max": 1000}),
+        ("closeAt", "Close at (%)", "num", 90, {"min": 1, "max": 1000}),
     ]),
-    # Eventos (Pro): rol events, texto; línea vertical + etiqueta con anticolisión.
-    ("events", "Events (Pro)", [
-        ("show", "Show events", "bool", True, {}),
-        ("color", "Line color", "fill", "", {}),
-        ("lineStyle", "Line style", "enum", "dashed", {"items": [("solid", "Solid"), ("dashed", "Dashed"), ("dotted", "Dotted")]}),
-        ("showLabels", "Show labels", "bool", True, {}),
-        ("labelPosition", "Label position", "enum", "top", {"items": [("top", "Top"), ("bottom", "Bottom")]}),
-        ("fontSize", "Text size", "num", 9, {"min": 7, "max": 18}),
-    ]),
-    # Anotaciones (Pro): rol annotations, texto; nota anclada al punto de la primera medida (o de su marca de leyenda).
     ("annotations", "Annotations (Pro)", [
         ("show", "Show annotations", "bool", True, {}),
-        ("fontSize", "Text size", "num", 9, {"min": 7, "max": 18}),
-        ("color", "Text color", "fill", "", {}),
-        ("background", "Background", "fill", "", {}),
-        ("opacity", "Background opacity (%)", "num", 85, {"min": 0, "max": 100}),
     ]),
-    ("xAxis", "X axis", [
-        ("show", "Show X axis", "bool", True, {}),
-        ("fontSize", "Text size", "num", 10, {"min": 7, "max": 24}),
-        ("color", "Text color", "fill", "#605E5C", {}),
-        ("title", "Title", "bool", False, {}),
-        # FC.CART10: solo con eje categórico (el visual oculta la opción con eje de fecha).
-        ("sort", "Sort categories", "enum", "data", {"items": [("data", "Data order"), ("valueDesc", "By value (descending)"),
-                                                               ("valueAsc", "By value (ascending)"), ("alpha", "Alphabetical")]}),
-    ]),
-    ("yAxis", "Y axis", [
-        ("show", "Show Y axis", "bool", True, {}),
-        ("fontSize", "Text size", "num", 10, {"min": 7, "max": 24}),
-        ("color", "Text color", "fill", "#605E5C", {}),
-        ("title", "Title", "bool", True, {}),
-        ("zero", "Start at zero", "bool", False, {}),
-        ("grid", "Gridlines", "bool", True, {}),
-        ("gridColor", "Gridline color", "fill", "#E1DFDD", {}),
-    ]),
-    ("y2Axis", "Secondary Y axis", [
-        ("show", "Show secondary Y axis", "bool", True, {}),
-        ("fontSize", "Text size", "num", 10, {"min": 7, "max": 24}),
-        ("title", "Title", "bool", True, {}),
-        ("zero", "Start at zero", "bool", False, {}),
-    ]),
-    ("legend", "Legend", [
-        ("show", "Show legend", "bool", True, {}),
-        ("position", "Position", "enum", "top", {"items": [("top", "Top"), ("bottom", "Bottom")]}),
-        ("fontSize", "Text size", "num", 10, {"min": 7, "max": 24}),
-        ("color", "Text color", "fill", "#605E5C", {}),
-        ("title", "Show title", "bool", False, {}),
-    ]),
-    # Las 9 opciones comunes (nombres internos de Histogram/Pareto) y el eje Y compartido.
+    # Las 9 opciones comunes (nombres internos de Line Chart) + Size by total.
     ("smallMultiples", "Small multiples (Pro)", [
         ("columns", "Columns (0 = automatic)", "num", 0, {"min": 0, "max": 12}),
         ("gap", "Space between panels", "num", 8, {"min": 0, "max": 40}),
@@ -145,49 +102,31 @@ OBJECTS = [
         ("background", "Panel background", "fill", "", {}),
         ("border", "Panel border", "bool", False, {}),
         ("borderColor", "Panel border color", "fill", "#E1DFDD", {}),
-        ("sharedY", "Shared Y axis", "bool", True, {}),
+        ("sizeByTotal", "Size by total", "bool", False, {}),
     ]),
-    # Color por serie (gratis, como el nativo): se guarda con selector (medida o valor de leyenda); el panel lo construye
-    # el visual en la tarjeta Lines. Sin tarjeta propia en PANE.
-    # Trazo por serie (gratis), mismo selector que el color: estilo, grosor y marcadores. Panel en código (contenedor).
-    ("dataColors", "Series colors", [
-        ("fill", "Color", "fill", "", {}),
-        ("lineStyle", "Line style", "enum", "solid", {"items": [("solid", "Solid"), ("dashed", "Dashed"), ("dotted", "Dotted")]}),
-        ("lineWidth", "Line width", "num", 2, {"min": 0.5, "max": 8}),
-        ("markers", "Markers", "enum", "auto", {"items": [("auto", "Automatic"), ("on", "On"), ("off", "Off")]}),
-    ]),
-    # Nota de fuente (gratis): texto pequeño al pie, resta su alto del gráfico.
-    ("sourceNote", "Source note", [
-        ("show", "Show source note", "bool", False, {}),
-        ("text", "Text", "text", "", {}),
-        ("fontSize", "Text size", "num", 9, {"min": 7, "max": 16}),
-        ("color", "Text color", "fill", "", {}),
-        ("align", "Alignment", "enum", "left", {"items": [("left", "Left"), ("center", "Center"), ("right", "Right")]}),
-    ]),
-    # Zoom del eje X (FC.CART09): solo visual, no filtra ni se guarda.
-    ("interactions", "Interactions", [
-        ("zoom", "Zoom", "bool", True, {}),
-        ("yAutoFit", "Y auto-fit when zoomed", "bool", True, {}),
-        ("zoomSlider", "Zoom slider", "bool", False, {}),
+    ("accessibility", "Accessibility", [
+        ("highContrast", "High contrast", "enum", "auto", {"items": [("auto", "Automatic"), ("on", "On")]}),
+        ("patterns", "Patterns", "bool", False, {}),
+        ("focusColor", "Focus color", "fill", "", {}),
+        ("focusWidth", "Focus width", "num", 2, {"min": 1, "max": 6}),
+        ("minFontSize", "Minimum text size", "num", 8, {"min": 8, "max": 16}),
+        ("reduceMotion", "Reduce motion", "bool", False, {}),
     ]),
 ]
 
-# Orden común de la colección: Style template, tarjetas propias, ejes, leyenda, small multiples.
+# Orden común de la colección: Style template, tarjetas propias, leyenda, Pro, small multiples, accesibilidad.
 PANE = [
     ("style", "Style template", [("style", None, None)]),
-    ("lines", "Lines", [("lines", None, None)]),
-    ("endLabels", "End labels", [("endLabels", None, "show")]),
-    ("events", "Events (Pro)", [("events", None, "show")]),
+    ("slices", "Slices", [("slices", None, None)]),
+    ("labels", "Data labels", [("labels", None, "show")]),
+    ("center", "Center", [("center", None, "show")]),
+    ("scaleRing", "Scale ring", [("scaleRing", None, None)]),
+    ("legend", "Legend table", [("legend", None, None)]),
+    ("compare", "Compare with (Pro)", [("compare", None, None)]),
+    ("target", "Target (Pro)", [("target", None, None)]),
     ("annotations", "Annotations (Pro)", [("annotations", None, "show")]),
-    ("references", "Plan, prior year and forecast", [("references", None, "show")]),
-    ("targetLine", "Target line", [("targetLine", None, "show")]),
-    ("trendLine", "Trend line", [("trendLine", None, "show")]),
-    ("peaks", "Peaks & lows", [("peaks", None, "show")]),
-    ("axes", "Axes", [("xAxis", "X axis", "show"), ("yAxis", "Y axis", "show"), ("y2Axis", "Secondary Y axis", "show")]),
-    ("legend", "Legend", [("legend", None, "show")]),
     ("smallMultiples", "Small multiples (Pro)", [("smallMultiples", None, None)]),
-    ("sourceNote", "Source note", [("sourceNote", None, "show")]),
-    ("interactions", "Interactions", [("interactions", None, None)]),
+    ("accessibility", "Accessibility", [("accessibility", None, None)]),
 ]
 
 
@@ -199,8 +138,17 @@ def cap_type(t):
 def generar():
     caps_p = os.path.join(ROOT, "capabilities.json")
     caps = json.load(io.open(caps_p, encoding="utf-8"))
-    objs = {"general": {"properties": {"formatString": {"type": {"formatting": {"formatString": True}}}}}}
     en = {}
+    por_nombre = {r["name"]: r for r in caps["dataRoles"]}
+    roles = []
+    for name, key, label, desc in ROLES:
+        r = por_nombre[name]
+        r.update({"displayName": label, "displayNameKey": key, "description": desc, "descriptionKey": key + "_Desc"})
+        en[key] = label
+        en[key + "_Desc"] = desc
+        roles.append(r)
+    caps["dataRoles"] = roles
+    objs = {"general": {"properties": {"formatString": {"type": {"formatting": {"formatString": True}}}}}}
     ts_objs = {}
     for name, label, props in OBJECTS:
         okey = "Obj_" + name
@@ -262,12 +210,8 @@ def generar():
     io.open(os.path.join(ROOT, "src", "formatSpec.ts"), "w", encoding="utf-8", newline="\n").write("\n".join(ts))
 
     enp = os.path.join(ROOT, "stringResources", "en-US", "resources.resjson")
-    base = json.load(io.open(enp, encoding="utf-8"))
-    roles = {k: v for k, v in base.items() if k.startswith("Role_")}
-    out = dict(roles)
-    out.update(en)
-    io.open(enp, "w", encoding="utf-8", newline="\n").write(json.dumps(out, indent=2, ensure_ascii=False) + "\n")
-    print("formato:", len(objs), "objetos ·", len(out), "claves en-US (sin las de tiempo de ejecución)")
+    io.open(enp, "w", encoding="utf-8", newline="\n").write(json.dumps(en, indent=2, ensure_ascii=False) + "\n")
+    print("formato:", len(objs), "objetos ·", len(en), "claves en-US (sin las de tiempo de ejecución)")
 
 
 if __name__ == "__main__":

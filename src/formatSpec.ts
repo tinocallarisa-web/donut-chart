@@ -72,138 +72,152 @@ export const OBJECTS: Record<string, ObjSpec> = {
             }
         ]
     },
-    "lines": {
-        "name": "lines",
-        "key": "Obj_lines",
-        "label": "Lines",
+    "slices": {
+        "name": "slices",
+        "key": "Obj_slices",
+        "label": "Slices",
         "props": [
             {
-                "name": "width",
+                "name": "shape",
+                "type": "enum",
+                "def": "donut",
+                "key": "Prop_slices_shape",
+                "label": "Shape",
+                "items": [
+                    [
+                        "donut",
+                        "Enum_shape_donut",
+                        "Donut"
+                    ],
+                    [
+                        "pie",
+                        "Enum_shape_pie",
+                        "Pie"
+                    ]
+                ]
+            },
+            {
+                "name": "innerRadius",
                 "type": "num",
-                "def": 2,
-                "key": "Prop_lines_width",
-                "label": "Line width",
-                "min": 0.5,
+                "def": 58,
+                "key": "Prop_slices_innerRadius",
+                "label": "Inner radius (%)",
+                "min": 20,
+                "max": 85
+            },
+            {
+                "name": "startAngle",
+                "type": "num",
+                "def": 0,
+                "key": "Prop_slices_startAngle",
+                "label": "Start angle (°)",
+                "min": 0,
+                "max": 359
+            },
+            {
+                "name": "gap",
+                "type": "num",
+                "def": 1,
+                "key": "Prop_slices_gap",
+                "label": "Space between slices",
+                "min": 0,
                 "max": 8
             },
             {
-                "name": "markers",
+                "name": "sort",
                 "type": "enum",
-                "def": "auto",
-                "key": "Prop_lines_markers",
-                "label": "Markers",
+                "def": "valueDesc",
+                "key": "Prop_slices_sort",
+                "label": "Order",
                 "items": [
                     [
-                        "auto",
-                        "Enum_markers_auto",
-                        "Automatic"
+                        "valueDesc",
+                        "Enum_sort_valueDesc",
+                        "By value"
                     ],
                     [
-                        "on",
-                        "Enum_markers_on",
-                        "On"
-                    ],
-                    [
-                        "off",
-                        "Enum_markers_off",
-                        "Off"
+                        "data",
+                        "Enum_sort_data",
+                        "Data order"
                     ]
                 ]
             },
             {
-                "name": "markerSize",
+                "name": "maxSlices",
+                "type": "num",
+                "def": 6,
+                "key": "Prop_slices_maxSlices",
+                "label": "Show at most",
+                "min": 2,
+                "max": 20
+            },
+            {
+                "name": "groupBelow",
                 "type": "num",
                 "def": 3,
-                "key": "Prop_lines_markerSize",
-                "label": "Marker size",
-                "min": 1,
-                "max": 10
+                "key": "Prop_slices_groupBelow",
+                "label": "Group below (%)",
+                "min": 0,
+                "max": 20
             },
             {
-                "name": "missing",
-                "type": "enum",
-                "def": "break",
-                "key": "Prop_lines_missing",
-                "label": "Missing values",
-                "items": [
-                    [
-                        "break",
-                        "Enum_missing_break",
-                        "Break the line"
-                    ],
-                    [
-                        "connect",
-                        "Enum_missing_connect",
-                        "Connect the points"
-                    ],
-                    [
-                        "zero",
-                        "Enum_missing_zero",
-                        "Treat as zero"
-                    ]
-                ]
-            },
-            {
-                "name": "smooth",
-                "type": "bool",
-                "def": false,
-                "key": "Prop_lines_smooth",
-                "label": "Smooth lines"
-            },
-            {
-                "name": "valueMode",
-                "type": "enum",
-                "def": "value",
-                "key": "Prop_lines_valueMode",
-                "label": "Show values as (Pro)",
-                "items": [
-                    [
-                        "value",
-                        "Enum_valueMode_value",
-                        "Value"
-                    ],
-                    [
-                        "index",
-                        "Enum_valueMode_index",
-                        "Index (first = 100)"
-                    ],
-                    [
-                        "pctChange",
-                        "Enum_valueMode_pctChange",
-                        "% change vs first"
-                    ],
-                    [
-                        "runningTotal",
-                        "Enum_valueMode_runningTotal",
-                        "Running total"
-                    ]
-                ]
+                "name": "otherColor",
+                "type": "fill",
+                "def": "#A19F9D",
+                "key": "Prop_slices_otherColor",
+                "label": "Other color"
             }
         ]
     },
-    "endLabels": {
-        "name": "endLabels",
-        "key": "Obj_endLabels",
-        "label": "End labels",
+    "dataColors": {
+        "name": "dataColors",
+        "key": "Obj_dataColors",
+        "label": "Slice colors",
+        "props": [
+            {
+                "name": "fill",
+                "type": "fill",
+                "def": "",
+                "key": "Prop_dataColors_fill",
+                "label": "Color"
+            },
+            {
+                "name": "rule",
+                "type": "fill",
+                "def": "",
+                "key": "Prop_dataColors_rule",
+                "label": "All slices (fx)"
+            }
+        ]
+    },
+    "labels": {
+        "name": "labels",
+        "key": "Obj_labels",
+        "label": "Data labels",
         "props": [
             {
                 "name": "show",
                 "type": "bool",
                 "def": true,
-                "key": "Prop_endLabels_show",
-                "label": "Show end labels"
+                "key": "Prop_labels_show",
+                "label": "Show data labels"
             },
             {
                 "name": "content",
                 "type": "enum",
-                "def": "nameValue",
-                "key": "Prop_endLabels_content",
+                "def": "auto",
+                "key": "Prop_labels_content",
                 "label": "Content",
                 "items": [
                     [
-                        "nameValue",
-                        "Enum_content_nameValue",
-                        "Name and value"
+                        "auto",
+                        "Enum_content_auto",
+                        "Automatic"
+                    ],
+                    [
+                        "percent",
+                        "Enum_content_percent",
+                        "Percent"
                     ],
                     [
                         "value",
@@ -214,452 +228,293 @@ export const OBJECTS: Record<string, ObjSpec> = {
                         "name",
                         "Enum_content_name",
                         "Name"
+                    ],
+                    [
+                        "namePercent",
+                        "Enum_content_namePercent",
+                        "Name and percent"
+                    ],
+                    [
+                        "valuePercent",
+                        "Enum_content_valuePercent",
+                        "Value and percent"
+                    ],
+                    [
+                        "all",
+                        "Enum_content_all",
+                        "All"
                     ]
                 ]
             },
             {
-                "name": "maxLabels",
-                "type": "num",
-                "def": 8,
-                "key": "Prop_endLabels_maxLabels",
-                "label": "Maximum labels",
-                "min": 1,
-                "max": 50
+                "name": "position",
+                "type": "enum",
+                "def": "auto",
+                "key": "Prop_labels_position",
+                "label": "Position",
+                "items": [
+                    [
+                        "auto",
+                        "Enum_position_auto",
+                        "Inside, then outside"
+                    ],
+                    [
+                        "inside",
+                        "Enum_position_inside",
+                        "Inside only"
+                    ],
+                    [
+                        "outside",
+                        "Enum_position_outside",
+                        "Outside"
+                    ]
+                ]
             },
             {
                 "name": "fontSize",
                 "type": "num",
                 "def": 10,
-                "key": "Prop_endLabels_fontSize",
+                "key": "Prop_labels_fontSize",
                 "label": "Text size",
-                "min": 7,
+                "min": 6,
                 "max": 24
-            },
-            {
-                "name": "seriesColor",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_endLabels_seriesColor",
-                "label": "Use the series color"
             },
             {
                 "name": "color",
                 "type": "fill",
                 "def": "#252423",
-                "key": "Prop_endLabels_color",
-                "label": "Text color"
+                "key": "Prop_labels_color",
+                "label": "Text color (outside)"
             },
             {
-                "name": "variance",
+                "name": "decimals",
+                "type": "num",
+                "def": 0,
+                "key": "Prop_labels_decimals",
+                "label": "Percent decimals",
+                "min": 0,
+                "max": 2
+            }
+        ]
+    },
+    "center": {
+        "name": "center",
+        "key": "Obj_center",
+        "label": "Center",
+        "props": [
+            {
+                "name": "show",
+                "type": "bool",
+                "def": true,
+                "key": "Prop_center_show",
+                "label": "Show total in the center"
+            },
+            {
+                "name": "title",
+                "type": "text",
+                "def": "",
+                "key": "Prop_center_title",
+                "label": "Title (blank = measure name)"
+            },
+            {
+                "name": "fontSize",
+                "type": "num",
+                "def": 20,
+                "key": "Prop_center_fontSize",
+                "label": "Value size",
+                "min": 8,
+                "max": 48
+            },
+            {
+                "name": "color",
+                "type": "fill",
+                "def": "#252423",
+                "key": "Prop_center_color",
+                "label": "Text color"
+            }
+        ]
+    },
+    "scaleRing": {
+        "name": "scaleRing",
+        "key": "Obj_scaleRing",
+        "label": "Scale ring",
+        "props": [
+            {
+                "name": "mode",
                 "type": "enum",
-                "def": "off",
-                "key": "Prop_endLabels_variance",
-                "label": "Variance vs plan or PY (Pro)",
+                "def": "quarters",
+                "key": "Prop_scaleRing_mode",
+                "label": "Marks",
                 "items": [
                     [
                         "off",
-                        "Enum_variance_off",
+                        "Enum_mode_off",
                         "Off"
                     ],
                     [
-                        "pct",
-                        "Enum_variance_pct",
-                        "Percentage"
+                        "quarters",
+                        "Enum_mode_quarters",
+                        "Quarters (25 %)"
                     ],
                     [
-                        "abs",
-                        "Enum_variance_abs",
-                        "Absolute"
-                    ]
-                ]
-            }
-        ]
-    },
-    "references": {
-        "name": "references",
-        "key": "Obj_references",
-        "label": "Plan, prior year and forecast",
-        "props": [
-            {
-                "name": "show",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_references_show",
-                "label": "Show reference lines"
-            },
-            {
-                "name": "colorMode",
-                "type": "enum",
-                "def": "gray",
-                "key": "Prop_references_colorMode",
-                "label": "Line color",
-                "items": [
-                    [
-                        "gray",
-                        "Enum_colorMode_gray",
-                        "Gray"
-                    ],
-                    [
-                        "series",
-                        "Enum_colorMode_series",
-                        "Color of its series"
+                        "tens",
+                        "Enum_mode_tens",
+                        "Every 10 %"
                     ]
                 ]
             },
             {
                 "name": "color",
                 "type": "fill",
-                "def": "#8A8886",
-                "key": "Prop_references_color",
-                "label": "Gray"
-            },
-            {
-                "name": "width",
-                "type": "num",
-                "def": 1.5,
-                "key": "Prop_references_width",
-                "label": "Line width",
-                "min": 0.5,
-                "max": 6
-            },
-            {
-                "name": "legend",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_references_legend",
-                "label": "Show in legend"
-            },
-            {
-                "name": "gapShading",
-                "type": "bool",
-                "def": false,
-                "key": "Prop_references_gapShading",
-                "label": "Gap shading"
-            },
-            {
-                "name": "aboveColor",
-                "type": "fill",
-                "def": "#2E7D32",
-                "key": "Prop_references_aboveColor",
-                "label": "Above the reference"
-            },
-            {
-                "name": "belowColor",
-                "type": "fill",
-                "def": "#C62828",
-                "key": "Prop_references_belowColor",
-                "label": "Below the reference"
-            },
-            {
-                "name": "gapOpacity",
-                "type": "num",
-                "def": 18,
-                "key": "Prop_references_gapOpacity",
-                "label": "Shading opacity (%)",
-                "min": 5,
-                "max": 30
-            },
-            {
-                "name": "actualSplit",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_references_actualSplit",
-                "label": "Split actual and plan"
+                "def": "#605E5C",
+                "key": "Prop_scaleRing_color",
+                "label": "Color"
             }
         ]
     },
-    "targetLine": {
-        "name": "targetLine",
-        "key": "Obj_targetLine",
-        "label": "Target line",
+    "legend": {
+        "name": "legend",
+        "key": "Obj_legend",
+        "label": "Legend table",
         "props": [
             {
-                "name": "show",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_targetLine_show",
-                "label": "Show target line"
-            },
-            {
-                "name": "color",
-                "type": "fill",
-                "def": "",
-                "key": "Prop_targetLine_color",
-                "label": "Line color"
-            },
-            {
-                "name": "width",
-                "type": "num",
-                "def": 1.5,
-                "key": "Prop_targetLine_width",
-                "label": "Line width",
-                "min": 0.5,
-                "max": 6
-            },
-            {
-                "name": "lineStyle",
+                "name": "position",
                 "type": "enum",
-                "def": "dashed",
-                "key": "Prop_targetLine_lineStyle",
-                "label": "Line style",
+                "def": "auto",
+                "key": "Prop_legend_position",
+                "label": "Position",
                 "items": [
                     [
-                        "solid",
-                        "Enum_lineStyle_solid",
-                        "Solid"
+                        "auto",
+                        "Enum_position_auto",
+                        "Automatic"
                     ],
                     [
-                        "dashed",
-                        "Enum_lineStyle_dashed",
-                        "Dashed"
+                        "right",
+                        "Enum_position_right",
+                        "Right"
                     ],
                     [
-                        "dotted",
-                        "Enum_lineStyle_dotted",
-                        "Dotted"
+                        "bottom",
+                        "Enum_position_bottom",
+                        "Bottom"
+                    ],
+                    [
+                        "off",
+                        "Enum_position_off",
+                        "Off"
                     ]
                 ]
             },
             {
-                "name": "showLabel",
+                "name": "header",
                 "type": "bool",
                 "def": true,
-                "key": "Prop_targetLine_showLabel",
-                "label": "Show label"
+                "key": "Prop_legend_header",
+                "label": "Show header"
+            },
+            {
+                "name": "totalRow",
+                "type": "enum",
+                "def": "auto",
+                "key": "Prop_legend_totalRow",
+                "label": "Show total row",
+                "items": [
+                    [
+                        "auto",
+                        "Enum_totalRow_auto",
+                        "Automatic (pie)"
+                    ],
+                    [
+                        "on",
+                        "Enum_totalRow_on",
+                        "On"
+                    ],
+                    [
+                        "off",
+                        "Enum_totalRow_off",
+                        "Off"
+                    ]
+                ]
             },
             {
                 "name": "fontSize",
                 "type": "num",
                 "def": 10,
-                "key": "Prop_targetLine_fontSize",
+                "key": "Prop_legend_fontSize",
                 "label": "Text size",
-                "min": 7,
+                "min": 6,
                 "max": 24
-            }
-        ]
-    },
-    "trendLine": {
-        "name": "trendLine",
-        "key": "Obj_trendLine",
-        "label": "Trend line",
-        "props": [
-            {
-                "name": "show",
-                "type": "bool",
-                "def": false,
-                "key": "Prop_trendLine_show",
-                "label": "Show trend line"
-            },
-            {
-                "name": "type",
-                "type": "enum",
-                "def": "linear",
-                "key": "Prop_trendLine_type",
-                "label": "Type",
-                "items": [
-                    [
-                        "linear",
-                        "Enum_type_linear",
-                        "Linear"
-                    ],
-                    [
-                        "movingAverage",
-                        "Enum_type_movingAverage",
-                        "Moving average"
-                    ]
-                ]
-            },
-            {
-                "name": "window",
-                "type": "num",
-                "def": 3,
-                "key": "Prop_trendLine_window",
-                "label": "Periods (moving average)",
-                "min": 2,
-                "max": 24
-            },
-            {
-                "name": "scope",
-                "type": "enum",
-                "def": "all",
-                "key": "Prop_trendLine_scope",
-                "label": "Apply to",
-                "items": [
-                    [
-                        "all",
-                        "Enum_scope_all",
-                        "All series"
-                    ],
-                    [
-                        "first",
-                        "Enum_scope_first",
-                        "First series only"
-                    ]
-                ]
-            },
-            {
-                "name": "width",
-                "type": "num",
-                "def": 1.5,
-                "key": "Prop_trendLine_width",
-                "label": "Line width",
-                "min": 0.5,
-                "max": 6
-            },
-            {
-                "name": "opacity",
-                "type": "num",
-                "def": 70,
-                "key": "Prop_trendLine_opacity",
-                "label": "Opacity (%)",
-                "min": 20,
-                "max": 100
-            }
-        ]
-    },
-    "peaks": {
-        "name": "peaks",
-        "key": "Obj_peaks",
-        "label": "Peaks & lows",
-        "props": [
-            {
-                "name": "show",
-                "type": "bool",
-                "def": false,
-                "key": "Prop_peaks_show",
-                "label": "Show peaks & lows"
-            },
-            {
-                "name": "mode",
-                "type": "enum",
-                "def": "both",
-                "key": "Prop_peaks_mode",
-                "label": "Mark",
-                "items": [
-                    [
-                        "both",
-                        "Enum_mode_both",
-                        "Maximum and minimum"
-                    ],
-                    [
-                        "max",
-                        "Enum_mode_max",
-                        "Maximum"
-                    ],
-                    [
-                        "min",
-                        "Enum_mode_min",
-                        "Minimum"
-                    ]
-                ]
-            },
-            {
-                "name": "scope",
-                "type": "enum",
-                "def": "first",
-                "key": "Prop_peaks_scope",
-                "label": "Apply to",
-                "items": [
-                    [
-                        "first",
-                        "Enum_scope_first",
-                        "First series only"
-                    ],
-                    [
-                        "all",
-                        "Enum_scope_all",
-                        "All series"
-                    ]
-                ]
-            },
-            {
-                "name": "fontSize",
-                "type": "num",
-                "def": 9,
-                "key": "Prop_peaks_fontSize",
-                "label": "Text size",
-                "min": 7,
-                "max": 18
-            }
-        ]
-    },
-    "events": {
-        "name": "events",
-        "key": "Obj_events",
-        "label": "Events (Pro)",
-        "props": [
-            {
-                "name": "show",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_events_show",
-                "label": "Show events"
             },
             {
                 "name": "color",
                 "type": "fill",
-                "def": "",
-                "key": "Prop_events_color",
-                "label": "Line color"
-            },
+                "def": "#252423",
+                "key": "Prop_legend_color",
+                "label": "Text color"
+            }
+        ]
+    },
+    "compare": {
+        "name": "compare",
+        "key": "Obj_compare",
+        "label": "Compare with (Pro)",
+        "props": [
             {
-                "name": "lineStyle",
+                "name": "changeShown",
                 "type": "enum",
-                "def": "dashed",
-                "key": "Prop_events_lineStyle",
-                "label": "Line style",
+                "def": "both",
+                "key": "Prop_compare_changeShown",
+                "label": "Change shown",
                 "items": [
                     [
-                        "solid",
-                        "Enum_lineStyle_solid",
-                        "Solid"
+                        "pp",
+                        "Enum_changeShown_pp",
+                        "Share points"
                     ],
                     [
-                        "dashed",
-                        "Enum_lineStyle_dashed",
-                        "Dashed"
+                        "value",
+                        "Enum_changeShown_value",
+                        "Value"
                     ],
                     [
-                        "dotted",
-                        "Enum_lineStyle_dotted",
-                        "Dotted"
+                        "both",
+                        "Enum_changeShown_both",
+                        "Both"
                     ]
                 ]
             },
             {
-                "name": "showLabels",
+                "name": "sortByChange",
                 "type": "bool",
-                "def": true,
-                "key": "Prop_events_showLabels",
-                "label": "Show labels"
-            },
+                "def": false,
+                "key": "Prop_compare_sortByChange",
+                "label": "Sort by change"
+            }
+        ]
+    },
+    "target": {
+        "name": "target",
+        "key": "Obj_target",
+        "label": "Target (Pro)",
+        "props": [
             {
-                "name": "labelPosition",
-                "type": "enum",
-                "def": "top",
-                "key": "Prop_events_labelPosition",
-                "label": "Label position",
-                "items": [
-                    [
-                        "top",
-                        "Enum_labelPosition_top",
-                        "Top"
-                    ],
-                    [
-                        "bottom",
-                        "Enum_labelPosition_bottom",
-                        "Bottom"
-                    ]
-                ]
-            },
-            {
-                "name": "fontSize",
+                "name": "metAt",
                 "type": "num",
-                "def": 9,
-                "key": "Prop_events_fontSize",
-                "label": "Text size",
-                "min": 7,
-                "max": 18
+                "def": 100,
+                "key": "Prop_target_metAt",
+                "label": "Met at (%)",
+                "min": 1,
+                "max": 1000
+            },
+            {
+                "name": "closeAt",
+                "type": "num",
+                "def": 90,
+                "key": "Prop_target_closeAt",
+                "label": "Close at (%)",
+                "min": 1,
+                "max": 1000
             }
         ]
     },
@@ -674,255 +529,6 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "def": true,
                 "key": "Prop_annotations_show",
                 "label": "Show annotations"
-            },
-            {
-                "name": "fontSize",
-                "type": "num",
-                "def": 9,
-                "key": "Prop_annotations_fontSize",
-                "label": "Text size",
-                "min": 7,
-                "max": 18
-            },
-            {
-                "name": "color",
-                "type": "fill",
-                "def": "",
-                "key": "Prop_annotations_color",
-                "label": "Text color"
-            },
-            {
-                "name": "background",
-                "type": "fill",
-                "def": "",
-                "key": "Prop_annotations_background",
-                "label": "Background"
-            },
-            {
-                "name": "opacity",
-                "type": "num",
-                "def": 85,
-                "key": "Prop_annotations_opacity",
-                "label": "Background opacity (%)",
-                "min": 0,
-                "max": 100
-            }
-        ]
-    },
-    "xAxis": {
-        "name": "xAxis",
-        "key": "Obj_xAxis",
-        "label": "X axis",
-        "props": [
-            {
-                "name": "show",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_xAxis_show",
-                "label": "Show X axis"
-            },
-            {
-                "name": "fontSize",
-                "type": "num",
-                "def": 10,
-                "key": "Prop_xAxis_fontSize",
-                "label": "Text size",
-                "min": 7,
-                "max": 24
-            },
-            {
-                "name": "color",
-                "type": "fill",
-                "def": "#605E5C",
-                "key": "Prop_xAxis_color",
-                "label": "Text color"
-            },
-            {
-                "name": "title",
-                "type": "bool",
-                "def": false,
-                "key": "Prop_xAxis_title",
-                "label": "Title"
-            },
-            {
-                "name": "sort",
-                "type": "enum",
-                "def": "data",
-                "key": "Prop_xAxis_sort",
-                "label": "Sort categories",
-                "items": [
-                    [
-                        "data",
-                        "Enum_sort_data",
-                        "Data order"
-                    ],
-                    [
-                        "valueDesc",
-                        "Enum_sort_valueDesc",
-                        "By value (descending)"
-                    ],
-                    [
-                        "valueAsc",
-                        "Enum_sort_valueAsc",
-                        "By value (ascending)"
-                    ],
-                    [
-                        "alpha",
-                        "Enum_sort_alpha",
-                        "Alphabetical"
-                    ]
-                ]
-            }
-        ]
-    },
-    "yAxis": {
-        "name": "yAxis",
-        "key": "Obj_yAxis",
-        "label": "Y axis",
-        "props": [
-            {
-                "name": "show",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_yAxis_show",
-                "label": "Show Y axis"
-            },
-            {
-                "name": "fontSize",
-                "type": "num",
-                "def": 10,
-                "key": "Prop_yAxis_fontSize",
-                "label": "Text size",
-                "min": 7,
-                "max": 24
-            },
-            {
-                "name": "color",
-                "type": "fill",
-                "def": "#605E5C",
-                "key": "Prop_yAxis_color",
-                "label": "Text color"
-            },
-            {
-                "name": "title",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_yAxis_title",
-                "label": "Title"
-            },
-            {
-                "name": "zero",
-                "type": "bool",
-                "def": false,
-                "key": "Prop_yAxis_zero",
-                "label": "Start at zero"
-            },
-            {
-                "name": "grid",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_yAxis_grid",
-                "label": "Gridlines"
-            },
-            {
-                "name": "gridColor",
-                "type": "fill",
-                "def": "#E1DFDD",
-                "key": "Prop_yAxis_gridColor",
-                "label": "Gridline color"
-            }
-        ]
-    },
-    "y2Axis": {
-        "name": "y2Axis",
-        "key": "Obj_y2Axis",
-        "label": "Secondary Y axis",
-        "props": [
-            {
-                "name": "show",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_y2Axis_show",
-                "label": "Show secondary Y axis"
-            },
-            {
-                "name": "fontSize",
-                "type": "num",
-                "def": 10,
-                "key": "Prop_y2Axis_fontSize",
-                "label": "Text size",
-                "min": 7,
-                "max": 24
-            },
-            {
-                "name": "title",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_y2Axis_title",
-                "label": "Title"
-            },
-            {
-                "name": "zero",
-                "type": "bool",
-                "def": false,
-                "key": "Prop_y2Axis_zero",
-                "label": "Start at zero"
-            }
-        ]
-    },
-    "legend": {
-        "name": "legend",
-        "key": "Obj_legend",
-        "label": "Legend",
-        "props": [
-            {
-                "name": "show",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_legend_show",
-                "label": "Show legend"
-            },
-            {
-                "name": "position",
-                "type": "enum",
-                "def": "top",
-                "key": "Prop_legend_position",
-                "label": "Position",
-                "items": [
-                    [
-                        "top",
-                        "Enum_position_top",
-                        "Top"
-                    ],
-                    [
-                        "bottom",
-                        "Enum_position_bottom",
-                        "Bottom"
-                    ]
-                ]
-            },
-            {
-                "name": "fontSize",
-                "type": "num",
-                "def": 10,
-                "key": "Prop_legend_fontSize",
-                "label": "Text size",
-                "min": 7,
-                "max": 24
-            },
-            {
-                "name": "color",
-                "type": "fill",
-                "def": "#605E5C",
-                "key": "Prop_legend_color",
-                "label": "Text color"
-            },
-            {
-                "name": "title",
-                "type": "bool",
-                "def": false,
-                "key": "Prop_legend_title",
-                "label": "Show title"
             }
         ]
     },
@@ -1013,171 +619,76 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "label": "Panel border color"
             },
             {
-                "name": "sharedY",
+                "name": "sizeByTotal",
                 "type": "bool",
-                "def": true,
-                "key": "Prop_smallMultiples_sharedY",
-                "label": "Shared Y axis"
+                "def": false,
+                "key": "Prop_smallMultiples_sizeByTotal",
+                "label": "Size by total"
             }
         ]
     },
-    "dataColors": {
-        "name": "dataColors",
-        "key": "Obj_dataColors",
-        "label": "Series colors",
+    "accessibility": {
+        "name": "accessibility",
+        "key": "Obj_accessibility",
+        "label": "Accessibility",
         "props": [
             {
-                "name": "fill",
-                "type": "fill",
-                "def": "",
-                "key": "Prop_dataColors_fill",
-                "label": "Color"
-            },
-            {
-                "name": "lineStyle",
-                "type": "enum",
-                "def": "solid",
-                "key": "Prop_dataColors_lineStyle",
-                "label": "Line style",
-                "items": [
-                    [
-                        "solid",
-                        "Enum_lineStyle_solid",
-                        "Solid"
-                    ],
-                    [
-                        "dashed",
-                        "Enum_lineStyle_dashed",
-                        "Dashed"
-                    ],
-                    [
-                        "dotted",
-                        "Enum_lineStyle_dotted",
-                        "Dotted"
-                    ]
-                ]
-            },
-            {
-                "name": "lineWidth",
-                "type": "num",
-                "def": 2,
-                "key": "Prop_dataColors_lineWidth",
-                "label": "Line width",
-                "min": 0.5,
-                "max": 8
-            },
-            {
-                "name": "markers",
+                "name": "highContrast",
                 "type": "enum",
                 "def": "auto",
-                "key": "Prop_dataColors_markers",
-                "label": "Markers",
+                "key": "Prop_accessibility_highContrast",
+                "label": "High contrast",
                 "items": [
                     [
                         "auto",
-                        "Enum_markers_auto",
+                        "Enum_highContrast_auto",
                         "Automatic"
                     ],
                     [
                         "on",
-                        "Enum_markers_on",
+                        "Enum_highContrast_on",
                         "On"
-                    ],
-                    [
-                        "off",
-                        "Enum_markers_off",
-                        "Off"
                     ]
                 ]
-            }
-        ]
-    },
-    "sourceNote": {
-        "name": "sourceNote",
-        "key": "Obj_sourceNote",
-        "label": "Source note",
-        "props": [
+            },
             {
-                "name": "show",
+                "name": "patterns",
                 "type": "bool",
                 "def": false,
-                "key": "Prop_sourceNote_show",
-                "label": "Show source note"
+                "key": "Prop_accessibility_patterns",
+                "label": "Patterns"
             },
             {
-                "name": "text",
-                "type": "text",
+                "name": "focusColor",
+                "type": "fill",
                 "def": "",
-                "key": "Prop_sourceNote_text",
-                "label": "Text"
+                "key": "Prop_accessibility_focusColor",
+                "label": "Focus color"
             },
             {
-                "name": "fontSize",
+                "name": "focusWidth",
                 "type": "num",
-                "def": 9,
-                "key": "Prop_sourceNote_fontSize",
-                "label": "Text size",
-                "min": 7,
+                "def": 2,
+                "key": "Prop_accessibility_focusWidth",
+                "label": "Focus width",
+                "min": 1,
+                "max": 6
+            },
+            {
+                "name": "minFontSize",
+                "type": "num",
+                "def": 8,
+                "key": "Prop_accessibility_minFontSize",
+                "label": "Minimum text size",
+                "min": 8,
                 "max": 16
             },
             {
-                "name": "color",
-                "type": "fill",
-                "def": "",
-                "key": "Prop_sourceNote_color",
-                "label": "Text color"
-            },
-            {
-                "name": "align",
-                "type": "enum",
-                "def": "left",
-                "key": "Prop_sourceNote_align",
-                "label": "Alignment",
-                "items": [
-                    [
-                        "left",
-                        "Enum_align_left",
-                        "Left"
-                    ],
-                    [
-                        "center",
-                        "Enum_align_center",
-                        "Center"
-                    ],
-                    [
-                        "right",
-                        "Enum_align_right",
-                        "Right"
-                    ]
-                ]
-            }
-        ]
-    },
-    "interactions": {
-        "name": "interactions",
-        "key": "Obj_interactions",
-        "label": "Interactions",
-        "props": [
-            {
-                "name": "zoom",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_interactions_zoom",
-                "label": "Zoom"
-            },
-            {
-                "name": "yAutoFit",
-                "type": "bool",
-                "def": true,
-                "key": "Prop_interactions_yAutoFit",
-                "label": "Y auto-fit when zoomed"
-            },
-            {
-                "name": "zoomSlider",
+                "name": "reduceMotion",
                 "type": "bool",
                 "def": false,
-                "key": "Prop_interactions_zoomSlider",
-                "label": "Zoom slider"
+                "key": "Prop_accessibility_reduceMotion",
+                "label": "Reduce motion"
             }
         ]
     }
@@ -1195,35 +706,79 @@ export const PANE: CardSpec[] = [
         ]
     },
     {
-        "uid": "lines",
-        "key": "Obj_lines",
-        "label": "Lines",
+        "uid": "slices",
+        "key": "Obj_slices",
+        "label": "Slices",
         "groups": [
             {
-                "obj": "lines",
+                "obj": "slices",
                 "toggle": null
             }
         ]
     },
     {
-        "uid": "endLabels",
-        "key": "Obj_endLabels",
-        "label": "End labels",
+        "uid": "labels",
+        "key": "Obj_labels",
+        "label": "Data labels",
         "groups": [
             {
-                "obj": "endLabels",
+                "obj": "labels",
                 "toggle": "show"
             }
         ]
     },
     {
-        "uid": "events",
-        "key": "Obj_events",
-        "label": "Events (Pro)",
+        "uid": "center",
+        "key": "Obj_center",
+        "label": "Center",
         "groups": [
             {
-                "obj": "events",
+                "obj": "center",
                 "toggle": "show"
+            }
+        ]
+    },
+    {
+        "uid": "scaleRing",
+        "key": "Obj_scaleRing",
+        "label": "Scale ring",
+        "groups": [
+            {
+                "obj": "scaleRing",
+                "toggle": null
+            }
+        ]
+    },
+    {
+        "uid": "legend",
+        "key": "Obj_legend",
+        "label": "Legend table",
+        "groups": [
+            {
+                "obj": "legend",
+                "toggle": null
+            }
+        ]
+    },
+    {
+        "uid": "compare",
+        "key": "Obj_compare",
+        "label": "Compare with (Pro)",
+        "groups": [
+            {
+                "obj": "compare",
+                "toggle": null
+            }
+        ]
+    },
+    {
+        "uid": "target",
+        "key": "Obj_target",
+        "label": "Target (Pro)",
+        "groups": [
+            {
+                "obj": "target",
+                "toggle": null
             }
         ]
     },
@@ -1234,86 +789,6 @@ export const PANE: CardSpec[] = [
         "groups": [
             {
                 "obj": "annotations",
-                "toggle": "show"
-            }
-        ]
-    },
-    {
-        "uid": "references",
-        "key": "Obj_references",
-        "label": "Plan, prior year and forecast",
-        "groups": [
-            {
-                "obj": "references",
-                "toggle": "show"
-            }
-        ]
-    },
-    {
-        "uid": "targetLine",
-        "key": "Obj_targetLine",
-        "label": "Target line",
-        "groups": [
-            {
-                "obj": "targetLine",
-                "toggle": "show"
-            }
-        ]
-    },
-    {
-        "uid": "trendLine",
-        "key": "Obj_trendLine",
-        "label": "Trend line",
-        "groups": [
-            {
-                "obj": "trendLine",
-                "toggle": "show"
-            }
-        ]
-    },
-    {
-        "uid": "peaks",
-        "key": "Obj_peaks",
-        "label": "Peaks & lows",
-        "groups": [
-            {
-                "obj": "peaks",
-                "toggle": "show"
-            }
-        ]
-    },
-    {
-        "uid": "axes",
-        "key": "Obj_axes",
-        "label": "Axes",
-        "groups": [
-            {
-                "obj": "xAxis",
-                "toggle": "show",
-                "key": "Grp_xAxis",
-                "label": "X axis"
-            },
-            {
-                "obj": "yAxis",
-                "toggle": "show",
-                "key": "Grp_yAxis",
-                "label": "Y axis"
-            },
-            {
-                "obj": "y2Axis",
-                "toggle": "show",
-                "key": "Grp_y2Axis",
-                "label": "Secondary Y axis"
-            }
-        ]
-    },
-    {
-        "uid": "legend",
-        "key": "Obj_legend",
-        "label": "Legend",
-        "groups": [
-            {
-                "obj": "legend",
                 "toggle": "show"
             }
         ]
@@ -1330,23 +805,12 @@ export const PANE: CardSpec[] = [
         ]
     },
     {
-        "uid": "sourceNote",
-        "key": "Obj_sourceNote",
-        "label": "Source note",
+        "uid": "accessibility",
+        "key": "Obj_accessibility",
+        "label": "Accessibility",
         "groups": [
             {
-                "obj": "sourceNote",
-                "toggle": "show"
-            }
-        ]
-    },
-    {
-        "uid": "interactions",
-        "key": "Obj_interactions",
-        "label": "Interactions",
-        "groups": [
-            {
-                "obj": "interactions",
+                "obj": "accessibility",
                 "toggle": null
             }
         ]

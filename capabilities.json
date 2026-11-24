@@ -4,49 +4,65 @@
       "displayName": "Category",
       "name": "category",
       "kind": "Grouping",
-      "description": "One slice per value of this field."
-    },
-    {
-      "displayName": "Segment (Pro)",
-      "name": "segment",
-      "kind": "Grouping",
-      "description": "Outer ring: each slice split by this field."
-    },
-    {
-      "displayName": "Small multiples (Pro)",
-      "name": "facet",
-      "kind": "Grouping",
-      "description": "One donut per value of this field."
+      "description": "One slice per value of this field.",
+      "displayNameKey": "Role_Category",
+      "descriptionKey": "Role_Category_Desc"
     },
     {
       "displayName": "Values",
       "name": "values",
       "kind": "Measure",
-      "description": "The measure the slices share."
+      "description": "The measure the slices share.",
+      "displayNameKey": "Role_Values",
+      "descriptionKey": "Role_Values_Desc"
+    },
+    {
+      "displayName": "Segment (Pro)",
+      "name": "segment",
+      "kind": "Grouping",
+      "description": "Outer ring: each slice split by this field.",
+      "displayNameKey": "Role_Segment",
+      "descriptionKey": "Role_Segment_Desc"
     },
     {
       "displayName": "Compare with (Pro)",
       "name": "compare",
       "kind": "Measure",
-      "description": "Prior period or plan: change of share and value."
+      "description": "Prior period or plan: change of share and value.",
+      "displayNameKey": "Role_Compare",
+      "descriptionKey": "Role_Compare_Desc"
     },
     {
       "displayName": "Target (Pro)",
       "name": "target",
       "kind": "Measure",
-      "description": "Target per slice."
+      "description": "Target per slice.",
+      "displayNameKey": "Role_Target",
+      "descriptionKey": "Role_Target_Desc"
     },
     {
       "displayName": "Annotation (Pro)",
       "name": "annotation",
       "kind": "Measure",
-      "description": "Text measure shown as a note under its row."
+      "description": "Text measure shown as a note under its row.",
+      "displayNameKey": "Role_Annotation",
+      "descriptionKey": "Role_Annotation_Desc"
+    },
+    {
+      "displayName": "Small multiples (Pro)",
+      "name": "facet",
+      "kind": "Grouping",
+      "description": "One donut per value of this field.",
+      "displayNameKey": "Role_Facet",
+      "descriptionKey": "Role_Facet_Desc"
     },
     {
       "displayName": "Tooltips",
       "name": "tooltips",
       "kind": "Measure",
-      "description": "Extra measures in the tooltip."
+      "description": "Extra measures in the tooltip.",
+      "displayNameKey": "Role_Tooltips",
+      "descriptionKey": "Role_Tooltips_Desc"
     }
   ],
   "dataViewMappings": [
@@ -147,6 +163,678 @@
           }
         }
       }
+    },
+    "style": {
+      "displayName": "Style template",
+      "displayNameKey": "Obj_style",
+      "properties": {
+        "template": {
+          "displayName": "Template",
+          "displayNameKey": "Prop_style_template",
+          "type": {
+            "enumeration": [
+              {
+                "value": "report",
+                "displayName": "Report theme",
+                "displayNameKey": "Enum_template_report"
+              },
+              {
+                "value": "classic",
+                "displayName": "Classic",
+                "displayNameKey": "Enum_template_classic"
+              },
+              {
+                "value": "boardroom",
+                "displayName": "Boardroom (Pro)",
+                "displayNameKey": "Enum_template_boardroom"
+              },
+              {
+                "value": "ledger",
+                "displayName": "Ledger (Pro)",
+                "displayNameKey": "Enum_template_ledger"
+              },
+              {
+                "value": "editorial",
+                "displayName": "Editorial (Pro)",
+                "displayNameKey": "Enum_template_editorial"
+              },
+              {
+                "value": "signal",
+                "displayName": "Signal (Pro)",
+                "displayNameKey": "Enum_template_signal"
+              },
+              {
+                "value": "aurora",
+                "displayName": "Aurora (Pro)",
+                "displayNameKey": "Enum_template_aurora"
+              },
+              {
+                "value": "terrace",
+                "displayName": "Terrace (Pro)",
+                "displayNameKey": "Enum_template_terrace"
+              }
+            ]
+          }
+        },
+        "guide": {
+          "displayName": "Setup guide",
+          "displayNameKey": "Prop_style_guide",
+          "type": {
+            "bool": true
+          }
+        }
+      }
+    },
+    "slices": {
+      "displayName": "Slices",
+      "displayNameKey": "Obj_slices",
+      "properties": {
+        "shape": {
+          "displayName": "Shape",
+          "displayNameKey": "Prop_slices_shape",
+          "type": {
+            "enumeration": [
+              {
+                "value": "donut",
+                "displayName": "Donut",
+                "displayNameKey": "Enum_shape_donut"
+              },
+              {
+                "value": "pie",
+                "displayName": "Pie",
+                "displayNameKey": "Enum_shape_pie"
+              }
+            ]
+          }
+        },
+        "innerRadius": {
+          "displayName": "Inner radius (%)",
+          "displayNameKey": "Prop_slices_innerRadius",
+          "type": {
+            "numeric": true
+          }
+        },
+        "startAngle": {
+          "displayName": "Start angle (°)",
+          "displayNameKey": "Prop_slices_startAngle",
+          "type": {
+            "numeric": true
+          }
+        },
+        "gap": {
+          "displayName": "Space between slices",
+          "displayNameKey": "Prop_slices_gap",
+          "type": {
+            "numeric": true
+          }
+        },
+        "sort": {
+          "displayName": "Order",
+          "displayNameKey": "Prop_slices_sort",
+          "type": {
+            "enumeration": [
+              {
+                "value": "valueDesc",
+                "displayName": "By value",
+                "displayNameKey": "Enum_sort_valueDesc"
+              },
+              {
+                "value": "data",
+                "displayName": "Data order",
+                "displayNameKey": "Enum_sort_data"
+              }
+            ]
+          }
+        },
+        "maxSlices": {
+          "displayName": "Show at most",
+          "displayNameKey": "Prop_slices_maxSlices",
+          "type": {
+            "numeric": true
+          }
+        },
+        "groupBelow": {
+          "displayName": "Group below (%)",
+          "displayNameKey": "Prop_slices_groupBelow",
+          "type": {
+            "numeric": true
+          }
+        },
+        "otherColor": {
+          "displayName": "Other color",
+          "displayNameKey": "Prop_slices_otherColor",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "dataColors": {
+      "displayName": "Slice colors",
+      "displayNameKey": "Obj_dataColors",
+      "properties": {
+        "fill": {
+          "displayName": "Color",
+          "displayNameKey": "Prop_dataColors_fill",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "rule": {
+          "displayName": "All slices (fx)",
+          "displayNameKey": "Prop_dataColors_rule",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "labels": {
+      "displayName": "Data labels",
+      "displayNameKey": "Obj_labels",
+      "properties": {
+        "show": {
+          "displayName": "Show data labels",
+          "displayNameKey": "Prop_labels_show",
+          "type": {
+            "bool": true
+          }
+        },
+        "content": {
+          "displayName": "Content",
+          "displayNameKey": "Prop_labels_content",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Automatic",
+                "displayNameKey": "Enum_content_auto"
+              },
+              {
+                "value": "percent",
+                "displayName": "Percent",
+                "displayNameKey": "Enum_content_percent"
+              },
+              {
+                "value": "value",
+                "displayName": "Value",
+                "displayNameKey": "Enum_content_value"
+              },
+              {
+                "value": "name",
+                "displayName": "Name",
+                "displayNameKey": "Enum_content_name"
+              },
+              {
+                "value": "namePercent",
+                "displayName": "Name and percent",
+                "displayNameKey": "Enum_content_namePercent"
+              },
+              {
+                "value": "valuePercent",
+                "displayName": "Value and percent",
+                "displayNameKey": "Enum_content_valuePercent"
+              },
+              {
+                "value": "all",
+                "displayName": "All",
+                "displayNameKey": "Enum_content_all"
+              }
+            ]
+          }
+        },
+        "position": {
+          "displayName": "Position",
+          "displayNameKey": "Prop_labels_position",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Inside, then outside",
+                "displayNameKey": "Enum_position_auto"
+              },
+              {
+                "value": "inside",
+                "displayName": "Inside only",
+                "displayNameKey": "Enum_position_inside"
+              },
+              {
+                "value": "outside",
+                "displayName": "Outside",
+                "displayNameKey": "Enum_position_outside"
+              }
+            ]
+          }
+        },
+        "fontSize": {
+          "displayName": "Text size",
+          "displayNameKey": "Prop_labels_fontSize",
+          "type": {
+            "numeric": true
+          }
+        },
+        "color": {
+          "displayName": "Text color (outside)",
+          "displayNameKey": "Prop_labels_color",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "decimals": {
+          "displayName": "Percent decimals",
+          "displayNameKey": "Prop_labels_decimals",
+          "type": {
+            "numeric": true
+          }
+        }
+      }
+    },
+    "center": {
+      "displayName": "Center",
+      "displayNameKey": "Obj_center",
+      "properties": {
+        "show": {
+          "displayName": "Show total in the center",
+          "displayNameKey": "Prop_center_show",
+          "type": {
+            "bool": true
+          }
+        },
+        "title": {
+          "displayName": "Title (blank = measure name)",
+          "displayNameKey": "Prop_center_title",
+          "type": {
+            "text": true
+          }
+        },
+        "fontSize": {
+          "displayName": "Value size",
+          "displayNameKey": "Prop_center_fontSize",
+          "type": {
+            "numeric": true
+          }
+        },
+        "color": {
+          "displayName": "Text color",
+          "displayNameKey": "Prop_center_color",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "scaleRing": {
+      "displayName": "Scale ring",
+      "displayNameKey": "Obj_scaleRing",
+      "properties": {
+        "mode": {
+          "displayName": "Marks",
+          "displayNameKey": "Prop_scaleRing_mode",
+          "type": {
+            "enumeration": [
+              {
+                "value": "off",
+                "displayName": "Off",
+                "displayNameKey": "Enum_mode_off"
+              },
+              {
+                "value": "quarters",
+                "displayName": "Quarters (25 %)",
+                "displayNameKey": "Enum_mode_quarters"
+              },
+              {
+                "value": "tens",
+                "displayName": "Every 10 %",
+                "displayNameKey": "Enum_mode_tens"
+              }
+            ]
+          }
+        },
+        "color": {
+          "displayName": "Color",
+          "displayNameKey": "Prop_scaleRing_color",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "legend": {
+      "displayName": "Legend table",
+      "displayNameKey": "Obj_legend",
+      "properties": {
+        "position": {
+          "displayName": "Position",
+          "displayNameKey": "Prop_legend_position",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Automatic",
+                "displayNameKey": "Enum_position_auto"
+              },
+              {
+                "value": "right",
+                "displayName": "Right",
+                "displayNameKey": "Enum_position_right"
+              },
+              {
+                "value": "bottom",
+                "displayName": "Bottom",
+                "displayNameKey": "Enum_position_bottom"
+              },
+              {
+                "value": "off",
+                "displayName": "Off",
+                "displayNameKey": "Enum_position_off"
+              }
+            ]
+          }
+        },
+        "header": {
+          "displayName": "Show header",
+          "displayNameKey": "Prop_legend_header",
+          "type": {
+            "bool": true
+          }
+        },
+        "totalRow": {
+          "displayName": "Show total row",
+          "displayNameKey": "Prop_legend_totalRow",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Automatic (pie)",
+                "displayNameKey": "Enum_totalRow_auto"
+              },
+              {
+                "value": "on",
+                "displayName": "On",
+                "displayNameKey": "Enum_totalRow_on"
+              },
+              {
+                "value": "off",
+                "displayName": "Off",
+                "displayNameKey": "Enum_totalRow_off"
+              }
+            ]
+          }
+        },
+        "fontSize": {
+          "displayName": "Text size",
+          "displayNameKey": "Prop_legend_fontSize",
+          "type": {
+            "numeric": true
+          }
+        },
+        "color": {
+          "displayName": "Text color",
+          "displayNameKey": "Prop_legend_color",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "compare": {
+      "displayName": "Compare with (Pro)",
+      "displayNameKey": "Obj_compare",
+      "properties": {
+        "changeShown": {
+          "displayName": "Change shown",
+          "displayNameKey": "Prop_compare_changeShown",
+          "type": {
+            "enumeration": [
+              {
+                "value": "pp",
+                "displayName": "Share points",
+                "displayNameKey": "Enum_changeShown_pp"
+              },
+              {
+                "value": "value",
+                "displayName": "Value",
+                "displayNameKey": "Enum_changeShown_value"
+              },
+              {
+                "value": "both",
+                "displayName": "Both",
+                "displayNameKey": "Enum_changeShown_both"
+              }
+            ]
+          }
+        },
+        "sortByChange": {
+          "displayName": "Sort by change",
+          "displayNameKey": "Prop_compare_sortByChange",
+          "type": {
+            "bool": true
+          }
+        }
+      }
+    },
+    "target": {
+      "displayName": "Target (Pro)",
+      "displayNameKey": "Obj_target",
+      "properties": {
+        "metAt": {
+          "displayName": "Met at (%)",
+          "displayNameKey": "Prop_target_metAt",
+          "type": {
+            "numeric": true
+          }
+        },
+        "closeAt": {
+          "displayName": "Close at (%)",
+          "displayNameKey": "Prop_target_closeAt",
+          "type": {
+            "numeric": true
+          }
+        }
+      }
+    },
+    "annotations": {
+      "displayName": "Annotations (Pro)",
+      "displayNameKey": "Obj_annotations",
+      "properties": {
+        "show": {
+          "displayName": "Show annotations",
+          "displayNameKey": "Prop_annotations_show",
+          "type": {
+            "bool": true
+          }
+        }
+      }
+    },
+    "smallMultiples": {
+      "displayName": "Small multiples (Pro)",
+      "displayNameKey": "Obj_smallMultiples",
+      "properties": {
+        "columns": {
+          "displayName": "Columns (0 = automatic)",
+          "displayNameKey": "Prop_smallMultiples_columns",
+          "type": {
+            "numeric": true
+          }
+        },
+        "gap": {
+          "displayName": "Space between panels",
+          "displayNameKey": "Prop_smallMultiples_gap",
+          "type": {
+            "numeric": true
+          }
+        },
+        "titleFontSize": {
+          "displayName": "Title size",
+          "displayNameKey": "Prop_smallMultiples_titleFontSize",
+          "type": {
+            "numeric": true
+          }
+        },
+        "titleColor": {
+          "displayName": "Title color",
+          "displayNameKey": "Prop_smallMultiples_titleColor",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "titleBold": {
+          "displayName": "Bold title",
+          "displayNameKey": "Prop_smallMultiples_titleBold",
+          "type": {
+            "bool": true
+          }
+        },
+        "titleAlign": {
+          "displayName": "Title alignment",
+          "displayNameKey": "Prop_smallMultiples_titleAlign",
+          "type": {
+            "enumeration": [
+              {
+                "value": "left",
+                "displayName": "Left",
+                "displayNameKey": "Enum_titleAlign_left"
+              },
+              {
+                "value": "center",
+                "displayName": "Center",
+                "displayNameKey": "Enum_titleAlign_center"
+              }
+            ]
+          }
+        },
+        "background": {
+          "displayName": "Panel background",
+          "displayNameKey": "Prop_smallMultiples_background",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "border": {
+          "displayName": "Panel border",
+          "displayNameKey": "Prop_smallMultiples_border",
+          "type": {
+            "bool": true
+          }
+        },
+        "borderColor": {
+          "displayName": "Panel border color",
+          "displayNameKey": "Prop_smallMultiples_borderColor",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "sizeByTotal": {
+          "displayName": "Size by total",
+          "displayNameKey": "Prop_smallMultiples_sizeByTotal",
+          "type": {
+            "bool": true
+          }
+        }
+      }
+    },
+    "accessibility": {
+      "displayName": "Accessibility",
+      "displayNameKey": "Obj_accessibility",
+      "properties": {
+        "highContrast": {
+          "displayName": "High contrast",
+          "displayNameKey": "Prop_accessibility_highContrast",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Automatic",
+                "displayNameKey": "Enum_highContrast_auto"
+              },
+              {
+                "value": "on",
+                "displayName": "On",
+                "displayNameKey": "Enum_highContrast_on"
+              }
+            ]
+          }
+        },
+        "patterns": {
+          "displayName": "Patterns",
+          "displayNameKey": "Prop_accessibility_patterns",
+          "type": {
+            "bool": true
+          }
+        },
+        "focusColor": {
+          "displayName": "Focus color",
+          "displayNameKey": "Prop_accessibility_focusColor",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "focusWidth": {
+          "displayName": "Focus width",
+          "displayNameKey": "Prop_accessibility_focusWidth",
+          "type": {
+            "numeric": true
+          }
+        },
+        "minFontSize": {
+          "displayName": "Minimum text size",
+          "displayNameKey": "Prop_accessibility_minFontSize",
+          "type": {
+            "numeric": true
+          }
+        },
+        "reduceMotion": {
+          "displayName": "Reduce motion",
+          "displayNameKey": "Prop_accessibility_reduceMotion",
+          "type": {
+            "bool": true
+          }
+        }
+      }
     }
   },
   "privileges": [],
@@ -170,5 +858,7 @@
   },
   "sorting": {
     "default": {}
-  }
+  },
+  "supportsOnObjectFormatting": true,
+  "enablePointerEventsFormatMode": true
 }

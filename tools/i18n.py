@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""stringResources (12 idiomas), la lista de pbiviz.json y src/strings.ts para Line Chart by TCViz.
+"""stringResources (12 idiomas), la lista de pbiviz.json y src/strings.ts para Donut & Pie Chart by TCViz.
 
 Patrón de Pareto 1.7: inglés = stringResources/en-US (claves de capabilities, que genera tools/formato.py) + los
-this.t/tf("Clave", "inglés") de src/visual.ts. Traducciones en tools/i18n_line.py, por TEXTO inglés; la 10.ª columna
+this.t/tf("Clave", "inglés") de src/visual.ts. Traducciones en tools/i18n_donut.py, por TEXTO inglés; la 10.ª columna
 es el español. Power BI Desktop solo traduce con getDisplayName las claves declaradas en capabilities.json: los textos
 propios del visual (avisos, asistente, landing, panel construido en código) viajan además en src/strings.ts, que t()
 consulta primero.
@@ -49,14 +49,14 @@ def main():
         formato.generar()
         en, _ = ingles()
         try:
-            from i18n_line import P
+            from i18n_donut import P
         except ImportError:
             P = {}
         for v in sorted({v for v in en.values() if v not in P}):
             print(json.dumps(v, ensure_ascii=False))
         return
     formato.generar()
-    from i18n_line import P
+    from i18n_donut import P
     en, rt = ingles()
     caps = io.open(os.path.join(ROOT, "capabilities.json"), encoding="utf-8").read()
     faltan = sorted({v for v in en.values() if v not in P})
