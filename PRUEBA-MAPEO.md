@@ -49,3 +49,4 @@ fetchMoreData y si hubo algún error o el visual se quedó en blanco. Con eso ba
 
 - **d OK:** target llega con su rol (Plan litros), junto a values, compare y centerValue; 4 medidas, 10 filas.
 - **Decisión de Tino:** fuera el pozo Center value; el centro es el total de Values y para más valores, tooltip de página. Quitado de capabilities.json (efectivo en la próxima build).
+- **e OK (con duda):** HIGHLIGHTS llegan; `highlights=1/10` (solo una marca con valor resaltado). Con un clic en una zona deberían salir 10/10 con valores parciales; 1/10 cuadra con un gráfico por marca. Confirmar con qué campo estaba el gráfico de barras.
