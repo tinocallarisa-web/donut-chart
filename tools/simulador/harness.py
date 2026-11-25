@@ -120,7 +120,7 @@ def dv_caso_f(n=None, segmento=False):
 TOTAL_F = sum(r["Litros"] for r in DETALLE)
 
 
-def dv_ventas(objects=None, compare=False, target=False, nota=False, facet=None, segment=None, marcas_excl=(), sin_aa=(), legacy=True, cat="Marca"):
+def dv_ventas(objects=None, compare=False, target=False, nota=False, facet=None, segment=None, marcas_excl=(), sin_aa=(), legacy=True, cat="Marca", zonas=None):
     """Hoja Ventas agregada como Desktop: una fila por Marca (× Zona × Canal si se piden), medidas por fila.
     Nota llega como "First Nota" (texto o None). sin_aa: marcas con Litros AA vacío (para "new" con blanco).
     legacy: Content = Table y Segment rows encendidas, como se probaba antes del 25-11."""
@@ -131,7 +131,7 @@ def dv_ventas(objects=None, compare=False, target=False, nota=False, facet=None,
     keys = [cat] + ([facet] if facet else []) + ([segment] if segment else [])
     g = OrderedDict()
     for r in VENTAS:
-        if r["Marca"] in marcas_excl:
+        if r["Marca"] in marcas_excl or (zonas is not None and r["Zona"] not in zonas):
             continue
         k = tuple(r[x] for x in keys)
         a = g.setdefault(k, [0.0, 0.0, 0.0, None, 0])
@@ -1369,6 +1369,71 @@ async def tanda_fuentes(b):
     await pg.close()
 
 
+# ── Títulos de panel de small multiples (25-11) ───────────────────────────────
+
+SMT = r"""() => {
+  const h = document.getElementById('host'), hr = h.getBoundingClientRect();
+  const root = h.querySelector('.dn-root');
+  const R = r => ({ x0: r.left - hr.left, y0: r.top - hr.top, x1: r.right - hr.left, y1: r.bottom - hr.top, w: r.width, h: r.height });
+  const titles = Array.from(root.querySelectorAll('.dn-sm-title')).map(t => { const rg = document.createRange(); rg.selectNodeContents(t);
+    const b = t.getBoundingClientRect(), x = rg.getBoundingClientRect();
+    // Texto visible: el que cae dentro de la caja (un nombre largo se recorta con elipsis).
+    const vis = { left: Math.max(b.left, x.left), right: Math.min(b.right, x.right), top: x.top, bottom: x.bottom, width: 0, height: x.height };
+    return { text: t.textContent, fs: parseFloat(getComputedStyle(t).fontSize), fam: getComputedStyle(t).fontFamily, box: R(b), txt: R(vis) }; });
+  const panels = Array.from(root.querySelectorAll('.dn-panel')).map(g => {
+    // Lo dibujado del donut: sectores, anillo de segmentos, anillo de escala e iconos del objetivo.
+    const ps = Array.from(g.querySelectorAll('path.dn-slice, path.dn-seg, .dn-ring line, .dn-ring circle, .dn-ring path, .dn-ticon'));
+    const bs = ps.map(p => p.getBoundingClientRect());
+    return { x0: Math.min(...bs.map(b => b.left)) - hr.left, x1: Math.max(...bs.map(b => b.right)) - hr.left, y0: Math.min(...bs.map(b => b.top)) - hr.top, y1: Math.max(...bs.map(b => b.bottom)) - hr.top };
+  });
+  const lg = root.querySelector('.dn-legend');
+  return { titles, panels, legendFs: lg ? parseFloat(getComputedStyle(lg).fontSize) : 0 };
+}"""
+
+
+async def tanda_sm_titulos(b):
+    print("25-11 (5) · Títulos de panel: centrados, pegados a su donut y con la letra de la leyenda")
+    ZONAS = sorted({r["Zona"] for r in VENTAS})
+    casos = [("tino", dv_ventas({}, cat="Familia", segment="Marca", facet="Canal", compare=True, target=True, nota=True, legacy=False), [(1250, 600), (960, 540), (380, 260)])]
+    for n in (2, 4, 9):
+        casos.append((f"zona{n}", dv_ventas({}, facet="Zona", zonas=ZONAS[:n], legacy=False), [(960, 540), (380, 260)]))
+    for tag, dv, tams in casos:
+        for W, H in tams:
+            lbl = f"títulos {tag} {W}x{H}"
+            pg = await page(b, dv, W, H, name=f"smt_{tag}_{W}x{H}")
+            S = await pg.evaluate(SMT)
+            T, P = S["titles"], S["panels"]
+            check(f"{lbl}: un título por panel", len(T) == len(P) and len(T) > 0, f"{len(T)} títulos, {len(P)} paneles")
+            mal_c, mal_g = [], []
+            for t, p in zip(T, P):
+                cxp = (p["x0"] + p["x1"]) / 2
+                if abs((t["txt"]["x0"] + t["txt"]["x1"]) / 2 - cxp) > 3:
+                    mal_c.append(t["text"])
+                gap = p["y0"] - t["txt"]["y1"]
+                if gap < -0.5 or gap > t["fs"] * 0.6 + 6:
+                    mal_g.append((t["text"], round(gap, 1)))
+            check(f"{lbl}: cada título centrado sobre su donut", not mal_c, str(mal_c))
+            check(f"{lbl}: cada título pegado a su donut (sin hueco grande ni encima)", not mal_g, str(mal_g))
+            fs = T[0]["fs"] if T else 0
+            check(f"{lbl}: letra del título ≥ 10 px o limitada por la celda, y no mayor que la leyenda", fs >= 8 and (not S["legendFs"] or fs <= S["legendFs"] + 0.01), f"{fs} vs leyenda {S['legendFs']}")
+            if W >= 960:
+                check(f"{lbl}: a tamaño grande el título escala como la leyenda", fs >= 10 and (not S["legendFs"] or abs(fs - S["legendFs"]) < 0.01), f"{fs} vs {S['legendFs']}")
+            fuera = [t["text"] for t in T if t["box"]["x0"] < -0.5 or t["box"]["x1"] > W + 0.5 or t["box"]["y0"] < -0.5]
+            check(f"{lbl}: títulos dentro del visual", not fuera, str(fuera))
+            await eventos(pg, lbl)
+            await pg.close()
+    pg = await page(b, dv_ventas({"smallMultiples": {"titleFontFamily": "Georgia", "titleItalic": True}}, facet="Zona", zonas=ZONAS[:4], legacy=False), 960, 540, name="smt_georgia")
+    S = await pg.evaluate(SMT)
+    check("títulos con Title font = Georgia cursiva", S["titles"] and all("Georgia" in t["fam"] for t in S["titles"]) and
+          await pg.evaluate("() => getComputedStyle(document.querySelector('.dn-sm-title')).fontStyle") == "italic", str({t["fam"] for t in S["titles"]}))
+    await pg.close()
+    pg = await page(b, dv_ventas({"smallMultiples": {"titleAlign": "left"}}, facet="Zona", zonas=ZONAS[:2], legacy=False), 960, 540, name="smt_izquierda")
+    S = await pg.evaluate(SMT)
+    ok = all(abs(t["txt"]["x0"] - p["x0"]) < 4 for t, p in zip(S["titles"], S["panels"]))
+    check("Title alignment = Left: alineado al borde izquierdo de su donut", ok, str([(round(t["txt"]["x0"]), round(p["x0"])) for t, p in zip(S["titles"], S["panels"])]))
+    await pg.close()
+
+
 def ventas_por_par(a, b_):
     d = defaultdict(float)
     for r in VENTAS:
@@ -1379,6 +1444,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--smtitulos" in sys.argv:
+            await tanda_sm_titulos(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--fuentes" in sys.argv:
             await tanda_fuentes(b)
             await b.close()
@@ -1695,6 +1766,7 @@ async def main():
         await leyenda_25(b)
         await tanda_25b(b)
         await tanda_fuentes(b)
+        await tanda_sm_titulos(b)
         await b.close()
     print()
     print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))

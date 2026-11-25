@@ -2013,9 +2013,12 @@ export class Visual implements IVisual {
         const gap = Math.max(0, Math.min(40, Number(sm.gap))) * Math.min(1, this.k);
         const boxed = !!sm.border || !!sm.background;
         const pad = boxed ? Math.max(3, Math.round(5 * Math.min(1, this.k))) : 0;
-        const tbase = Math.max(7, Number(sm.titleFontSize));
-        const tfs = Math.max(this.minFs, Math.min(tbase, Math.round(tbase * Math.min(1, this.k) * 2) / 2));
-        const titleH = Math.ceil(tfs * 1.35) + pad;
+        // Título con la norma de la leyenda: escala con k y no baja de 10 px (ni del mínimo de Accessibility); solo en
+        // paneles muy bajos se limita a una fracción de la celda para no comerse el donut.
+        let tfs = Math.max(10, this.minFs, this.fz(Number(sm.titleFontSize)));
+        const titleGap = Math.max(2, Math.round(3 * this.k));
+        const titleHOf = (f: number) => Math.ceil(f * 1.3) + titleGap;
+        let titleH = titleHOf(tfs) + pad;
         const MIN = 36;
         const layout = (n: number, top: number) => {
             const h = ah - top;
@@ -2052,6 +2055,8 @@ export class Visual implements IVisual {
             this.root.appendChild(nd);
         }
         const cw = (aw - gap * (L.cols - 1)) / L.cols, ch = (ah - top - gap * (L.rows - 1)) / L.rows;
+        const capT = Math.max(this.minFs, Math.floor(ch * 0.16 * 2) / 2);
+        if (tfs > capT) { tfs = capT; titleH = titleHOf(tfs) + pad; }
         const dw = Math.max(0, cw - 2 * pad), dh = Math.max(0, ch - titleH - pad);
         const ringOn0 = s.scaleRing.mode !== "off";
         const Rcell = Math.max(0, Math.min(dw, dh) / 2 - 2);
@@ -2071,16 +2076,27 @@ export class Visual implements IVisual {
                     .attr("rx", 2).attr("fill", hc ? "none" : (sm.background || "none")).attr("stroke", sm.border ? (hc ? this.hcFg : String(sm.borderColor)) : "none")
                     .style("pointer-events", "none");
             }
+            const R = sm.sizeByTotal && maxT > 0 ? Math.max(4, R0 * Math.sqrt(p.total / maxT)) : R0;
+            // Título + donut como un bloque centrado en la celda; el título, pegado encima de su donut (sobre el radio
+            // real, también con Size by total) y centrado sobre él (o alineado a su borde izquierdo).
+            // Lo que se dibuja de verdad: arriba, el círculo del anillo de escala (no lleva marca a las 12); al lado, su marca.
+            const outerTop = R + (ringOn ? 3 : 1) + iconSpace;
+            const outerSide = (ringOn ? R + 2 + Math.max(3, Math.round((R + 2) * 0.05)) : R) + iconSpace;
+            const blockH = titleH - pad + 2 * (Rcell + 2);
+            const blockTop = y + pad + Math.max(0, (ch - 2 * pad - blockH) / 2);
+            const cx = x + cw / 2, cy = blockTop + titleH - pad + Rcell + 2;
             const t = document.createElement("div");
             t.className = "dn-sm-title";
             t.textContent = p.title;
-            Object.assign(t.style, { left: (x + pad + 2) + "px", top: (y + pad) + "px", width: Math.max(0, cw - 2 * pad - 4) + "px", fontSize: tfs + "px",
-                fontWeight: sm.titleBold ? "600" : "400", color: hc ? this.hcFg : String(sm.titleColor || this.ink), textAlign: sm.titleAlign === "center" ? "center" : "left",
+            const tw = Math.max(0, cw - 2 * pad - 4);
+            const center = sm.titleAlign !== "left";
+            const lx = Math.max(x + pad + 2, cx - outerSide);
+            Object.assign(t.style, { left: (center ? x + pad + 2 : lx) + "px", top: (cy - outerTop - titleHOf(tfs)) + "px",
+                width: (center ? tw : Math.max(0, x + cw - pad - 2 - lx)) + "px", fontSize: tfs + "px",
+                fontWeight: sm.titleBold ? "600" : "400", color: hc ? this.hcFg : String(sm.titleColor || this.ink), textAlign: center ? "center" : "left",
                 lineHeight: "1.3" });
             Visual.styleFont(t, this.fontOf("smallMultiples", "titleFontFamily", null, "titleItalic", "titleUnderline"), false);
             this.root.appendChild(t);
-            const R = sm.sizeByTotal && maxT > 0 ? Math.max(4, R0 * Math.sqrt(p.total / maxT)) : R0;
-            const cx = x + cw / 2, cy = y + titleH + dh / 2;
             p.arcs = this.makeArcs(p.entries, sa);
             p.geo = { cx, cy, R, Rin: this.rinOf(R), ri: this.riOf(R), ringR: R + (ringOn ? 2 : 0), ax: x + pad, ay: y + titleH, aw: dw, ah: dh, ringSpace, iconSpace };
         });

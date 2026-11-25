@@ -1141,7 +1141,7 @@ export const OBJECTS: Record<string, ObjSpec> = {
             {
                 "name": "titleFontSize",
                 "type": "num",
-                "def": 12,
+                "def": 10,
                 "key": "Prop_smallMultiples_titleFontSize",
                 "label": "Title size",
                 "min": 7,
@@ -1185,7 +1185,7 @@ export const OBJECTS: Record<string, ObjSpec> = {
             {
                 "name": "titleAlign",
                 "type": "enum",
-                "def": "left",
+                "def": "center",
                 "key": "Prop_smallMultiples_titleAlign",
                 "label": "Title alignment",
                 "items": [
