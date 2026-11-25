@@ -182,8 +182,10 @@ window.powerbi = { visuals: { plugins: {} }, extensibility: {} };
   createSelectionManager(){ return { select(id, multi){ const a = Array.isArray(id) ? id : [id]; sel = multi ? sel.concat(a) : a; window.__sel = sel; return Promise.resolve(sel); },
      clear(){ sel = []; window.__sel = []; return Promise.resolve(); }, getSelectionIds(){ return sel; },
      hasSelection(){ return sel.length > 0; }, registerOnSelectCallback(cb){ window.__onSel = cb; }, showContextMenu(id, p){ __menu.push(id && id.key); return Promise.resolve(); } }; },
-  // Como Power BI: la identidad de una categoría es su valor (todas las filas de la marca comparten identidad).
-  createSelectionIdBuilder(){ const k=[]; const b = { withCategory(c,i){ k.push(c.source.displayName + '=' + c.values[i]); return b; }, withSeries(){ return b; },
+  // Como Power BI: con varias columnas en categories (category, facet, segment), la identidad de categories[k].identity[i]
+  // es la de la FILA i (todas sus columnas), sea cual sea la columna; con una sola columna, la de su valor.
+  createSelectionIdBuilder(){ const k=[]; const b = { withCategory(c,i){ const cols = window.__cats || [c];
+     for (const col of cols) { const part = col.source.displayName + '=' + col.values[i]; if (k.indexOf(part) < 0) k.push(part); } return b; }, withSeries(){ return b; },
      withMeasure(){ return b; }, createSelectionId(){ const key=k.join('|'); return { key, getKey(){return key;}, getSelector(){ return {data:[key]}; }, equals(o){return !!o&&o.key===key;}, includes(){return false;} }; } }; return b; },
   createLocalizationManager(){ return { getDisplayName(k){ return k; } }; },
   tooltipService: { enabled(){ return true; }, show(o){ window.__tip = o; }, move(o){ window.__tip = o; }, hide(){} },
@@ -239,7 +241,7 @@ async def upd(pg, dv, W=None, H=None, op=0):
         pg._dims = (W, H)
         await pg.evaluate(f"() => {{ const h = document.getElementById('host'); h.style.width = '{W}px'; h.style.height = '{H}px'; }}")
     W, H = pg._dims
-    await pg.evaluate("([dv, W, H, vm, op]) => __v.update({ dataViews: dv ? [dv] : [], viewport: { width: W, height: H }, type: 2, operationKind: op, viewMode: vm, editMode: 0, jsonFilters: [] })",
+    await pg.evaluate("([dv, W, H, vm, op]) => { window.__cats = dv && dv.categorical ? dv.categorical.categories : null; __v.update({ dataViews: dv ? [dv] : [], viewport: { width: W, height: H }, type: 2, operationKind: op, viewMode: vm, editMode: 0, jsonFilters: [] }); }",
                       [dv, W, H, pg._vm, op])
     await pg.wait_for_timeout(40)
 
@@ -602,7 +604,7 @@ async def bloque2(b):
     sel = await pg.evaluate(clic, ko)
     check("clic en Otros · HOME: las 5 identidades (marca + HOME)", len(sel) == 5 and all(s.endswith("|Canal=HOME") for s in sel), str(sel))
     await shot(pg, "b2_seg_seleccion")
-    await pg.evaluate("() => window.__onSel([__host.createSelectionIdBuilder().withCategory({source:{displayName:'Marca'},values:['Nord']},0).withCategory({source:{displayName:'Canal'},values:['AFH']},0).createSelectionId()])")
+    await pg.evaluate("() => { const key = 'Marca=Nord|Canal=AFH'; window.__onSel([{ key, getKey(){ return key; }, equals(o){ return !!o && o.key === key; }, includes(){ return false; } }]); }")
     i = await info(pg)
     check("marcador con un par: restaura sin persistProperties", await pg.evaluate("() => __persist.length") == 0, "")
     await pg.focus(".dn-root")
@@ -656,7 +658,9 @@ async def bloque2(b):
     tip = await pg.evaluate("() => { const c = document.querySelector('.dn-table .dn-c.dn-name[data-key]'); const r = c.getBoundingClientRect(); c.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.x + 3, clientY: r.y + 3 })); return (window.__tip.dataItems || []).map(d => d.displayName); }")
     check("tabla compartida: el tooltip de una fila trae el detalle de los 9 paneles", sum(1 for z in ZORD if z in tip) == 9, str(tip))
     sel = await pg.evaluate("() => { const p = document.querySelectorAll('.dn-panel')[3].querySelector('path.dn-slice'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); return (window.__sel || []).map(s => s.key); }")
-    check("clic en un sector de un panel: filtra la categoría (todas sus filas)", len(sel) == 1 and sel[0].startswith("Marca="), str(sel))
+    marca = sel[0].split("|")[0] if sel else ""
+    check("clic en un sector de un panel: filtra la categoría en todos los paneles (todas sus filas)", sel and all(k.startswith(marca + "|") for k in sel)
+          and abs(litros_identidades(sel) - POR_MARCA[marca.split("=", 1)[1]]) < 1, f"{len(sel)} filas {sel[:2]}")
     n = await eventos(pg, "sm interacción")
     check("small multiples: interacción sin updates nuevos", n == 1, str(n))
     await pg.close()
@@ -1562,7 +1566,9 @@ async def tanda_lazo_bordes(b):
     I = await pg.evaluate(CENTROS, "text.dn-label")
     await lazo(pg, I[0]["x"] - 3, I[0]["y"] - 3, I[0]["x"] + 5, I[0]["y"] + 5)
     sel = await pg.evaluate(SEL)
-    check("lazo en el anillo interior: selecciona categorías", sel and all("|" not in k for k in sel), str(sel))
+    fams = {k.split("|")[0] for k in sel}
+    check("lazo en el anillo interior: selecciona la categoría entera (todas sus filas)", len(fams) == 1 and
+          abs(litros_identidades(sel) - ventas_por("Familia")[next(iter(fams)).split("=", 1)[1]][0]) < 1, str(sel))
     await pg.close()
 
     ZONAS = sorted({r["Zona"] for r in VENTAS})
@@ -1658,7 +1664,7 @@ async def tanda_centro_seleccion(b):
     sel = await pg.evaluate(SEL)
     t = await pg.evaluate(CTR)
     esperado = FAM["Refrescos"][0] + FAM["Aguas"][0] + FAM["Té y café frío"][0]
-    check("lazo sobre 3 categorías: 3 identidades", len(sel) == 3, str(sel))
+    check("lazo sobre 3 categorías: las filas de las 3 familias", len({k.split("|")[0] for k in sel}) == 3 and abs(litros_identidades(sel) - (FAM["Refrescos"][0] + FAM["Aguas"][0] + FAM["Té y café frío"][0])) < 1, str(sel))
     check("centro con 3 seleccionadas: «3 selected», la suma (9.76M) y 70 %", len(t) >= 3 and t[0] == "3 selected" and t[1] == "9.76M" and t[2] == "70%", f"{t} (esperado {esperado:,.0f})")
     await shot(pg, "centro_suma_seleccion_960x540")
     check("tras un lazo con ratón no hay contorno de foco", await pg.evaluate(FOCO) == 0, str(await pg.evaluate(FOCO)))
@@ -1747,18 +1753,7 @@ async def tanda_otros_seleccion(b):
     dv = dv_ventas(objs, cat="Familia", segment="Marca", legacy=False)
     TABLA = []
 
-    def filas(sel):
-        """Litros de las filas que cubren las identidades enviadas; None si dos identidades se solapan (doble conteo)."""
-        tot, vistos = 0.0, set()
-        for k in sel:
-            partes = dict(x.split("=", 1) for x in k.split("|"))
-            f, m = partes.get("Familia"), partes.get("Marca")
-            cubre = {(f, mm) for (ff, mm) in PAR if ff == f and (m is None or mm == m)}
-            if cubre & vistos:
-                return None
-            vistos |= cubre
-            tot += sum(PAR[x] for x in cubre)
-        return tot
+    filas = litros_identidades
 
     async def comprobar(pg, lbl, esperado):
         E = await pg.evaluate(ESTADO)
@@ -1860,9 +1855,52 @@ async def tanda_otros_seleccion(b):
         check(f"{lbl}: restaurado sin persistProperties, dibujo y centro = lo esperado", await pg.evaluate("() => __persist.length") == 0 and abs(dib - esp) < 1 and cv and abs(cv - esp) / esp < 0.006, f"{dib:,.0f} {E['center']} vs {esp:,.0f}")
         TABLA.append((lbl, len(ids), filas(ids), E["center"][1] if len(E["center"]) > 1 else "", esp))
         await pg.close()
+    # H) clics simples: Refrescos (con segmentos), Aguas (una sola marca) y Refrescos con small multiples por Canal.
+    pg = await nueva()
+    I = {c["key"]: c for c in await pg.evaluate(CENTROS, "text.dn-label")}
+    await pg.mouse.click(I["string:Refrescos"]["x"], I["string:Refrescos"]["y"])
+    await pg.mouse.move(3, 535)
+    await comprobar(pg, "H1 clic en Refrescos (interior)", FAM["Refrescos"])
+    await pg.mouse.click(I["string:Aguas"]["x"], I["string:Aguas"]["y"])
+    await pg.mouse.move(3, 535)
+    await comprobar(pg, "H2 clic en Aguas (una sola marca)", FAM["Aguas"])
+    await pg.close()
+    pg = await page(b, dv_ventas(objs, cat="Familia", segment="Marca", facet="Canal", legacy=False), 1250, 600)
+    await pg.mouse.move(3, 595)
+    k = await pg.evaluate("() => { const p = Array.from(document.querySelectorAll('path.dn-slice')).find(x => x.getAttribute('data-key') === 'string:Refrescos'); p.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; }")
+    E = await pg.evaluate(ESTADO)
+    env = filas(E["sel"])
+    check("H3 clic en Refrescos con small multiples por Canal: filtra la familia en todos los paneles", env is not None and abs(env - FAM["Refrescos"]) < 1, f"{env} {len(E['sel'])} ids")
+    TABLA.append(("H3 clic en Refrescos con small multiples por Canal", len(E["sel"]), env, E["center"][1] if len(E["center"]) > 1 else "(por panel)", FAM["Refrescos"]))
+    await pg.close()
+    # I) sin Segment: solo Category, y Category + small multiples.
+    for lbl, dvx in [("I1 solo Category: clic en Refrescos", dv_ventas({}, cat="Familia", legacy=False)),
+                     ("I2 Category + small multiples por Canal: clic en Refrescos", dv_ventas({}, cat="Familia", facet="Canal", legacy=False))]:
+        pg = await page(b, dvx, 960, 540)
+        await pg.evaluate("() => { const p = Array.from(document.querySelectorAll('path.dn-slice')).find(x => x.getAttribute('data-key') === 'string:Refrescos'); p.dispatchEvent(new MouseEvent('click', { bubbles: true })); }")
+        E = await pg.evaluate(ESTADO)
+        env = filas(E["sel"])
+        check(f"{lbl}: filtra toda la familia", env is not None and abs(env - FAM["Refrescos"]) < 1, f"{env} {E['sel'][:3]}")
+        TABLA.append((lbl, len(E["sel"]), env, E["center"][1] if len(E["center"]) > 1 else "", FAM["Refrescos"]))
+        await pg.close()
     print("  Tabla de casos: identidades · filas enviadas (Litros) · centro · esperado (Ventas)")
     for lbl, n, env, cen, esp in TABLA:
-        print(f"    {lbl}: {n} identidades · {env:,.0f} · {cen} · {esp:,.0f}")
+        print(f"    {lbl}: {n} identidades · {('—' if env is None else format(env, ',.0f'))} · {cen} · {esp:,.0f}")
+
+
+def litros_identidades(sel):
+    """Como Power BI: cada identidad filtra las filas de Ventas que coinciden en TODAS las columnas que lleva. Devuelve los
+    Litros de la unión; None si dos identidades cubren la misma fila (doble conteo)."""
+    vistos, tot = set(), 0.0
+    for k in sel:
+        partes = [x.split("=", 1) for x in k.split("|")]
+        for i, r in enumerate(VENTAS):
+            if all(str(r.get(c)) == v for c, v in partes):
+                if i in vistos:
+                    return None
+                vistos.add(i)
+                tot += r["Litros"] or 0
+    return tot
 
 
 def ventas_por_par(a, b_):
@@ -2101,7 +2139,9 @@ async def main():
         check("mismas 5 marcas + Otros que con una fila por marca", [r["name"] for r in filas[:5]] == MARCAS[:5], str([r["name"] for r in filas]))
         await pg.evaluate("() => { const p = document.querySelector('path.dn-slice[data-key*=\"other\"]'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); }")
         sel = await pg.evaluate("() => (window.__sel || []).map(s => s.key)")
-        check("Otros con 180 filas: pasa la identidad de cada una de sus 5 marcas", sorted(sel) == sorted("Marca=" + m for m in MARCAS[5:]), str(sel))
+        marcas_sel = {k.split("|")[0].split("=", 1)[1] for k in sel}
+        check("Otros con 180 filas: pasa las identidades de todas las filas de sus 5 marcas", marcas_sel == set(MARCAS[5:]) and
+              abs(litros_identidades(sel) - sum(POR_MARCA[m] for m in MARCAS[5:])) < 1, f"{len(sel)} filas")
         await eventos(pg, "filas")
         await pg.close()
 

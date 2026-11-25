@@ -2973,6 +2973,7 @@ export class Visual implements IVisual {
     // ── Selección ────────────────────────────────────────────────────────────
 
     /** Identidad de una categoría: todas las columnas de Category de su primera fila (cubre todas sus filas). */
+    /** Selector de color por categoría (panel de formato): el de su primera fila, como hasta ahora. No se usa para filtrar. */
     private catId(c: Cat): ISelectionId {
         let id = this.idCache.get(c.key);
         if (!id) {
@@ -2984,31 +2985,47 @@ export class Visual implements IVisual {
         return id;
     }
 
-    /** Identidad de un par categoría·segmento: las columnas de Category y la de Segment de una de sus filas (todos los paneles). */
-    private pairId(c: Cat, sk: string): ISelectionId | null {
-        const ck = c.key + "␞" + sk;
+    /**
+     * Identidad de una FILA del dataView: withCategory(col, fila) para cada columna de categories (category, facet,
+     * segment). Con varias columnas, Power BI ya da a categories[k].identity[i] la identidad de la fila completa: una
+     * identidad «de categoría» hecha con la primera fila filtraba solo esa fila (defecto de la build .62: Refrescos
+     * filtraba solo Nord Cola). Por eso cada marca envía las identidades de TODAS sus filas.
+     */
+    private rowId(r: number): ISelectionId {
+        const ck = "row:" + r;
         let id = this.idCache.get(ck);
         if (!id) {
-            const a = c.bySeg.get(sk);
-            if (!a || !a.rows.length) return null;
-            const r = a.rows[0];
             let b = this.host.createSelectionIdBuilder();
-            for (const col of this.model.catCols) b = b.withCategory(col, r);
-            b = b.withCategory(this.model.segmentCol, r);
+            const m = this.model;
+            for (const col of m.catCols) b = b.withCategory(col, r);
+            if (m.facetCol) b = b.withCategory(m.facetCol, r);
+            if (m.segmentCol) b = b.withCategory(m.segmentCol, r);
             id = b.createSelectionId();
             this.idCache.set(ck, id);
         }
         return id;
     }
 
-    /** "Otros" y los pares de segmento pasan TODAS sus identidades (regla filtros-todas-las-filas). */
-    private idsOf(key: string): ISelectionId[] {
+    /**
+     * Filas que cubre una clave (regla filtros-todas-las-filas): una categoría, todas sus filas (todos sus pares y todos
+     * los paneles); «Otros», todas las filas de sus categorías; un par, sus filas en todos los paneles (el clic en un
+     * panel filtra igual que el de la leyenda o la tabla, que no son de un panel); un miembro de «Otros», sus filas.
+     */
+    private rowsOf(key: string): number[] {
         const pr = this.segOn ? this.pairOf(key) : null;
-        if (pr) return pr.e.members.map(c => this.pairId(c, pr.sd.key)).filter((x): x is ISelectionId => !!x);
+        if (pr) {
+            const out: number[] = [];
+            for (const c of pr.e.members) out.push(...(c.bySeg.get(pr.sd.key)?.rows ?? []));
+            return out;
+        }
         const e = this.entryOf(key);
-        if (e) return e.members.map(c => this.catId(c));
+        if (e) return ([] as number[]).concat(...e.members.map(c => c.rows));
         const ch = this.catOf(key);
-        return ch ? [this.catId(ch.c)] : [];
+        return ch ? ch.c.rows.slice() : [];
+    }
+
+    private idsOf(key: string): ISelectionId[] {
+        return this.rowsOf(key).map(r => this.rowId(r));
     }
 
     /**
@@ -3030,23 +3047,12 @@ export class Visual implements IVisual {
         }
     }
 
-    /**
-     * Identidades de la selección, todas de la misma forma. Power BI no combina bien identidades de categoría con
-     * identidades categoría + segmento (con las dos, filtra solo por los pares): si hay algún par, cada categoría se
-     * envía como todos sus pares con filas (las mismas filas). Una marca agregada pasa todas sus identidades.
-     */
+    /** Identidades de la selección: las de todas las filas que cubre, sin repetir ninguna (la unión es exacta). */
     private selectionIds(): ISelectionId[] {
         this.normalizeSel();
-        const keys = Array.from(this.selKeys);
-        const anyPair = this.segOn && keys.some(k => !!this.pairOf(k));
-        const ids: ISelectionId[] = [];
-        for (const k of keys) {
-            if (!anyPair || this.pairOf(k)) { ids.push(...this.idsOf(k)); continue; }
-            const e = this.entryOf(k);
-            const cats = e ? e.members : (this.catOf(k) ? [this.catOf(k).c] : []);
-            for (const c of cats) for (const sd of this.model.segments) { const id = this.pairId(c, sd.key); if (id) ids.push(id); }
-        }
-        return ids;
+        const rows = new Set<number>();
+        for (const k of this.selKeys) for (const r of this.rowsOf(k)) rows.add(r);
+        return Array.from(rows).map(r => this.rowId(r));
     }
 
     /** Cuánto de una categoría está seleccionado: entera, en parte (pares o miembros de «Otros») o nada. */
@@ -3084,19 +3090,36 @@ export class Visual implements IVisual {
         this.pendingRestore = null;
         this.selKeys.clear();
         if (!ids.length) return;
+        // Las identidades son de fila: una categoría está seleccionada si lo están todas sus filas; si no, cada par con
+        // todas sus filas. Se casa por getKey y, si no coincide (marcadores), por equals.
+        const keyOf = (x: ISelectionId) => { try { return (x as any).getKey?.() ?? null; } catch { return null; } };
+        const keys = new Set(ids.map(keyOf).filter(k => k !== null));
         const eq = (a: ISelectionId, b: ISelectionId) => { try { return a.equals(b) || b.equals(a); } catch { return false; } };
-        const hitId = (id: ISelectionId | null) => !!id && ids.some(x => eq(x, id));
-        const hit = (c: Cat) => hitId(this.catId(c));
+        let total = 0;
+        for (const e of this.entries) for (const c of e.members) total += c.rows.length;
+        const scan = ids.length * total <= 3e6;
+        const memo = new Map<number, boolean>();
+        const rowHit = (r: number) => {
+            let v = memo.get(r);
+            if (v === undefined) {
+                const id = this.rowId(r);
+                const k = keyOf(id);
+                v = (k !== null && keys.has(k)) || (scan && ids.some(x => eq(x, id)));
+                memo.set(r, v);
+            }
+            return v;
+        };
+        const all = (rows: number[]) => rows.length > 0 && rows.every(rowHit);
         for (const e of this.entries) {
             if (e.isOther) {
-                const sel = e.members.filter(hit);
+                const sel = e.members.filter(c => all(c.rows));
                 if (sel.length === e.members.length) this.selKeys.add(e.key);
                 else for (const c of sel) this.selKeys.add(c.key);
-            } else if (hit(e.members[0])) this.selKeys.add(e.key);
+            } else if (all(e.members[0].rows)) this.selKeys.add(e.key);
             if (this.segOn && !this.selKeys.has(e.key)) {
                 for (const sd of this.model.segments) {
-                    const pids = e.members.map(c => this.pairId(c, sd.key)).filter(x => !!x);
-                    if (pids.length && pids.every(hitId)) this.selKeys.add(Visual.pairKey(e.key, sd.key));
+                    const rows = this.rowsOf(Visual.pairKey(e.key, sd.key));
+                    if (all(rows)) this.selKeys.add(Visual.pairKey(e.key, sd.key));
                 }
             }
         }
