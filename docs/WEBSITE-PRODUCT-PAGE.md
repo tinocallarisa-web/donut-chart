@@ -6,8 +6,7 @@ Microsoft publishes the offer; the AppSource button works then. Then: icon `logo
 `assets/logo_300x300.png`), screenshot and infographic with `node scripts/screenshots.js`, the guide is generated from this
 entry by `scripts/guides.js`, `node scripts/build.js`.
 
-**Pending:** `youtube` — Tino gives the URL when the video is up; only the canonical form `https://www.youtube.com/watch?v=<id>`.
-Until then the field is an empty string.
+Video: https://www.youtube.com/watch?v=hyOo-zqMA08.
 
 Price: 0.99 USD per user per month, 9.99 per year, no trial (plan `donut-chart-pro`). The entry is also the source of
 `tools/gen_infographic.py`: correct the entry, never the image.
@@ -20,7 +19,7 @@ Price: 0.99 USD per user per month, 9.99 per year, no trial (plan `donut-chart-p
     screenshot: "/logos/screenshots/donut-chart.png?v=1",
     infographic: "/logos/screenshots/donut-chart-infographic.png?v=1",
     appSource: "https://marketplace.microsoft.com/en-us/product/tino_callarisa.donut-chart-tcviz?tab=Overview",
-    youtube: "",
+    youtube: "https://www.youtube.com/watch?v=hyOo-zqMA08",
     guide: "/guides/donut-chart.html",
     name: "Donut & Pie Chart by TCViz",
     icon: "/logos/icons/donut-chart.png",

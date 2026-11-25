@@ -18,7 +18,7 @@ REPO = "https://github.com/tinocallarisa-web/donut-chart"
 VERSION = json.load(io.open(os.path.join(ROOT, "pbiviz.json"), encoding="utf-8"))["visual"]["version"]
 FECHA = "25 November 2026"
 # Pendiente: la URL la da Tino cuando el vídeo esté en YouTube. Solo la forma canónica https://www.youtube.com/watch?v=<id>.
-VIDEO = ""
+VIDEO = "https://www.youtube.com/watch?v=hyOo-zqMA08"
 
 plantilla = io.open(os.path.join(WC, "privacy.html"), encoding="utf-8").read()
 HEAD = plantilla[:plantilla.index("<body>")]

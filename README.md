@@ -8,6 +8,7 @@ Segment ring, annotations, small multiples and six style templates.
 - Documentation: https://tinocallarisa-web.github.io/donut-chart/support.html
 - Privacy: https://tinocallarisa-web.github.io/donut-chart/privacy.html · Terms: https://tinocallarisa-web.github.io/donut-chart/terms.html
 - Questions: https://github.com/tinocallarisa-web/donut-chart/discussions · support@tcviz.com
+- Video: https://www.youtube.com/watch?v=hyOo-zqMA08
 - Sample data: `DonutChart_Dataset.xlsx` (Begudes Nord, a fictitious drinks company)
 
 ## Build

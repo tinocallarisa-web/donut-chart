@@ -124,7 +124,7 @@ Support: support@tcviz.com — a person reads and replies
 | Offer alias | `donut-chart-by-tcviz` (internal; 3-50 lowercase letters, numbers, hyphens and underscores) |
 | Categories (max 2) | De una parte a la totalidad (Part-to-whole); Comparación (Comparison) |
 | Industries (max 2) | Venta al por menor (Retail); Servicios financieros (Financial services) |
-| Video | **PENDING** — Tino gives the URL. Only `https://www.youtube.com/watch?v=<id>`; never a shortener, `/shorts/` or `/embed/` |
+| Video | https://www.youtube.com/watch?v=hyOo-zqMA08 |
 | Support / documentation | https://tinocallarisa-web.github.io/donut-chart/support.html + support@tcviz.com |
 | Privacy | https://tinocallarisa-web.github.io/donut-chart/privacy.html |
 | Terms (EULA) | standard contract as the rest of the portfolio, or https://tinocallarisa-web.github.io/donut-chart/terms.html |

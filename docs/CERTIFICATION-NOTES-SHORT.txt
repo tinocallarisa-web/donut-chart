@@ -37,6 +37,7 @@ Rendering events: one pair per update(); hover, selection, Other expansion, sort
 the licence repaint redraw without update().
 eslint (powerbi-visuals plugin): 0 errors.
 
+Video: https://www.youtube.com/watch?v=hyOo-zqMA08
 Support: https://tinocallarisa-web.github.io/donut-chart/support.html
 Privacy: https://tinocallarisa-web.github.io/donut-chart/privacy.html
 Terms: https://tinocallarisa-web.github.io/donut-chart/terms.html
