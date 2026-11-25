@@ -205,5 +205,7 @@ P.update({
 "Border color": ["Cor da borda", "Couleur de la bordure", "Rahmenfarbe", "Colore del bordo", "Randkleur", "Kolor obramowania", "枠線の色", "边框颜色", "테두리 색", "Color del borde"],
 "Border width": ["Largura da borda", "Largeur de la bordure", "Rahmenbreite", "Spessore del bordo", "Randbreedte", "Szerokość obramowania", "枠線の幅", "边框宽度", "테두리 두께", "Ancho del borde"],
 "Lasso selection": ["Seleção com laço", "Sélection au lasso", "Lassoauswahl", "Selezione con lazo", "Lassoselectie", "Zaznaczanie lassem", "なげなわ選択", "套索选择", "올가미 선택", "Selección con lazo"],
+"{0} selected": ["{0} selecionados", "{0} sélectionnés", "{0} ausgewählt", "{0} selezionati", "{0} geselecteerd", "Zaznaczono: {0}", "{0} 個を選択", "已选择 {0} 项", "{0}개 선택됨", "{0} seleccionados"],
+"Border": ["Borda", "Bordure", "Rahmen", "Bordo", "Rand", "Obramowanie", "枠線", "边框", "테두리", "Borde"],
 })
 

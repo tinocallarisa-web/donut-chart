@@ -262,8 +262,22 @@
           }
         },
         "gap": {
-          "displayName": "Border width",
+          "displayName": "Space between slices",
           "displayNameKey": "Prop_slices_gap",
+          "type": {
+            "numeric": true
+          }
+        },
+        "border": {
+          "displayName": "Border",
+          "displayNameKey": "Prop_slices_border",
+          "type": {
+            "bool": true
+          }
+        },
+        "borderWidth": {
+          "displayName": "Border width",
+          "displayNameKey": "Prop_slices_borderWidth",
           "type": {
             "numeric": true
           }

@@ -49,9 +49,11 @@ OBJECTS = [
         ("shape", "Shape", "enum", "donut", {"items": [("donut", "Donut"), ("pie", "Pie")]}),
         ("innerRadius", "Inner radius (%)", "num", 58, {"min": 20, "max": 85}),
         ("startAngle", "Start angle (°)", "num", 0, {"min": 0, "max": 359}),
-        # Border (FC.PROP04): el ancho es el antiguo «Space between slices» (mismo nombre interno, mismo valor por defecto).
-        # Border color vacío = hueco al fondo del visual o del estilo, como hasta ahora; con color (fx), borde de ese ancho.
-        ("gap", "Border width", "num", 1, {"min": 0, "max": 8}),
+        # Space between slices: hueco real entre sectores y entre los dos anillos. Border (FC.PROP04): trazo alrededor de cada
+        # sector, apagado por defecto y compatible con el hueco; ancho y color (fx; vacío = fondo) solo con él encendido.
+        ("gap", "Space between slices", "num", 1, {"min": 0, "max": 8}),
+        ("border", "Border", "bool", False, {}),
+        ("borderWidth", "Border width", "num", 1, {"min": 1, "max": 8}),
         ("borderColor", "Border color", "fill", "", {}),
         ("sort", "Order", "enum", "valueDesc", {"items": [("valueDesc", "By value"), ("data", "Data order")]}),
         ("maxSlices", "Show at most", "num", 6, {"min": 2, "max": 20}),

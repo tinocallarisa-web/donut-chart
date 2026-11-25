@@ -120,8 +120,24 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "type": "num",
                 "def": 1,
                 "key": "Prop_slices_gap",
-                "label": "Border width",
+                "label": "Space between slices",
                 "min": 0,
+                "max": 8
+            },
+            {
+                "name": "border",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_slices_border",
+                "label": "Border"
+            },
+            {
+                "name": "borderWidth",
+                "type": "num",
+                "def": 1,
+                "key": "Prop_slices_borderWidth",
+                "label": "Border width",
+                "min": 1,
                 "max": 8
             },
             {

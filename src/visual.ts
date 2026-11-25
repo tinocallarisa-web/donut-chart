@@ -261,12 +261,17 @@ export class Visual implements IVisual {
         }
 
         this.root.addEventListener("keydown", (e: KeyboardEvent) => this.onKey(e));
-        this.root.addEventListener("pointerdown", () => { this.pointerDown = true; this.kbMode = false; });
-        this.root.addEventListener("mousedown", () => { this.pointerDown = true; this.kbMode = false; });
+        // Un puntero apaga el modo teclado y borra un contorno que hubiera quedado (en Desktop el foco del iframe puede
+        // llegar antes que el pointerdown y parecer de teclado).
+        const offKb = () => { this.pointerDown = true; if (this.kbMode) { this.kbMode = false; this.paintState(); } };
+        this.root.addEventListener("pointerdown", offKb);
+        this.root.addEventListener("mousedown", offKb);
         this.root.addEventListener("focus", () => {
             this.hasFocus = true;
             // Con Tab el foco llega sin puntero: modo teclado. Con un clic, no.
-            this.kbMode = !this.pointerDown;
+            let visible = true;
+            try { visible = this.root.matches(":focus-visible"); } catch { /* navegador sin :focus-visible */ }
+            this.kbMode = !this.pointerDown && visible;
             this.pointerDown = false;
             if (!this.kbMode) return;
             if (this.focusIdx < 0) this.focusIdx = 0;
@@ -1330,16 +1335,25 @@ export class Visual implements IVisual {
         return 0;
     }
 
-    /** Color de borde de los sectores: fijo o regla fx (la primera con valor); vacío = sin borde (hueco al fondo). */
+    /**
+     * Border (FC.PROP04): con el interruptor encendido, color fijo o regla fx (la primera con valor); vacío = el fondo del
+     * visual o del estilo. null = sin borde (apagado o alto contraste, que pone su propio trazo).
+     */
     private get borderColor(): string | null {
-        if (this.hc) return null;
+        if (this.hc || !this.settings.slices?.border) return null;
         const fixed = String(this.settings.slices?.borderColor || "");
         if (fixed) return fixed;
         for (const cc of this.dataView?.categorical?.categories ?? []) for (const o of (cc.objects ?? []) as any[]) {
             const v = o?.slices?.borderColor?.solid?.color;
             if (v) return String(v);
         }
-        return null;
+        return this.bgColor;
+    }
+
+    /** Separación radial entre el anillo de categorías y el de segmentos: el hueco (Space between slices), con su mínimo de siempre. */
+    private ringSep(R: number): number {
+        const gap = Number(this.settings.slices?.gap) || 0;
+        return gap > 0 ? Math.max(gap, 1.5, Math.min(3, R * 0.02)) : 0;
     }
 
     private get mutedInk(): string {
@@ -2197,12 +2211,12 @@ export class Visual implements IVisual {
         const { cx, cy, R, Rin, ri } = g0;
         const pg = this.svg.append("g").attr("class", "dn-panel").attr("data-panel", String(p.index)) as unknown as Sel<SVGGElement>;
         p.g = pg;
-        // Border (FC.PROP04): sin color, el ancho es hueco transparente (se ve el fondo); con color, borde de ese ancho y
-        // sin hueco. Igual en los dos anillos. El alto contraste manda sobre ambos.
+        // Space between slices = hueco real (se ve el fondo) entre sectores y entre los dos anillos. Border = trazo alrededor de
+        // cada sector, compatible con el hueco. Igual en los dos anillos. El alto contraste manda sobre el borde propio.
         const bColor = this.borderColor;
         const gap = Number(s.slices.gap) || 0;
-        const bw = bColor ? Math.max(0.5, gap) : 0;
-        const pad = (r: number) => (p.arcs.length > 1 && !bColor ? gap / Math.max(r, 1) : 0);
+        const bw = bColor ? Math.max(0.5, Number(s.slices.borderWidth) || 1) : 0;
+        const pad = (r: number) => (p.arcs.length > 1 ? gap / Math.max(r, 1) : 0);
         const arcGen = d3.arc<any>().innerRadius(ri).outerRadius(Rin).padRadius(Rin).padAngle(pad(Rin)).cornerRadius(0);
         const border = (grp: Sel<SVGGElement>, d: string) => {
             if (bColor) grp.append("path").attr("class", "dn-border").attr("d", d).attr("fill", "none").attr("stroke", bColor).attr("stroke-width", bw)
@@ -2238,8 +2252,8 @@ export class Visual implements IVisual {
         // Anillo exterior de segmentos (Pro): el desglose de cada categoría, en el mismo ángulo que su sector.
         p.segArcs = [];
         if (this.segOn) {
-            const r0 = Rin + Math.max(1.5, Math.min(3, R * 0.02)), r1 = R;
-            const sgen = d3.arc<any>().innerRadius(r0).outerRadius(r1).padRadius(r1).padAngle(gap > 0 && !bColor ? Math.min(gap, 1.5) / Math.max(r1, 1) : 0);
+            const r0 = Rin + this.ringSep(R), r1 = R;
+            const sgen = d3.arc<any>().innerRadius(r0).outerRadius(r1).padRadius(r1).padAngle(gap > 0 ? gap / Math.max(r1, 1) : 0);
             const gs = pg.append("g").attr("class", "dn-segs").attr("transform", "translate(" + cx + "," + cy + ")");
             for (const a of p.arcs) {
                 const split = this.segSplit(a.e, p.fkey, a.e.pct);
@@ -2273,7 +2287,7 @@ export class Visual implements IVisual {
         }
         if (this.segOn && s.labels.show && s.labels.segment !== "off" && p.segArcs.length) {
             const fsSeg = labels.length ? labels[0].fs : Math.max(this.minFs, this.capFs > 0 ? Math.min(this.fz(Number(s.labels.fontSize)), this.capFs) : this.fz(Number(s.labels.fontSize)));
-            this.drawSegLabels(pg, p, Rin + Math.max(1.5, Math.min(3, R * 0.02)), R, cx, cy, fsSeg);
+            this.drawSegLabels(pg, p, Rin + this.ringSep(R), R, cx, cy, fsSeg);
         }
         if (ringOn) this.drawScaleRing(pg, cx, cy, g0.ringR, sa);
         if (this.tgtOn && g0.iconSpace > 0) this.drawTargetIcons(pg, p);
@@ -2533,6 +2547,27 @@ export class Visual implements IVisual {
         }
     }
 
+    /**
+     * Suma de la selección en un panel, sin doble conteo: una categoría seleccionada cuenta entera (sus pares y miembros
+     * no se suman otra vez); si no, cuentan sus miembros de «Otros» o sus pares seleccionados. El % suma los mismos
+     * porcentajes redondeados que enseña el visual (sectores, miembros, pares), para no contradecirlo.
+     */
+    private selectionInfo(p: PanelDraw): { name: string; value: number; pct: number; fmt?: string } | null {
+        let value = 0, pct = 0, n = 0, last = "";
+        for (const e of p.entries) {
+            if (this.selKeys.has(e.key)) { value += e.value; pct += e.pct; n++; last = e.key; continue; }
+            if (e.isOther) e.members.forEach((c, i) => {
+                if (!this.selKeys.has(c.key)) return;
+                value += p.fkey !== null ? Math.max(0, c.byFacet.get(p.fkey)?.value ?? 0) : c.value;
+                pct += e.memberPct[i] ?? 0; n++; last = c.key;
+            });
+            for (const sa of p.segArcs) if (sa.e.key === e.key && this.selKeys.has(sa.key)) { value += sa.value; pct += sa.pct; n++; last = sa.key; }
+        }
+        if (!n) return null;
+        if (n === 1) return this.infoIn(p, last);
+        return { name: this.tf("UI_NSelected", "{0} selected", String(n)), value, pct, fmt: this.model?.format };
+    }
+
     /** Lo que enseña el centro de un panel para una clave (sector, miembro de "Otros" o par categoría·segmento). */
     private infoIn(p: PanelDraw, key: string | null): { name: string; value: number; pct: number; fmt?: string } | null {
         if (!key) return null;
@@ -2784,7 +2819,7 @@ export class Visual implements IVisual {
             const g = p.geo;
             if (!g) continue;
             for (const a of p.arcs) if (touches(g.cx, g.cy, a.a0, a.a1, g.ri, g.Rin)) out.add(a.e.key);
-            for (const sa of p.segArcs) if (touches(g.cx, g.cy, sa.a0, sa.a1, g.Rin + 2, g.R)) out.add(sa.key);
+            for (const sa of p.segArcs) if (touches(g.cx, g.cy, sa.a0, sa.a1, g.Rin + this.ringSep(g.R), g.R)) out.add(sa.key);
         }
         return Array.from(out);
     }
@@ -3100,12 +3135,15 @@ export class Visual implements IVisual {
                     .attr("stroke-width", Number(this.settings.accessibility.focusWidth) + 1).style("pointer-events", "none");
             }
         }
-        // Centro: el elemento enfocado, el del puntero o una única selección; si no, el total (de cada panel).
-        let showKey: string | null = null;
-        if (focusKey) showKey = focusKey;
-        else if (hover) showKey = hover;
-        else if (this.selKeys.size === 1) showKey = Array.from(this.selKeys)[0];
-        for (const p of this.panels) if (p.g && p.geo) this.drawCenter(p, this.infoIn(p, showKey));
+        // Centro (Tino, 25-11): 1) el elemento bajo el puntero; 2) la selección (uno: ese elemento; varios: «N selected» con
+        // la suma sin doble conteo y su %); 3) el total. El foco de teclado no cambia el centro (la región viva lo lee).
+        for (const p of this.panels) {
+            if (!p.g || !p.geo) continue;
+            let info = hover ? this.infoIn(p, hover) : null;
+            if (!info && this.selKeys.size === 1) info = this.infoIn(p, Array.from(this.selKeys)[0]);
+            else if (!info && this.selKeys.size > 1) info = this.selectionInfo(p);
+            this.drawCenter(p, info);
+        }
     }
 
     // ── Teclado: una parada de Tab; flechas por sectores y filas; Enter selecciona ──
@@ -3536,6 +3574,7 @@ export class Visual implements IVisual {
         if (obj === "labels" && name === "segment") return has("segment");
         if (obj === "summary") return name === "show" || this.summaryOn;
         if (obj === "footnotes") return name === "show" || this.settings.footnotes?.show !== "off";
+        if (obj === "slices" && (name === "borderWidth" || name === "borderColor")) return !!this.settings.slices?.border;
         if (obj === "legend") return name === "position" || this.settings.legend?.position !== "off";
         if (obj !== "dataTable") return true;
         const l = this.settings.dataTable ?? {};

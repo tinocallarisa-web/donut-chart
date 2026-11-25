@@ -1587,23 +1587,143 @@ async def tanda_lazo_bordes(b):
     check("Lasso selection apagado: arrastrar no selecciona", not await pg.evaluate(SEL), "")
     await pg.close()
 
-    print("25-11 (7) · Border (FC.PROP04)")
-    for W, H in [(960, 540), (380, 260)]:
-        pg = await page(b, dv_ventas({"slices": {"gap": 5, "borderColor": {"solid": {"color": "#C8102E"}}}}, cat="Familia", segment="Marca", legacy=False), W, H, name=f"bordes_color_{W}x{H}")
-        B = await pg.evaluate("() => Array.from(document.querySelectorAll('path.dn-border')).map(p => [p.getAttribute('stroke'), p.getAttribute('stroke-width')])")
-        n_sl = await pg.evaluate("() => document.querySelectorAll('path.dn-slice').length + document.querySelectorAll('path.dn-seg').length")
-        check(f"bordes {W}x{H}: un borde por sector, en los dos anillos, con color y ancho", len(B) == n_sl and all(x == ["#C8102E", "5"] for x in B), f"{len(B)} vs {n_sl} {B[:2]}")
-        i = await info(pg)
-        comprobar_dibujo(i, W, H, f"bordes {W}x{H}", mira_suma=False)
-        await eventos(pg, f"bordes {W}x{H}")
-        await pg.close()
-    pg = await page(b, dv_caso_a({"slices": {"gap": 2}}, legacy=False), 700, 400)
-    check("sin Border color: sin trazo de borde (hueco al fondo, como antes)", await pg.evaluate("() => document.querySelectorAll('path.dn-border').length") == 0, "")
-    await pg.close()
-    pg = await page(b, dv_ventas({"slices": {"gap": 5, "borderColor": {"solid": {"color": "#C8102E"}}}}, cat="Familia", segment="Marca", legacy=False), 960, 540, hc=True, name="bordes_hc")
+    print("25-11 (7) · Space between slices y Border (FC.PROP04), separados")
+    BORDES = "() => Array.from(document.querySelectorAll('path.dn-border')).map(p => [p.getAttribute('stroke'), p.getAttribute('stroke-width')])"
+    NSEC = "() => document.querySelectorAll('path.dn-slice').length + document.querySelectorAll('path.dn-seg').length"
+    # Radio exterior de los sectores interiores frente al interior del anillo de segmentos (separación radial = hueco).
+    SEP = """() => { const s = document.querySelector('.dn-slices').getBoundingClientRect(); const g = document.querySelector('.dn-segs').getBoundingClientRect();
+      const cx = (s.left + s.right) / 2, cy = (s.top + s.bottom) / 2; let rin = 1e9;
+      for (const p of document.querySelectorAll('path.dn-seg')) { const L = p.getTotalLength(); for (let i = 0; i <= 40; i++) { const q = p.getPointAtLength(L * i / 40);
+        const m = p.getScreenCTM(); const x = q.x * m.a + q.y * m.c + m.e, y = q.x * m.b + q.y * m.d + m.f; rin = Math.min(rin, Math.hypot(x - cx, y - cy)); } }
+      return { rOut: s.width / 2, rIn: rin }; }"""
+    casos = [
+        ("hueco solo", {"gap": 4}, 0, None),
+        ("borde solo", {"gap": 0, "border": True, "borderWidth": 3, "borderColor": {"solid": {"color": "#C8102E"}}}, 1, ["#C8102E", "3"]),
+        ("hueco + borde", {"gap": 4, "border": True, "borderWidth": 5, "borderColor": {"solid": {"color": "#C8102E"}}}, 1, ["#C8102E", "5"]),
+        ("hueco 0 sin borde (sectores pegados)", {"gap": 0}, 0, None),
+        ("borde sin color (= fondo)", {"border": True}, 1, ["#FFFFFF", "1"]),
+    ]
+    for lbl, sl, con, esperado in casos:
+        for W, H in [(960, 540), (380, 260)]:
+            tag = lbl.split(" (")[0].replace(" ", "_").replace("+", "y")
+            pg = await page(b, dv_ventas({"slices": sl}, cat="Familia", segment="Marca", legacy=False), W, H, name=f"bordes_{tag}_{W}x{H}")
+            B = await pg.evaluate(BORDES)
+            n = await pg.evaluate(NSEC)
+            if con:
+                check(f"{lbl} {W}x{H}: un borde por sector en los dos anillos, con su color y ancho", len(B) == n and all(x == esperado for x in B), f"{len(B)} vs {n} {B[:2]}")
+            else:
+                check(f"{lbl} {W}x{H}: sin trazo de borde", not B, str(B[:2]))
+            sep = await pg.evaluate(SEP)
+            gap = sl.get("gap", 1)
+            if gap == 0:
+                check(f"{lbl} {W}x{H}: anillos pegados (sin separación radial)", sep["rIn"] - sep["rOut"] < 1.0, str(sep))
+            else:
+                check(f"{lbl} {W}x{H}: separación radial entre anillos ≥ el hueco", sep["rIn"] - sep["rOut"] >= min(gap, 3) - 0.6, str(sep))
+            i = await info(pg)
+            comprobar_dibujo(i, W, H, f"{lbl} {W}x{H}", mira_suma=False)
+            await eventos(pg, f"{lbl} {W}x{H}")
+            await pg.close()
+    pg = await page(b, dv_ventas({"slices": {"gap": 4, "border": True, "borderWidth": 5, "borderColor": {"solid": {"color": "#C8102E"}}}}, cat="Familia", segment="Marca", legacy=False), 960, 540, hc=True, name="bordes_hc")
     B = await pg.evaluate("() => document.querySelectorAll('path.dn-border').length")
     st = await pg.evaluate("() => Array.from(document.querySelectorAll('path.dn-slice')).map(p => p.getAttribute('stroke'))")
-    check("alto contraste: manda sobre Border color (trazo del tema, sin borde propio)", B == 0 and all(x == "#FFFF00" for x in st), f"{B} {set(st)}")
+    check("alto contraste: manda sobre el borde propio (trazo del tema)", B == 0 and all(x == "#FFFF00" for x in st), f"{B} {set(st)}")
+    await pg.close()
+
+
+# ── Centro con selección múltiple (25-11) ──────────────────────────────────────
+
+CTR = "() => Array.from(document.querySelectorAll('.dn-center-text')).map(t => t.textContent)"
+FOCO = "() => document.querySelectorAll('.dn-focusrow').length + document.querySelectorAll('.dn-focus path').length"
+
+
+def num_compacto(t):
+    t = t.replace(",", "")
+    mult = {"K": 1e3, "M": 1e6, "B": 1e9}.get(t[-1:], 1)
+    try:
+        return float(t[:-1] if mult != 1 else t) * mult
+    except ValueError:
+        return None
+
+
+async def tanda_centro_seleccion(b):
+    print("25-11 (8) · Centro: hover > selección (uno o suma «N selected») > total; el foco no cambia el centro")
+    dv = dv_ventas({"labels": {"content": "percent", "segment": "name"}}, cat="Familia", segment="Marca", legacy=False)
+    FAM = ventas_por("Familia")
+    pg = await page(b, dv, 960, 540)
+    I = {c["key"]: c for c in await pg.evaluate(CENTROS, "text.dn-label")}
+    k = lambda f: "string:" + f
+    for n, f in enumerate(["Refrescos", "Aguas", "Té y café frío"]):
+        c = I[k(f)]
+        await lazo(pg, c["x"] - 3, c["y"] - 3, c["x"] + 5, c["y"] + 5, ctrl=n > 0)
+    sel = await pg.evaluate(SEL)
+    t = await pg.evaluate(CTR)
+    esperado = FAM["Refrescos"][0] + FAM["Aguas"][0] + FAM["Té y café frío"][0]
+    check("lazo sobre 3 categorías: 3 identidades", len(sel) == 3, str(sel))
+    check("centro con 3 seleccionadas: «3 selected», la suma (9.76M) y 70 %", len(t) >= 3 and t[0] == "3 selected" and t[1] == "9.76M" and t[2] == "70%", f"{t} (esperado {esperado:,.0f})")
+    await shot(pg, "centro_suma_seleccion_960x540")
+    check("tras un lazo con ratón no hay contorno de foco", await pg.evaluate(FOCO) == 0, str(await pg.evaluate(FOCO)))
+    cz = I[k("Cerveza 0,0")]
+    await pg.mouse.move(cz["x"], cz["y"])
+    await pg.wait_for_timeout(30)
+    t = await pg.evaluate(CTR)
+    check("hover durante la selección: manda el hover", t and t[0] == "Cerveza 0,0", str(t))
+    await pg.mouse.move(3, 530)
+    await pg.wait_for_timeout(30)
+    t = await pg.evaluate(CTR)
+    check("al salir el puntero vuelve la suma de la selección", t and t[0] == "3 selected", str(t))
+    await pg.focus(".dn-root")
+    await pg.keyboard.press("ArrowRight")
+    await pg.keyboard.press("ArrowRight")
+    t = await pg.evaluate(CTR)
+    check("el foco de teclado no cambia el centro (sigue la selección)", t and t[0] == "3 selected", str(t))
+    check("con el teclado sí se pinta el contorno de foco", await pg.evaluate(FOCO) > 0, "")
+    await eventos(pg, "centro selección")
+    await pg.close()
+
+    pg = await page(b, dv, 960, 540)
+    I = {c["key"]: c for c in await pg.evaluate(CENTROS, "text.dn-label")}
+    await pg.mouse.click(I[k("Refrescos")]["x"], I[k("Refrescos")]["y"])
+    t1 = await pg.evaluate(CTR)
+    check("un solo seleccionado: el centro enseña ese elemento", t1 and t1[0] == "Refrescos", str(t1))
+    await pg.keyboard.down("Control")
+    await pg.mouse.click(I[k("Aguas")]["x"], I[k("Aguas")]["y"])
+    await pg.keyboard.up("Control")
+    await pg.mouse.move(3, 530)
+    await pg.wait_for_timeout(30)
+    t = await pg.evaluate(CTR)
+    check("Ctrl+clic sobre 2: «2 selected», 8.85M y 64 %", t and t[0] == "2 selected" and t[1] == "8.85M" and t[2] == "64%", str(t))
+    check("tras clics con ratón no hay contorno de foco", await pg.evaluate(FOCO) == 0, "")
+    await pg.close()
+
+    pg = await page(b, dv, 960, 540)
+    S = await pg.evaluate(CENTROS, "text.dn-seglabel")
+    par = ventas_por_par("Familia", "Marca")
+    elegidos = S[:2]
+    for n, c in enumerate(elegidos):
+        await lazo(pg, c["x"] - 3, c["y"] - 3, c["x"] + 5, c["y"] + 5, ctrl=n > 0)
+    await pg.mouse.move(3, 530)
+    await pg.wait_for_timeout(30)
+    sel = await pg.evaluate(SEL)
+    t = await pg.evaluate(CTR)
+    quiere = 0.0
+    for c in elegidos:
+        fam, marca = [x.replace("string:", "") for x in c["key"].split("␞")]
+        quiere += par[(fam, marca)]
+    v = num_compacto(t[1]) if len(t) > 1 else None
+    check("lazo en el anillo exterior sobre 2 pares: «2 selected» y la suma de los pares", t and t[0] == "2 selected" and v and abs(v - quiere) / quiere < 0.01, f"{t} vs {quiere:,.0f} {sel}")
+    # Mixta: categoría + un par de esa misma categoría → sin doble conteo.
+    I = {c["key"]: c for c in await pg.evaluate(CENTROS, "text.dn-label")}
+    fam0 = elegidos[0]["key"].split("␞")[0]
+    c = I[fam0]
+    await lazo(pg, c["x"] - 3, c["y"] - 3, c["x"] + 5, c["y"] + 5, ctrl=True)
+    await pg.mouse.move(3, 530)
+    await pg.wait_for_timeout(30)
+    t = await pg.evaluate(CTR)
+    fam0n = fam0.replace("string:", "")
+    otros = [c2 for c2 in elegidos if c2["key"].split("␞")[0] != fam0]
+    quiere = FAM[fam0n][0] + sum(par[tuple(x.replace("string:", "") for x in c2["key"].split("␞"))] for c2 in otros)
+    v = num_compacto(t[1]) if len(t) > 1 else None
+    check("selección mixta (categoría + par suyo + otro par): suma sin doble conteo", v and abs(v - quiere) / quiere < 0.01, f"{t} vs {quiere:,.0f}")
     await pg.close()
 
 
@@ -1617,6 +1737,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--centro" in sys.argv:
+            await tanda_centro_seleccion(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--lazo" in sys.argv:
             await tanda_lazo_bordes(b)
             await b.close()
@@ -1954,6 +2080,7 @@ async def main():
         await tanda_sm_titulos(b)
         await tanda_notas(b)
         await tanda_lazo_bordes(b)
+        await tanda_centro_seleccion(b)
         await b.close()
     print()
     print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
