@@ -1727,6 +1727,144 @@ async def tanda_centro_seleccion(b):
     await pg.close()
 
 
+# ── Selección con «Otros» y pares: dibujo = centro = filtro (25-11) ───────────
+
+ESTADO = r"""() => {
+  const sel = (window.__sel || []).map(s => s.key);
+  const segs = Array.from(document.querySelectorAll('.dn-segg')).map(g => ({ key: g.getAttribute('data-key'), op: g.getAttribute('opacity') }));
+  const inner = Array.from(document.querySelectorAll('.dn-sg')).map(g => ({ key: g.getAttribute('data-key'), op: g.getAttribute('opacity') }));
+  const center = Array.from(document.querySelectorAll('.dn-center-text')).map(t => t.textContent);
+  return { sel, segs, inner, center };
+}"""
+
+
+async def tanda_otros_seleccion(b):
+    print("25-11 (9) · Selección con «Otros» y pares: lo dibujado, el centro y lo que filtra Power BI son lo mismo")
+    FAM = {f: v[0] for f, v in ventas_por("Familia").items()}
+    PAR = ventas_por_par("Familia", "Marca")
+    MARCA = {m: v for (f, m), v in PAR.items()}
+    objs = {"slices": {"maxSlices": 5, "groupBelow": 0}, "labels": {"content": "percent", "segment": "name"}}
+    dv = dv_ventas(objs, cat="Familia", segment="Marca", legacy=False)
+    TABLA = []
+
+    def filas(sel):
+        """Litros de las filas que cubren las identidades enviadas; None si dos identidades se solapan (doble conteo)."""
+        tot, vistos = 0.0, set()
+        for k in sel:
+            partes = dict(x.split("=", 1) for x in k.split("|"))
+            f, m = partes.get("Familia"), partes.get("Marca")
+            cubre = {(f, mm) for (ff, mm) in PAR if ff == f and (m is None or mm == m)}
+            if cubre & vistos:
+                return None
+            vistos |= cubre
+            tot += sum(PAR[x] for x in cubre)
+        return tot
+
+    async def comprobar(pg, lbl, esperado):
+        E = await pg.evaluate(ESTADO)
+        enviado = filas(E["sel"])
+        dibujado = sum(MARCA.get(sg["key"].split("␞")[1].replace("string:", ""), 0) for sg in E["segs"] if sg["op"] == "1")
+        cv = num_compacto(E["center"][1]) if len(E["center"]) > 1 else None
+        formas = {len(k.split("|")) for k in E["sel"]}
+        check(f"{lbl}: identidades de una sola forma y sin solapes", enviado is not None and len(formas) <= 1, f"{E['sel']}")
+        check(f"{lbl}: lo que filtra Power BI = lo esperado ({esperado:,.0f})", enviado is not None and abs(enviado - esperado) < 1, f"{enviado}")
+        check(f"{lbl}: lo que se ve sin atenuar en el anillo exterior = lo esperado", abs(dibujado - esperado) < 1, f"{dibujado:,.0f} vs {esperado:,.0f}")
+        check(f"{lbl}: el centro suma lo esperado", cv is not None and abs(cv - esperado) / esperado < 0.006, f"{E['center']} vs {esperado:,.0f}")
+        TABLA.append((lbl, len(E["sel"]), enviado, E["center"][1] if len(E["center"]) > 1 else "", esperado))
+        return E
+
+    async def nueva():
+        pg = await page(b, dv, 960, 540)
+        await pg.mouse.move(3, 535)
+        return pg
+
+    pg = await nueva()
+    hay = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-legend .dn-li')).map(e => e.textContent)")
+    check("configuración: «Other (2)» con Isotónicas y Té y café frío", any(t.startswith("Other (2)") for t in hay), str(hay[:8]))
+    I = {c["key"]: c for c in await pg.evaluate(CENTROS, "text.dn-label")}
+    S = {c["key"]: c for c in await pg.evaluate(CENTROS, "text.dn-seglabel")}
+    OK_ = next(k for k in I if "other" in k.lower())
+    zum = I["string:Zumos"]
+    # A) lazo en el interior de Otros + Ctrl+lazo en Zumos (caso de Tino).
+    c = I[OK_]
+    await lazo(pg, c["x"] - 3, c["y"] - 3, c["x"] + 5, c["y"] + 5)
+    await lazo(pg, zum["x"] - 3, zum["y"] - 3, zum["x"] + 5, zum["y"] + 5, ctrl=True)
+    await pg.mouse.move(3, 535)
+    await comprobar(pg, "A lazo interior Otros + Zumos", FAM["Zumos"] + FAM["Isotónicas y energéticas"] + FAM["Té y café frío"])
+    ids_a = (await pg.evaluate(ESTADO))["sel"]
+    await pg.close()
+    # B) lazo solo sobre trozos exteriores de Otros (los que llevan etiqueta).
+    pg = await nueva()
+    # Los trozos de Otros no llevan etiqueta (son pequeños): se apunta al centro de su trazo. Solo dos de los cuatro.
+    P = {c["key"]: c for c in await pg.evaluate(CENTROS, "path.dn-seg")}
+    exts = [(k, v) for k, v in P.items() if "other" in k.lower() and ("Isonord" in k or "Tè Nord" in k)]
+    for n, (k, c) in enumerate(exts):
+        await lazo(pg, c["x"] - 1.5, c["y"] - 1.5, c["x"] + 1.5, c["y"] + 1.5, ctrl=n > 0)
+    await pg.mouse.move(3, 535)
+    E = await pg.evaluate(ESTADO)
+    marcas = [k.split("␞")[1].replace("string:", "") for k, _ in exts]
+    esp = sum(MARCA[m] for m in marcas)
+    await comprobar(pg, "B lazo solo en trozos exteriores de Otros (" + ", ".join(marcas) + ")", esp)
+    oi = next(x for x in E["inner"] if "other" in x["key"].lower())
+    check("B: el sector interior de Otros se dibuja como parcial", oi["op"] == "0.6", str(oi))
+    # C) Ctrl+clic en el interior de Otros: Otros entero.
+    c = I[OK_]
+    await pg.keyboard.down("Control")
+    await pg.mouse.click(c["x"], c["y"])
+    await pg.keyboard.up("Control")
+    await pg.mouse.move(3, 535)
+    E = await comprobar(pg, "C B + Ctrl+clic en el interior de Otros", FAM["Isotónicas y energéticas"] + FAM["Té y café frío"])
+    oi = next(x for x in E["inner"] if "other" in x["key"].lower())
+    check("C: Otros entero sin atenuar (interior y sus cuatro trozos)", oi["op"] == "1" and all(sg["op"] == "1" for sg in E["segs"] if "other" in sg["key"].lower()), str(oi))
+    await pg.close()
+    # D) clic en la leyenda «Other (2)».
+    pg = await nueva()
+    await pg.evaluate("(k) => document.querySelector('.dn-legend .dn-li[data-key=\"' + k + '\"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))", OK_)
+    await comprobar(pg, "D clic en la leyenda «Other (2)»", FAM["Isotónicas y energéticas"] + FAM["Té y café frío"])
+    # E) clic en una marca de Otros en la leyenda (Voltnord), sustituye.
+    kv = await pg.evaluate("() => { const e = Array.from(document.querySelectorAll('.dn-legend .dn-lseg')).find(x => x.textContent === 'Voltnord'); return e.getAttribute('data-key'); }")
+    await pg.evaluate("(k) => document.querySelector('.dn-legend .dn-li[data-key=\"' + k + '\"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))", kv)
+    await comprobar(pg, "E clic en la leyenda en Voltnord (marca de Otros)", MARCA["Voltnord"])
+    await pg.close()
+    # F) sin Otros: categoría interior frente a pares sueltos, y mixta.
+    pg = await nueva()
+    I = {c["key"]: c for c in await pg.evaluate(CENTROS, "text.dn-label")}
+    S = {c["key"]: c for c in await pg.evaluate(CENTROS, "text.dn-seglabel")}
+    c = I["string:Refrescos"]
+    await lazo(pg, c["x"] - 3, c["y"] - 3, c["x"] + 5, c["y"] + 5)
+    await pg.mouse.move(3, 535)
+    await comprobar(pg, "F1 lazo en el interior de Refrescos", FAM["Refrescos"])
+    ka = next(k for k in S if "Aigua Serena" in k)
+    c = S[ka]
+    await lazo(pg, c["x"] - 2, c["y"] - 2, c["x"] + 3, c["y"] + 3, ctrl=True)
+    await pg.mouse.move(3, 535)
+    await comprobar(pg, "F2 Refrescos (interior) + Ctrl+lazo en el par Aguas · Aigua Serena", FAM["Refrescos"] + MARCA["Aigua Serena"])
+    ids_f = (await pg.evaluate(ESTADO))["sel"]
+    kn = next(k for k in S if k.endswith("string:Nord Cola"))
+    c = S[kn]
+    await pg.keyboard.down("Control")
+    await pg.mouse.click(c["x"], c["y"])
+    await pg.keyboard.up("Control")
+    await pg.mouse.move(3, 535)
+    await comprobar(pg, "F3 Ctrl+clic en Nord Cola con Refrescos entera: Refrescos menos Nord Cola", FAM["Refrescos"] - MARCA["Nord Cola"] + MARCA["Aigua Serena"])
+    await pg.close()
+    # G) marcadores: la selección restaurada cuadra igual.
+    for lbl, ids, esp in [("G marcador del caso A", ids_a, FAM["Zumos"] + FAM["Isotónicas y energéticas"] + FAM["Té y café frío"]),
+                          ("G marcador del caso F2", ids_f, FAM["Refrescos"] + MARCA["Aigua Serena"])]:
+        pg = await nueva()
+        await pg.evaluate("(ks) => { window.__sel = ks.map(key => ({ key, getKey(){return key;}, equals(o){return !!o && o.key === key;}, includes(){return false;} })); window.__onSel(window.__sel); }", ids)
+        await pg.wait_for_timeout(30)
+        E = await pg.evaluate(ESTADO)
+        dib = sum(MARCA.get(sg["key"].split("␞")[1].replace("string:", ""), 0) for sg in E["segs"] if sg["op"] == "1")
+        cv = num_compacto(E["center"][1]) if len(E["center"]) > 1 else None
+        check(f"{lbl}: restaurado sin persistProperties, dibujo y centro = lo esperado", await pg.evaluate("() => __persist.length") == 0 and abs(dib - esp) < 1 and cv and abs(cv - esp) / esp < 0.006, f"{dib:,.0f} {E['center']} vs {esp:,.0f}")
+        TABLA.append((lbl, len(ids), filas(ids), E["center"][1] if len(E["center"]) > 1 else "", esp))
+        await pg.close()
+    print("  Tabla de casos: identidades · filas enviadas (Litros) · centro · esperado (Ventas)")
+    for lbl, n, env, cen, esp in TABLA:
+        print(f"    {lbl}: {n} identidades · {env:,.0f} · {cen} · {esp:,.0f}")
+
+
 def ventas_por_par(a, b_):
     d = defaultdict(float)
     for r in VENTAS:
@@ -1737,6 +1875,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--otros" in sys.argv:
+            await tanda_otros_seleccion(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--centro" in sys.argv:
             await tanda_centro_seleccion(b)
             await b.close()
@@ -2081,6 +2225,7 @@ async def main():
         await tanda_notas(b)
         await tanda_lazo_bordes(b)
         await tanda_centro_seleccion(b)
+        await tanda_otros_seleccion(b)
         await b.close()
     print()
     print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))

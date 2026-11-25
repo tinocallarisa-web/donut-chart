@@ -2783,7 +2783,7 @@ export class Visual implements IVisual {
         if (!d.add) this.selKeys.clear();
         for (const k of keys) this.selKeys.add(k);
         const ids: ISelectionId[] = [];
-        for (const k of this.selKeys) ids.push(...this.idsOf(k));
+        ids.push(...this.selectionIds());
         if (ids.length) this.selectionManager.select(ids, false); else this.selectionManager.clear();
         this.paintState();
     }
@@ -3011,13 +3011,68 @@ export class Visual implements IVisual {
         return ch ? [this.catId(ch.c)] : [];
     }
 
+    /**
+     * La selección normalizada, para que lo dibujado, el centro y lo que filtra Power BI sean lo mismo (Tino, 25-11):
+     * una categoría seleccionada (o «Otros») absorbe sus pares y sus miembros; si todos los pares con filas de una
+     * categoría están seleccionados, pasa a ser la categoría.
+     */
+    private normalizeSel(): void {
+        if (!this.selKeys.size || !this.model) return;
+        for (const e of this.entries) {
+            const segKeys = this.segOn ? this.model.segments.filter(sd => e.members.some(c => (c.bySeg.get(sd.key)?.rows.length ?? 0) > 0)).map(sd => Visual.pairKey(e.key, sd.key)) : [];
+            if (!this.selKeys.has(e.key) && segKeys.length && segKeys.every(k => this.selKeys.has(k))) this.selKeys.add(e.key);
+            if (e.isOther && !this.selKeys.has(e.key) && e.members.length && e.members.every(c => this.selKeys.has(c.key))) this.selKeys.add(e.key);
+            if (this.selKeys.has(e.key)) {
+                segKeys.forEach(k => this.selKeys.delete(k));
+                for (const k of Array.from(this.selKeys)) if (k.indexOf(e.key + "␞") === 0) this.selKeys.delete(k);
+                if (e.isOther) e.members.forEach(c => this.selKeys.delete(c.key));
+            }
+        }
+    }
+
+    /**
+     * Identidades de la selección, todas de la misma forma. Power BI no combina bien identidades de categoría con
+     * identidades categoría + segmento (con las dos, filtra solo por los pares): si hay algún par, cada categoría se
+     * envía como todos sus pares con filas (las mismas filas). Una marca agregada pasa todas sus identidades.
+     */
+    private selectionIds(): ISelectionId[] {
+        this.normalizeSel();
+        const keys = Array.from(this.selKeys);
+        const anyPair = this.segOn && keys.some(k => !!this.pairOf(k));
+        const ids: ISelectionId[] = [];
+        for (const k of keys) {
+            if (!anyPair || this.pairOf(k)) { ids.push(...this.idsOf(k)); continue; }
+            const e = this.entryOf(k);
+            const cats = e ? e.members : (this.catOf(k) ? [this.catOf(k).c] : []);
+            for (const c of cats) for (const sd of this.model.segments) { const id = this.pairId(c, sd.key); if (id) ids.push(id); }
+        }
+        return ids;
+    }
+
+    /** Cuánto de una categoría está seleccionado: entera, en parte (pares o miembros de «Otros») o nada. */
+    private selLevel(e: Entry): "full" | "part" | "none" {
+        if (this.selKeys.has(e.key)) return "full";
+        if (e.isOther && e.members.some(c => this.selKeys.has(c.key))) return "part";
+        const pre = e.key + "␞";
+        for (const k of this.selKeys) if (k.indexOf(pre) === 0) return "part";
+        return "none";
+    }
+
     /** select(lista) no alterna: la selección se calcula aquí y se pasa entera (o clear si queda vacía). */
     private toggle(key: string, multi: boolean): void {
-        if (multi) { if (this.selKeys.has(key)) this.selKeys.delete(key); else this.selKeys.add(key); }
+        const pr = this.segOn ? this.pairOf(key) : null;
+        if (multi && pr && this.selKeys.has(pr.e.key)) {
+            // Ctrl+clic en un par de una categoría seleccionada entera: queda la categoría menos ese par.
+            this.selKeys.delete(pr.e.key);
+            for (const sd of this.model.segments) {
+                const k = Visual.pairKey(pr.e.key, sd.key);
+                if (k !== key && pr.e.members.some(c => (c.bySeg.get(sd.key)?.rows.length ?? 0) > 0)) this.selKeys.add(k);
+            }
+        } else if (multi) { if (this.selKeys.has(key)) this.selKeys.delete(key); else this.selKeys.add(key); }
         else if (this.selKeys.size === 1 && this.selKeys.has(key)) this.selKeys.clear();
         else { this.selKeys.clear(); this.selKeys.add(key); }
         const ids: ISelectionId[] = [];
-        for (const k of this.selKeys) ids.push(...this.idsOf(k));
+        ids.push(...this.selectionIds());
         if (ids.length) this.selectionManager.select(ids, false);
         else this.selectionManager.clear();
         this.paintState();
@@ -3045,6 +3100,7 @@ export class Visual implements IVisual {
                 }
             }
         }
+        this.normalizeSel();
     }
 
     private pruneSelection(): void {
@@ -3078,14 +3134,16 @@ export class Visual implements IVisual {
             const el = nodes[i];
             const e = this.entryOf(el.getAttribute("data-key"));
             if (!e) return;
-            let op = any && !this.isSelected(e) ? 0.35 : 1;
+            // Interior: entera = 1; solo algunos pares o miembros = parcial (0,6); nada = atenuado.
+            const lv = any ? this.selLevel(e) : "full";
+            let op = lv === "full" ? 1 : lv === "part" ? 0.6 : 0.35;
             if (hoverEntry && hoverEntry.key !== e.key) op = Math.min(op, 0.6);
             el.setAttribute("opacity", String(op));
         });
         this.svg.selectAll<SVGGElement, unknown>(".dn-segg").each((_d, i, nodes) => {
             const el = nodes[i];
             const k = el.getAttribute("data-key"), parent = el.getAttribute("data-parent");
-            const sel = this.selKeys.has(k) || this.selKeys.has(parent) || (parent === OTHER_KEY && false);
+            const sel = this.selKeys.has(k) || this.selKeys.has(parent);
             let op = any && !sel ? 0.35 : 1;
             if (hover && hover !== k && hover !== parent) op = Math.min(op, 0.6);
             el.setAttribute("opacity", String(op));
@@ -3107,8 +3165,8 @@ export class Visual implements IVisual {
                 const e = this.entryOf(key);
                 const pr = e ? null : this.pairOf(key);
                 const ch = e || pr ? null : this.catOf(key);
-                const sel = e ? this.isSelected(e) : pr ? (this.selKeys.has(key) || this.selKeys.has(pr.e.key)) : ch ? (this.selKeys.has(key) || this.selKeys.has(OTHER_KEY)) : false;
-                c.style.opacity = any && !sel ? "0.45" : "1";
+                const lv = e ? this.selLevel(e) : (pr ? (this.selKeys.has(key) || this.selKeys.has(pr.e.key)) : ch ? (this.selKeys.has(key) || this.selKeys.has(OTHER_KEY)) : false) ? "full" : "none";
+                c.style.opacity = !any || lv === "full" ? "1" : lv === "part" ? "0.7" : "0.45";
                 const isFocus = focusKey === key && c.getAttribute("data-col") !== "ann";
                 c.classList.toggle("dn-focusrow", isFocus);
                 c.style.outlineColor = this.focusColor;
