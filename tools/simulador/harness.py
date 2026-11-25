@@ -648,9 +648,10 @@ async def bloque2(b):
                 check(f"{lbl}: 9 paneles", nps == 9 and len(i["titles"]) == 9, f"{nps} {i['titles']}")
             else:
                 check(f"{lbl}: paneles legibles o aviso de cuántos", nps == 9 or ("Showing" in i["smnote"] and str(nps) in i["smnote"]), f"{nps} {i['smnote']}")
-            filas_k = [r["key"] for r in filas_datos(i)]
-            ok_ord = all([s["key"] for s in p["slices"]] == filas_k for p in i["panels"])
-            check(f"{lbl}: mismo conjunto de Otros y mismo orden en todos los paneles", ok_ord, "")
+            # La tabla puede plegar las últimas filas en «+N more» (25-11: con small multiples cede sitio a los paneles).
+            filas_k = [r["key"] for r in filas_datos(i) if r["key"]]
+            ok_ord = all([s["key"] for s in p["slices"]][:len(filas_k)] == filas_k for p in i["panels"]) and                 len({tuple(s["key"] for s in p["slices"]) for p in i["panels"]}) == 1
+            check(f"{lbl}: mismo conjunto de Otros y mismo orden en todos los paneles", ok_ord, str(filas_k))
             cols = [[s["fill"] for s in p["slices"]] for p in i["panels"]]
             check(f"{lbl}: mismos colores en todos los paneles", all(c == cols[0] for c in cols), "")
             check(f"{lbl}: etiquetas con la misma letra en todos los paneles", len(set(i["labelSizes"])) <= 1, str(sorted(set(i["labelSizes"]))))
@@ -2161,6 +2162,62 @@ async def tanda_filtro_otros(b):
     await pg.close()
 
 
+# ── % of target sin contradicciones y small multiples con la tabla (25-11, vídeo) ─
+
+async def tanda_video(b):
+    print("25-11 (14) · % of target con decimales cuando hacen falta; paneles con radio mínimo junto a la tabla; zoom del host")
+    objs = {"target": {"metAt": 99.5, "closeAt": 99.2}}
+    pg = await page(b, dv_ventas(objs, cat="Familia", compare=True, target=True, legacy=False), 1040, 576, name="tgt_umbral_995")
+    i = await info(pg)
+    tg = [r["tgt"] for r in filas_datos(i) if r["tgt"] and r["tgt"] != "—"]
+    num = lambda t: pct_num(t[1:].strip().replace(" ", ""))
+    por_texto = {}
+    contra = []
+    for t in tg:
+        g, v = t[0], num(t)
+        if g == "✓" and v < 99.5 or g == "≈" and v < 99.2:
+            contra.append(t)
+        if v in por_texto and por_texto[v] != g:
+            contra.append(t)
+        por_texto[v] = g
+    check("Met at 99,5 / Close at 99,2 (Ventas por Familia): ningún número contradice su símbolo", tg and not contra, f"{tg} → {contra}")
+    check("Met at 99,5: con decimales donde hacen falta (no todo a entero)", any("." in t for t in tg), str(tg))
+    tip = await pg.evaluate("() => { const c = Array.from(document.querySelectorAll('.dn-table .dn-c.dn-name[data-key]'))[0]; const r = c.getBoundingClientRect(); c.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.x + 3, clientY: r.y + 3 })); return (window.__tip.dataItems || []).map(d => d.displayName + '=' + d.value).join(' | '); }")
+    check("tooltip con los mismos decimales que la tabla", tg[0][1:].strip().replace(" ", "") in tip.replace(" ", ""), tip[:160])
+    await pg.close()
+    pg = await page(b, dv_ventas({}, cat="Familia", compare=True, target=True, legacy=False), 960, 540)
+    i = await info(pg)
+    tg = [r["tgt"] for r in filas_datos(i) if r["tgt"] and r["tgt"] != "—"]
+    check("umbrales por defecto (100/90): % of target a entero", tg and not any("." in t for t in tg), str(tg))
+    await pg.close()
+
+    ZONAS = sorted({r["Zona"] for r in VENTAS})
+    for n, facet, zonas in [(2, "Canal", None), (4, "Zona", ZONAS[:4])]:
+        for W, H in [(1040, 576), (960, 540), (1250, 600)]:
+            lbl = f"small multiples {n} paneles + tabla {W}x{H}"
+            pg = await page(b, dv_ventas({}, cat="Familia", facet=facet, zonas=zonas, compare=True, target=True, legacy=False), W, H, name=f"sm_tabla_{n}p_{W}x{H}")
+            P = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-panel .dn-slices')).map(g => g.getBoundingClientRect().width / 2)")
+            minR = max(32, min(80, min(W, H) * 0.13))
+            t = await pg.evaluate("() => { const e = document.querySelector('.dn-table'); return e ? e.getAttribute('data-pos') : null; }")
+            check(f"{lbl}: radio de los donuts ≥ mínimo ({minR * 0.8:.0f} px) con la tabla {t}", len(P) == n and min(P) >= minR * 0.8, f"{[round(x) for x in P]}")
+            i = await info(pg)
+            comprobar_dibujo(i, W, H, lbl, mira_suma=False)
+            await eventos(pg, lbl)
+            await pg.close()
+    # Zoom del host (transform: scale 1,25, como el vídeo): la disposición no cambia.
+    dvz = dv_ventas({}, cat="Familia", facet="Canal", compare=True, target=True, legacy=False)
+    pg = await page(b, dvz, 1040, 576)
+    sin = await pg.evaluate("() => { const t = document.querySelector('.dn-table'); return [t.offsetWidth, t.offsetHeight, Array.from(document.querySelectorAll('.dn-panel .dn-slices')).map(g => g.getBoundingClientRect().width)]; }")
+    await pg.close()
+    pg = await page(b, None, 1040, 576)
+    await pg.evaluate("() => { const h = document.getElementById('host'); h.style.transform = 'scale(1.25)'; h.style.transformOrigin = '0 0'; }")
+    await upd(pg, dvz)
+    con = await pg.evaluate("() => { const t = document.querySelector('.dn-table'); return [t.offsetWidth, t.offsetHeight, Array.from(document.querySelectorAll('.dn-panel .dn-slices')).map(g => g.getBoundingClientRect().width / 1.25)]; }")
+    await shot(pg, "sm_tabla_zoom125")
+    check("zoom 1,25 del host: misma tabla y mismos donuts que sin zoom", abs(sin[0] - con[0]) <= 2 and abs(sin[1] - con[1]) <= 2 and all(abs(a - c) <= 2 for a, c in zip(sin[2], con[2])), f"{sin} vs {con}")
+    await pg.close()
+
+
 async def clic_otros(pg):
     """Clic en Otros: tiempo (selección + repintado), filas que cubriría, identidades enviadas y aviso."""
     return await pg.evaluate(r"""() => { const p = document.querySelector('path.dn-slice[data-key*="other"]');
@@ -2196,6 +2253,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--video" in sys.argv:
+            await tanda_video(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--regresion" in sys.argv:
             await tanda_regresion_clic(b)
             await b.close()
@@ -2577,6 +2640,7 @@ async def main():
         await tanda_avisos_centro(b)
         await tanda_filtro_otros(b)
         await tanda_regresion_clic(b)
+        await tanda_video(b)
         await b.close()
     check(f"global: ninguna llamada a select() con más de {MAX_IDS} identidades", MAXSEL[0] <= MAX_IDS, str(MAXSEL[0]))
     print()

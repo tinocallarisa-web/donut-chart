@@ -229,6 +229,8 @@ export class Visual implements IVisual {
     private suppressClick = false;
     /** La selección actual es demasiado grande para filtrar fuera: solo se dibuja aquí. */
     private localOnly = false;
+    /** Decimales de % of target en este update (computeTgtDec). */
+    private tgtDec = 0;
     /** «Otros» filtrado hacia fuera con un BasicFilter NotIn (en vez de identidades) y el filtro que se recibió. */
     private filterOn = false;
     private lastFilterJson = "";
@@ -831,6 +833,7 @@ export class Visual implements IVisual {
         // Pro: cambio frente a Compare with, orden (cabecera / Sort by change) y paneles. Colores antes de ordenar: el
         // color va con la categoría, no con la posición.
         this.computeChanges();
+        this.tgtDec = this.computeTgtDec();
         this.applySort();
         this.panels = this.buildPanels();
         if (this.pendingRestore) this.restoreSelection(this.pendingRestore);
@@ -1146,6 +1149,43 @@ export class Visual implements IVisual {
         return si >= 0 ? { e, sd: l[si].sd, si } : null;
     }
 
+    /**
+     * Decimales de % of target (para todo el visual: tabla, tooltip, voz): 0 salvo que hagan falta para que el número no
+     * contradiga su símbolo (Met at 99,5: «✕ 99%» junto a «✓ 99%»). Se busca el mínimo, hasta 2, con el que: un ✓ no
+     * baja de Met at, un ≈ no baja de Close at y dos estados distintos nunca muestran la misma cifra. Siempre truncado:
+     * un ✕ o un ≈ nunca enseñan el umbral alcanzado.
+     */
+    private computeTgtDec(): number {
+        if (!this.tgtOn) return 0;
+        const met = Number(this.settings.target?.metAt) || 100;
+        const close = Math.min(met, Number(this.settings.target?.closeAt) || 90);
+        const vals: { pct: number; g: string }[] = [];
+        const add = (v: number, t: number | null) => { const st = this.tgtStatus(v, t); if (st) vals.push({ pct: st.pct, g: st.glyph }); };
+        for (const e of this.entries) {
+            add(e.value, e.tgt);
+            if (e.isOther) for (const c of e.members) add(c.value, c.tgt !== null && c.tgt > 0 ? c.tgt : null);
+        }
+        for (let d = 0; d <= 2; d++) {
+            const f = Math.pow(10, d);
+            const seen = new Map<number, string>();
+            let ok = true;
+            for (const x of vals) {
+                const t = Math.floor(x.pct * f + 1e-9) / f;
+                if ((x.g === "✓" && t < met) || (x.g === "≈" && t < close)) { ok = false; break; }
+                const prev = seen.get(t);
+                if (prev !== undefined && prev !== x.g) { ok = false; break; }
+                seen.set(t, x.g);
+            }
+            if (ok) return d;
+        }
+        return 2;
+    }
+
+    private fmtTgt(pct: number): string {
+        const f = Math.pow(10, this.tgtDec);
+        return this.fmtPct(Math.floor(pct * f + 1e-9), this.tgtDec);
+    }
+
     /** Estado frente al objetivo: ✓ (≥ Met at) · ≈ (≥ Close at) · ✕; forma y color. null sin objetivo. */
     private tgtStatus(v: number, t: number | null): { pct: number; glyph: string; color: string; word: string } | null {
         if (t === null || !(t > 0)) return null;
@@ -1316,13 +1356,27 @@ export class Visual implements IVisual {
             let tpos = String(s.dataTable.position);
             const auto = tpos === "auto";
             if (auto) tpos = aw / Math.max(1, ah) >= 1.3 ? "right" : "bottom";
-            let t: Fit | null = this.fitTable(tpos, aw + 2 * pad, ah + 2 * pad, pad);
-            // Con columnas Pro, en Automático se prueba también la otra posición y gana la que menos recorta.
-            if (auto && this.proColumns && (!t || t.score > 0)) {
+            // Con small multiples la tabla no puede dejar los paneles por debajo de un radio mínimo: su caja se limita
+            // a lo que sobra y, si no cabe, recorta según su orden (o pasa a la otra posición en Automático).
+            const cap = (pos: string) => this.smOn ? this.smTableCap(pos, aw, ah, pad) : Infinity;
+            let t: Fit | null = this.fitTable(tpos, aw + 2 * pad, ah + 2 * pad, pad, cap(tpos));
+            // Con columnas Pro (o paneles), en Automático se prueba también la otra posición y gana la que menos recorta.
+            if (auto && (this.proColumns || this.smOn) && (!t || t.score > 0)) {
                 const otra = tpos === "right" ? "bottom" : "right";
-                const alt = this.fitTable(otra, aw + 2 * pad, ah + 2 * pad, pad);
+                const alt = this.fitTable(otra, aw + 2 * pad, ah + 2 * pad, pad, cap(otra));
                 if (alt && (!t || alt.score < t.score)) { if (t) t.el.remove(); t = alt; tpos = otra; }
                 else if (alt) alt.el.remove();
+            }
+            // Si con el radio mínimo de los paneles la tabla no cabe en ninguna posición (visual pequeño o muchos paneles),
+            // se dibuja como antes, sin límite: mejor paneles pequeños que perder la tabla del total.
+            if (!t && this.smOn && this.tableHasData) {
+                t = this.fitTable(tpos, aw + 2 * pad, ah + 2 * pad, pad);
+                if (auto && (!t || t.score > 0)) {
+                    const otra = tpos === "right" ? "bottom" : "right";
+                    const alt = this.fitTable(otra, aw + 2 * pad, ah + 2 * pad, pad);
+                    if (alt && (!t || alt.score < t.score)) { if (t) t.el.remove(); t = alt; tpos = otra; }
+                    else if (alt) alt.el.remove();
+                }
             }
             if (t) { this.tableEl = t.el; this.tableFs = t.fs; place(t, tpos); }
         }
@@ -1347,6 +1401,51 @@ export class Visual implements IVisual {
         else this.drawDonut(this.panels[0], Math.max(0, ax), Math.max(0, ay), Math.max(0, aw), Math.max(0, ah));
         this.geo = this.panels[0]?.geo ?? null;
         this.arcs = this.panels[0]?.arcs ?? [];
+    }
+
+    /**
+     * Escala de pantalla del host (zoom del informe o transform: scale de un contenedor): getBoundingClientRect mide en
+     * píxeles de pantalla; el diseño va en píxeles CSS. Todas las medidas de cajas se dividen por ella.
+     */
+    private get zoom(): number {
+        const w = this.root.offsetWidth;
+        const z = w > 0 ? this.root.getBoundingClientRect().width / w : 1;
+        return isFinite(z) && z > 0 ? z : 1;
+    }
+
+    private boxW(el: HTMLElement): number { return el.getBoundingClientRect().width / this.zoom; }
+    private boxH(el: HTMLElement): number { return el.getBoundingClientRect().height / this.zoom; }
+
+    /**
+     * Radio mínimo de los paneles de small multiples a tamaño de informe (Tino, vídeo a 1040×576: donuts de ~60 px con
+     * la tabla al lado): el 13 % del lado menor del visual, entre 32 y 80 px.
+     */
+    private get smMinR(): number { return Math.max(32, Math.min(80, Math.min(this.W, this.H) * 0.13)); }
+
+    /**
+     * Lo que puede ocupar la tabla (ancho si va al lado, alto si va abajo) dejando a los paneles su radio mínimo, con la
+     * mejor rejilla posible en el hueco que queda.
+     */
+    private smTableCap(pos: string, aw: number, ah: number, pad: number): number {
+        const sm = this.settings.smallMultiples;
+        const n = Math.max(1, this.model?.facets.length ?? 1);
+        const R = this.smMinR;
+        const gap = Math.max(0, Math.min(40, Number(sm.gap))) * Math.min(1, this.k);
+        const th = Math.max(10, this.minFs, this.fz(Number(sm.titleFontSize))) * 1.3 + Math.max(2, Math.round(3 * this.k));
+        const cellW = 2 * R + 6, cellH = 2 * R + 6 + th;
+        const side = pos === "right" || pos === "left";
+        let best = Infinity;
+        const fixed = Number(sm.columns) >= 1 ? Math.min(n, Math.round(Number(sm.columns))) : 0;
+        for (let c = fixed || 1; c <= (fixed || n); c++) {
+            const rows = Math.ceil(n / c);
+            const needW = c * cellW + gap * (c - 1), needH = rows * cellH + gap * (rows - 1);
+            if (side && needH <= ah) best = Math.min(best, needW);
+            if (!side && needW <= aw) best = Math.min(best, needH);
+        }
+        // Si ni sin tabla caben los paneles al radio mínimo (muchos paneles o visual pequeño), la rejilla ya enseña los que
+        // caben («Showing N of M»): la tabla no se limita.
+        if (!isFinite(best)) return Infinity;
+        return Math.floor((side ? aw : ah) - best - pad);
     }
 
     /** Summary: Automatic = encendida si hay Compare en los pozos. */
@@ -1458,13 +1557,13 @@ export class Visual implements IVisual {
      * mínimo y se pliegan las últimas filas en "+N more · x %" (suma 100, sin "…"). score = cuánto se ha recortado,
      * con más peso cuanto peor (letra bajo el suelo > columnas > filas): en Automático gana la posición que menos recorta.
      */
-    private fitTable(pos: string, W: number, H: number, pad: number): { el: HTMLDivElement; w: number; h: number; score: number; fs: number } | null {
+    private fitTable(pos: string, W: number, H: number, pad: number, cap = Infinity): { el: HTMLDivElement; w: number; h: number; score: number; fs: number } | null {
         const s = this.settings;
         const mini = W < 200 || H < 140;
         const pro = this.proColumns;
         const side = pos === "right" || pos === "left";
-        const maxW = side ? Math.floor(W * (mini ? 0.55 : pro ? 0.64 : 0.5)) : W - 2 * pad;
-        const maxH = side ? H - 2 * pad : Math.floor(H * (mini ? 0.6 : pro ? 0.56 : 0.5));
+        const maxW = Math.min(side ? Math.floor(W * (mini ? 0.55 : pro ? 0.64 : 0.5)) : W - 2 * pad, side ? cap : Infinity);
+        const maxH = Math.min(side ? H - 2 * pad : Math.floor(H * (mini ? 0.6 : pro ? 0.56 : 0.5)), side ? Infinity : cap);
         if (maxW < 40 || maxH < 12) return null;
         if (!this.tableHasData) return null;
         const fs0 = this.fz(Number(s.dataTable.fontSize));
@@ -1482,9 +1581,9 @@ export class Visual implements IVisual {
             el.style.left = "0px"; el.style.top = "0px";
             el.style.width = "max-content";
             this.root.appendChild(el);
-            let w = Math.ceil(el.getBoundingClientRect().width);
+            let w = Math.ceil(this.boxW(el));
             if (w > maxW) { el.style.width = maxW + "px"; w = maxW; }
-            const h = Math.ceil(el.getBoundingClientRect().height);
+            const h = Math.ceil(this.boxH(el));
             const fitsW = el.scrollWidth <= w + 1;
             if (h <= maxH && fitsW) {
                 el.style.visibility = "";
@@ -1541,13 +1640,13 @@ export class Visual implements IVisual {
             el.style.left = "0px"; el.style.top = "0px";
             el.style.width = "max-content";
             this.root.appendChild(el);
-            let w = Math.ceil(el.getBoundingClientRect().width);
+            let w = Math.ceil(this.boxW(el));
             if (w > maxW) { el.style.width = maxW + "px"; w = maxW; }
-            const h = Math.ceil(el.getBoundingClientRect().height);
+            const h = Math.ceil(this.boxH(el));
             if (h <= maxH) {
                 el.style.visibility = "";
                 el.style.width = w + "px";
-                const tops = new Set(Array.from(el.querySelectorAll<HTMLElement>(".dn-li")).map(x => Math.round(x.getBoundingClientRect().top)));
+                const tops = new Set(Array.from(el.querySelectorAll<HTMLElement>(".dn-li")).map(x => Math.round(x.getBoundingClientRect().top / this.zoom)));
                 if (last) last.el.remove();
                 return { el, w, h, score: fold, fs, lines: tops.size };
             }
@@ -1743,7 +1842,7 @@ export class Visual implements IVisual {
             g.style.color = st.color;
             g.setAttribute("aria-label", st.word);
             sp.appendChild(g);
-            sp.appendChild(document.createTextNode(" " + this.fmtPct(Math.floor(st.pct), 0)));
+            sp.appendChild(document.createTextNode(" " + this.fmtTgt(st.pct)));
             return sp;
         };
         const mark = (ch: Change | undefined) => (c: HTMLDivElement, col: string) => {
@@ -2857,7 +2956,7 @@ export class Visual implements IVisual {
 
     private rootPoint(e: { clientX: number; clientY: number }): [number, number] {
         const r = this.root.getBoundingClientRect();
-        return [e.clientX - r.left, e.clientY - r.top];
+        return [(e.clientX - r.left) / this.zoom, (e.clientY - r.top) / this.zoom];
     }
 
     private lassoStart(e: PointerEvent): void {
@@ -2995,7 +3094,7 @@ export class Visual implements IVisual {
             const st = this.tgtStatus(value, tgt);
             if (st) {
                 items.push({ displayName: this.tgtName, value: this.fmtFull(tgt, fmt) });
-                items.push({ displayName: this.t("UI_OfTarget", "% of target"), value: st.glyph + " " + this.fmtPct(Math.floor(st.pct), 0) + " · " + st.word });
+                items.push({ displayName: this.t("UI_OfTarget", "% of target"), value: st.glyph + " " + this.fmtTgt(st.pct) + " · " + st.word });
             }
         }
     }
@@ -3497,7 +3596,7 @@ export class Visual implements IVisual {
         }
         if (this.tgtOn) {
             const st = this.tgtStatus(value, tgt);
-            if (st) txt += ". " + this.tf("UI_AnnTarget", "{0} of target, {1}", this.fmtPct(Math.floor(st.pct), 0), st.word);
+            if (st) txt += ". " + this.tf("UI_AnnTarget", "{0} of target, {1}", this.fmtTgt(st.pct), st.word);
         }
         return txt;
     }
@@ -3572,8 +3671,9 @@ export class Visual implements IVisual {
                 const r = this.root.getBoundingClientRect();
                 const g = this.geo;
                 const a = this.arcs.find(x => x.e.key === cur.e.key);
-                let x = r.left + (g ? g.cx : 0), y = r.top + (g ? g.cy : 0);
-                if (a && g) { const am = (a.a0 + a.a1) / 2; x += Math.sin(am) * g.R * 0.8; y -= Math.cos(am) * g.R * 0.8; }
+                const z = this.zoom;
+                let x = r.left + (g ? g.cx : 0) * z, y = r.top + (g ? g.cy : 0) * z;
+                if (a && g) { const am = (a.a0 + a.a1) / 2; x += Math.sin(am) * g.R * 0.8 * z; y -= Math.cos(am) * g.R * 0.8 * z; }
                 this.selectionManager.showContextMenu(this.idsOf(curKey)[0] ?? ({} as ISelectionId), { x, y });
                 break;
             }
