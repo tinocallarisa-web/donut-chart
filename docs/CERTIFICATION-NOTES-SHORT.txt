@@ -6,8 +6,8 @@ https://github.com/tinocallarisa-web/donut-chart, branch "certification". Public
 TESTING THE PRO FEATURES - NO KEY NEEDED
 Pro comes from the AppSource plan (IVisualLicenseManager); no activation key.
 Open a report in EDIT mode without a licence: each Pro feature is drawn WORKING under a
-"Pro preview" watermark that names it, and Power BI shows its licence notice. Reading view
-shows the free chart. Without licence information (Desktop not signed in) Pro stays off.
+"Pro preview" watermark that names it (small multiples: first 4 panels, with a note), and
+Power BI shows its licence notice. Reading view shows the free chart. No licence info (Desktop not signed in): Pro off.
 
 WHAT TO CHECK (sample .pbix, table Ventas)
 1. Empty visual: start screen, no links.
@@ -26,12 +26,12 @@ Only on a user click in the setup guide (style.guide, style.template) and once w
 author changes Style template in the Format pane. Never on selection or in the select callback.
 
 ROWS
-Categorical mapping, window of 30,000; fetchMoreData, up to 10 more segments (tested in Desktop
-with 54,662 rows). A footnote says when rows are missing. Selections above 1,000 identities
+Categorical mapping, window of 30,000; fetchMoreData, up to 10 more segments (Desktop:
+54,662 rows). A footnote says when rows are missing. Selections above 1,000 identities
 (items or rows) are drawn locally only, with a note; select() is not called, no filter. Segment: 6 largest segments per category + Other (n).
 
 PRIVACY
-privileges []. No network, telemetry or browser storage. src uses no innerHTML. 12 languages.
+privileges []. No network, telemetry or storage. src uses no innerHTML. 12 languages.
 
 Rendering events: one pair per update(); hover, selection, Other expansion, sorting and
 the licence repaint redraw without update().

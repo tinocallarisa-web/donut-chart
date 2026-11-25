@@ -39,7 +39,8 @@ Rows: up to 30,000 at a time; the visual asks Power BI for up to 10 more blocks.
 - **Show the data table without Pro.** In Automatic it appears with Compare with, Target or Annotation. Set Format → Data
   table → Position to Right, Left or Bottom to show it with just Values.
 - **Open Other.** In the data table, click Other (5) ▸ (→ on the keyboard). The largest categories always keep a name, never
-  an all-grey Other. Show at most 20 and Group below 0 draw every category.
+  an all-grey Other. With 20 categories or fewer, Show at most 20 and Group below 0
+  draw every one.
 - **Center.** Point at a slice to read its name, value and share; select several to read their sum.
 - **Sort.** Click a header of the data table; click again to reverse. Not saved with the report.
 - **⚠ in the change column.** Value and share moved in opposite directions: value up but share down because the total grew
@@ -47,7 +48,8 @@ Rows: up to 30,000 at a time; the visual asks Power BI for up to 10 more blocks.
 - **new / gone.** No value in Compare with / no value now. Never an invented change.
 - **Segment.** Each category shows its six largest segments and its own Other (n). If a note says to swap the fields, every
   category belongs to one segment: put the broader field in Category.
-- **Small multiples.** Same Other, order and colours in every panel; the table is the total. A slice selects that
+- **Small multiples.** Without a licence, the Pro preview shows the first 4 panels, with a note. Same Other, order and
+  colours in every panel; the table is the total. A slice selects that
   category in its panel only; the legend and the table select it in every panel; Ctrl combines panels. Size by total makes each donut
   proportional to its total. Too many panels: "Showing N of M panels".
 - **A tooltip measure does not show.** With Segment or Small multiples a slice is several rows and the measure is not

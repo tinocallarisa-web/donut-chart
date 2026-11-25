@@ -64,7 +64,7 @@ def page(title, sub, body, nav="", search=False):
 FIELDS = [
     ("Category", "Grouping", "Yes — one field", "The field that names the slices: brand, region, channel. A hierarchy gives drilldown."),
     ("Values", "Measure", "Yes — one measure", "The measure the slices share. Its total goes in the center. Negative, zero and blank values are not drawn, because a slice cannot be negative or empty; they are counted in a footnote, negatives with their sum."),
-    ("Segment", "Grouping", "No — Pro, one field", "An outer ring that splits every slice by a second field, at the same angle as its slice: family by brand, channel by subchannel. Six segments per category, the rest in its own Other."),
+    ("Segment", "Grouping", "No — Pro, one field", "An outer ring that splits every slice by a second field, at the same angle as its slice: family by brand, channel by subchannel. Up to six named segments per category; with more than seven, the rest in its own Other."),
     ("Compare with", "Measure", "No — Pro, one measure", "The same measure for another period, usually last year: the change in share (Δ pp) and in value (Δ %) for every category."),
     ("Target", "Measure", "No — Pro, one measure", "The plan or budget of each category: % of target with ✓ ≈ ✕, and status icons on the slices."),
     ("Annotation", "Measure", "No — Pro, one text field", "A comment per category, shown under its row in the data table and in the tooltip. Use a text column set to First."),
@@ -76,7 +76,7 @@ FREE_PRO = [
     ("Donut or pie; inner radius, start angle, Space between slices, Border, order by value or by the data", "✓", "✓"),
     ("Data labels inside the slices, all with the same content and the same text size; a label that does not fit is left out, never cut with \"…\"; outside with leader lines when there is no legend or table", "✓", "✓"),
     ("Total in the center; point at, select or focus a slice to see its name, value and percent — with several selected, their sum", "✓", "✓"),
-    ("An honest Other: Show at most and Group below %; it opens in the data table, and selecting it selects every item in it", "✓", "✓"),
+    ("An honest Other: Show at most and Group below %; grey by default; it opens in the data table, and selecting it selects every item in it (up to 1,000 items)", "✓", "✓"),
     ("Percentages that add up to 100 (largest remainder rounding)", "✓", "✓"),
     ("Legend and Data table, independent, each with its own position; the table with value and share columns, header, total row, gridlines and banding; sort by clicking a header", "✓", "✓"),
     ("Summary sentence above the chart; Footnotes for excluded values and incomplete rows", "✓", "✓"),
@@ -90,26 +90,26 @@ FREE_PRO = [
     ("Report theme and Classic styles; setup guide inside the visual; start screen in three sizes", "✓", "✓"),
     ("Compare with: Δ pp with a mini bar, Δ %, new and gone, ⚠ where share and value move apart, the change in the labels", "—", "✓"),
     ("Target: % of target with ✓ ≈ ✕, Status on slices, a summary of how many categories miss it", "—", "✓"),
-    ("Segment: an outer ring with its own labels — the six largest segments of each category and its own Other — and segment rows in the data table", "—", "✓"),
+    ("Segment: an outer ring with its own labels — up to six named segments per category; with more than seven, the rest in its own Other — and segment rows in the data table", "—", "✓"),
     ("Annotations: a comment per category in the data table and the tooltip", "—", "✓"),
-    ("Small multiples: one donut per value with a shared table of the total, the same size or sized by total", "—", "✓"),
+    ("Small multiples: one donut per value with a shared table of the total, the same size or sized by total (Pro preview without a licence: the first 4 panels, with a note)", "—", "✓"),
     ("Six collection style templates: Boardroom, Ledger, Editorial, Signal, Aurora, Terrace", "—", "✓"),
 ]
 
 FORMAT = [
     ("Style template", "Report theme (free), Classic (free) or one of the six collection styles (Pro). Setup guide: turn it back on to see the guide again."),
-    ("Slices", "Shape donut or pie; inner radius (20–85%); start angle; Space between slices (0–8 px); Border on/off, width and colour (with fx); order by value or as in the data; Show at most (2–20, default 6) and Group below % (0–20, default 3) for Other, and its colour; Lasso selection on/off. Colors: All slices (fx) and one colour per category."),
-    ("Data labels", "Show; content Automatic, Percent, Value, Name, Name and percent, Value and percent, or All; position Automatic, Inside or Outside; Segment labels (Pro); font, size, bold, italic, underline; colour of the labels outside; display units and decimals of value and percent."),
+    ("Slices", "Shape donut or pie; inner radius (20–85%); start angle; Space between slices (0–8 px); Border on/off, width and colour (with fx); order by value or as in the data; Show at most (2–20, default 6) and Group below % (0–20, default 3) for Other, and its colour (grey by default); Lasso selection on/off. Colors: All slices (fx) and one colour per category."),
+    ("Data labels", "Show; content Automatic, Percent, Value, Name, Name and percent, Value and percent, or All; position Inside, then outside / Inside only / Outside (labels go outside only when there is no legend or data table; with small multiples they stay inside); Segment labels (Pro); font, size, bold, italic, underline; colour of the labels outside; display units and decimals of value and percent."),
     ("Center", "Show the total; title (blank = the measure name), its font, size and colour; value font, size, bold, colour, display units and decimals."),
     ("Scale ring", "Marks Off, Quarters (25/50/75%) or Every 10%; colour (kept at a contrast of at least 3:1 with the background)."),
     ("Legend", "Position Automatic, Top, Bottom, Left, Right or Off; font, size, bold, italic, underline, colour."),
-    ("Data table", "Position Automatic, Right, Left, Bottom or Off; header, its text colour and background (with fx); total row Automatic (on in the pie), On or Off; columns Value, Share %, Change, % of target, Notes and Segment rows; gridlines None, Horizontal or All, their colour and width; row banding; font; display units and decimals."),
+    ("Data table", "Position Automatic, Right, Left, Bottom or Off; header, its text colour and background (with fx); total row Automatic (on in the pie), On or Off; columns Value, Share %, Change, % of target, Notes and Segment rows; gridlines None, Horizontal or All, their colour and width; row banding; font, size, bold, italic and underline; display units and decimals."),
     ("Footnotes", "Automatic or Off; font, size and colour."),
     ("Summary", "Automatic (on when Compare with has a field), On or Off; font, size, bold, italic, underline and colour."),
-    ("Compare with (Pro)", "Change shown: Δ pp, Δ % or both; Sort by change."),
+    ("Compare with (Pro)", "Change shown: Share points, Value or Both; Sort by change."),
     ("Target (Pro)", "Met at (default 100%) and Close at (default 90%); Status on slices: misses only, all or off."),
     ("Annotations (Pro)", "Show annotations."),
-    ("Small multiples (Pro)", "Columns (0 = automatic); space between panels; title font, size, colour, bold, italic, underline and alignment; panel background and border; Size by total."),
+    ("Small multiples (Pro)", "Columns (0 = automatic); space between panels; title font, size, colour, bold, italic, underline and alignment; panel background, Panel border and Panel border color; Size by total."),
     ("Accessibility", "High contrast Automatic or On; patterns; focus colour and width; minimum text size (8–16 px); reduce motion."),
 ]
 
@@ -128,7 +128,7 @@ FAQ = [
      "Other, always the last slice, with its count: \"Other (5)\". In the data table, click <strong>Other (5) ▸</strong> to list its "
      "members with their own values and percentages (→ on the keyboard). Always at least the min(5, Show at most − 1) largest categories have a name (all of them if they fit in Show at most), even below "
      "Group below %, so a donut is never an all-grey Other. Clicking the Other slice filters the page by every item inside it, not by a "
-     "label — unless that is more than 1,000 items (see below). Set Show at most to 20 and Group below to 0 to draw every category.</p>"),
+     "label — unless that is more than 1,000 items (see below). With 20 categories or fewer, Show at most 20 and Group below 0 draw every one of them; Other is grey by default.</p>"),
     ("Why is a value not drawn?",
      "<p>A slice is an angle of a whole, and it cannot be negative or empty. Negative, zero and blank values are left out and counted in "
      "a footnote — \"Excluded: 1 negative (−0.3M), 1 blank\" — so nothing disappears in silence. Percentages use the positive total.</p>"),
@@ -158,7 +158,7 @@ FAQ = [
      "The summary says how many categories miss it.</p>"),
     ("What does Segment do?",
      "<p>Segment (Pro) adds an outer ring: each slice is split by a second field at the same angle — family by brand, channel by "
-     "subchannel. Each category shows its six largest segments and groups the rest into its own \"Other (n)\", in the ring, the legend, "
+     "subchannel. Each category shows up to six named segments; with more than seven, the rest go into its own \"Other (n)\", in the ring, the legend, "
      "the table, the keyboard order and the selection. The ring has its own labels (Format → Data labels → Segment labels) and the table can list segment rows under each "
      "category. When every category belongs to a single segment (for example Brand in Category and Family in Segment), the ring would "
      "say nothing: it is not drawn and, while you edit, a note suggests swapping the two fields.</p>"),
@@ -179,7 +179,7 @@ FAQ = [
      "<p>Measures in <strong>Tooltips</strong> show when a slice is one row of data. With Segment or Small multiples a slice is made of "
      "several rows, and adding up a measure such as a margin % or an average across them would give a false figure, so it is left out. "
      "Use a report page tooltip instead: it is computed by Power BI for the slice.</p>"),
-    ("Why does a selection say \"shown here only\"?",
+    ("Too many items to filter other visuals",
      "<p>A selection is passed to Power BI as one identity per item — or, with Segment or Small multiples, per row. Above 1,000 — for "
      "example Other over thousands of points of sale — Power BI cannot filter the rest of the page reliably, so the selection is drawn "
      "inside the visual only, with a note: \"Too many items to filter other visuals (N) — select fewer items\", or with Segment or Small "
@@ -429,7 +429,7 @@ and any applicable Microsoft AppSource subscription terms.</p>
 <p><strong>Free tier:</strong> available to all users at no cost. Includes: {html.escape(free)}.</p>
 <p><strong>Pro tier:</strong> available through a Microsoft AppSource subscription, licensed per user. Adds: {html.escape(pro)}.
 Without an active licence, Pro features are shown in edit mode only, as a preview marked with a watermark; reading view shows the free chart.
-Data limits (one field per well, 30,000 rows per block of data) are the same in both tiers.</p>
+Data limits (one field per well, Tooltips up to five; 30,000 rows per block of data) are the same in both tiers.</p>
 <h2>3. Restrictions</h2>
 <ul>
 <li>Do not reverse-engineer, decompile or disassemble the Visual, except where applicable law permits it.</li>

@@ -27,7 +27,7 @@ Price: 0.99 USD per user per month, 9.99 per year, no trial (plan `donut-chart-p
     tagline: "Donut and pie chart for Power BI: labels that never cut, shares that add up to 100, the change in share vs last year.",
     seoTitle: "Donut & Pie Chart for Power BI: Data Table, Share Change, Targets | tcviz",
     seoDescription: "A Power BI donut and pie chart that reads at any size: labels never cut, percentages that add up to 100, an honest Other and a data table. Share change vs last year and targets in Pro.",
-    category: "Comparison",
+    category: "Part-to-whole",
     price: 0.99,
     noTrial: true,
     version: "1.0.0.0",
@@ -39,7 +39,7 @@ Price: 0.99 USD per user per month, 9.99 per year, no trial (plan `donut-chart-p
     features: [
       { id: "F01", name: "Labels never cut", desc: "Every label inside its slice with the same content and text size; a label that does not fit is left out, never cut.", free: true, pro: true },
       { id: "F02", name: "Shares that add up to 100", desc: "Largest remainder rounding in the labels, the table and the total row.", free: true, pro: true },
-      { id: "F03", name: "Honest Other", desc: "Show at most and Group below %; Other opens in the data table and selects every item inside it.", free: true, pro: true },
+      { id: "F03", name: "Honest Other", desc: "Show at most and Group below %; Other opens in the data table and selects every item inside it, up to 1,000 items.", free: true, pro: true },
       { id: "F04", name: "Legend and data table", desc: "Independent, each with its position; value and share columns, header, total row, gridlines, banding, sort by header.", free: true, pro: true },
       { id: "F05", name: "Center and summary", desc: "The total in the center, or the sum of what you select; a summary sentence and footnotes.", free: true, pro: true },
       { id: "F06", name: "Lasso and drilldown", desc: "Lasso selection, drilldown, cross-filtering, highlight, bookmarks, report page tooltips.", free: true, pro: true },

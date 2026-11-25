@@ -8,8 +8,8 @@ Limits measured in Partner Center: *Search results summary* 100 characters, *Des
 the HTML tags (cut silently), *Certification notes* 2,500 counted with CRLF and **cleared on every resubmission**.
 
 Rules for this listing: no comparison with other marketplace visuals by name; compare only with the native Power BI
-donut (what is said about it was checked by Tino in Power BI Desktop on 24-11-2026: labels cut with "…" at report size,
-one measure only, no small multiples). No "certified", no accessibility standard names, no superlatives that cannot be
+donut (only what Tino checked in Power BI Desktop on 24-11-2026: labels cut with "…" at report size, one measure only,
+no small multiples). No "certified", no accessibility standard names, no superlatives that cannot be
 proven. "Power BI" with capitals. OKviz criteria written as such: "Dynamic format strings", "Conditional formatting (fx)",
 "On-object formatting", "Small multiples", "Report page tooltips", "Drilldown", "Lasso selection". Never mention the
 organisation licence here (policy 100.4).
@@ -47,7 +47,7 @@ market share
 ## Description
 
 ```
-A donut answers one question: what share does each part have. At report size the native Power BI donut often cannot say it: labels are cut with an ellipsis, the value in the center has no title, and with a single measure there is no way to show how a share moved against last year.
+A donut answers one question: what share does each part have. At report size the native Power BI donut often cannot say it: labels are cut with an ellipsis, it takes a single measure, so there is no way to show how a share moved against last year, and it has no small multiples.
 
 Donut & Pie Chart by TCViz keeps the shape you know and fixes the reading. Every slice gets the same label, inside it; a label that does not fit is left out, never cut. Percentages add up to 100. Small categories go into an honest Other you can open. It filters, highlights and formats like any Power BI visual.
 
@@ -57,31 +57,32 @@ BEST FOR
 • Plan reviews: each category against its target, with the misses marked on the slices
 
 READ THE SHARES
+• Donut or pie; inner radius, start angle, space between slices, border; a scale ring at 25/50/75% or every 10%
 • Labels inside every slice with the same content and text size; outside with leader lines when there is no legend or table
 • Percentages rounded by largest remainder, so labels, table and total add up to 100
-• Other (Show at most, Group below %) opens in the data table; selecting it filters by every item inside it
+• Other (Show at most, Group below %) opens in the data table (Format → Data table); selecting it filters by every item inside it, up to 1,000 items
 • Total in the center, or the name, value and share of the slice you point at; the sum of a multiple selection
-• Legend and Data table, independent, each with its position; table header, total row, gridlines, banding, sort by header
+• Legend and Data table, independent, each with its position; header, total row, gridlines, banding, sort by header
 • Summary sentence above the chart; footnotes count negative, zero and blank values instead of hiding them
 
 PRO
-• Compare with: change in share (Δ pp, with a mini bar) and in value (Δ %), new and gone, and a ⚠ where share and value move in opposite directions
+• Compare with: change in share (Δ pp, with a mini bar) and in value (Δ %), new and gone, ⚠ where share and value move in opposite directions; Sort by change
 • Target: % of target with ✓ ≈ ✕ (a shape and a colour), and status icons on the slices that miss it
-• Segment: an outer ring that splits every slice by a second field — its six largest segments and its own Other — with its own labels
-• Small multiples: one donut per value, the same Other, order and colours, and a shared table of the total
+• Segment: an outer ring that splits every slice by a second field, with its own labels
+• Small multiples: one donut per value, the same Other, order and colours, a shared table of the total; Size by total
 • Annotations per category in the table and the tooltip; six collection style templates
 
 FREE AND PRO
-The free version is a complete donut and pie chart: labels, Other, legend, data table, center, summary, footnotes, fonts and every interaction. Pro adds the reading of what moved. Turn on a Pro feature while editing without a licence and it is drawn working, on your own data, under a "Pro preview" watermark that names it; reading view shows the free chart.
+The free version is a complete donut and pie chart: labels, Other, legend, data table, center, summary, footnotes, fonts and every interaction. Pro adds the reading of what moved. Turn on a Pro feature while editing without a licence and it is drawn working, on your own data, under a "Pro preview" watermark that names it (small multiples: the first 4 panels); reading view shows the free chart.
 
 WORKS LIKE A NATIVE VISUAL
-• Cross-filtering, highlight (Other included), bookmarks, Lasso selection, Drilldown, Report page tooltips, context menu
+• Cross-filtering, highlight (Other included), bookmarks, multi-visual selection, Lasso selection, Drilldown, Report page tooltips, context menu
 • Number format of the measure, with Dynamic format strings, so labels match the rest of your report
 • Conditional formatting (fx): rules that colour each slice by its result; also on the border and the table header
-• On-object formatting; a selectable font in every text; Report theme style; Format pane and texts in 12 languages
+• On-object formatting; a font for every text; Report theme style; start screen and setup guide; 12 languages
 
 ACCESSIBILITY
-Keyboard navigation slice by slice with a screen-reader description, high contrast, patterns, focus colour and width, a minimum text size and reduce motion, all in an Accessibility card. Text scales with the size of the visual.
+Keyboard navigation slice by slice (arrows, Home/End) with a screen-reader description, high contrast, patterns, focus colour and width, a minimum text size and reduce motion, all in an Accessibility card. Text scales with the size of the visual.
 
 PRIVACY
 The visual makes no network requests and declares no privileges, so Power BI does not let it send anything anywhere.
@@ -128,7 +129,7 @@ Support: support@tcviz.com — a person reads and replies
 | Privacy | https://tinocallarisa-web.github.io/donut-chart/privacy.html |
 | Terms (EULA) | standard contract as the rest of the portfolio, or https://tinocallarisa-web.github.io/donut-chart/terms.html |
 | Logo | `assets/logo_300x300.png` |
-| Screenshots (in this order) | `assets/Screenshot_1.png` … `Screenshot_5.png`, then `infographic.png`, `infographic-pro.png` (all 1366x768) |
+| Images (Partner Center takes 5, in this order) | `assets/infographic.png`, `infographic-pro.png`, `Screenshot_1.png` (share change), `Screenshot_2.png` (Segment), `Screenshot_3.png` (small multiples); all 1366x768. `Screenshot_4.png` and `Screenshot_5.png` stay in the repo, not in Partner Center |
 | Certification notes | `docs/CERTIFICATION-NOTES-SHORT.txt` |
 | Sample .pbix | built with the **production** package only, with this visual only, no `_test` |
 
