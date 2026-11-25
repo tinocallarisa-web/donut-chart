@@ -177,6 +177,10 @@ export class Visual implements IVisual {
     private tableEl: HTMLDivElement | null = null;
     /** Letra de la tabla dibujada: las etiquetas nunca la superan. */
     private tableFs = 0;
+    /** Leyenda compacta (Content = Legend, o Automatic sin Compare/Target/Annotation en los pozos). */
+    private legendMode = false;
+    /** Segment anidado en Category (cada categoría en un solo segmento): sin anillo exterior. */
+    private segNested = false;
     private canvasCtx: CanvasRenderingContext2D | null = null;
     private fmtCache = new Map<string, valueFormatter.IValueFormatter>();
     private idCache = new Map<string, ISelectionId>();
@@ -725,6 +729,7 @@ export class Visual implements IVisual {
             decimals: this.pctDec("labels"), otherName: this.t("UI_Other", "Other") });
         this.entries = g.entries;
         this.roundedNote = g.adjusted || (this.entries.length > 0 && this.tablePct().adjusted);
+        this.segNested = this.computeSegNested();
         this.assignColors();
         // Pro: cambio frente a Compare with, orden (cabecera / Sort by change) y paneles. Colores antes de ordenar: el
         // color va con la categoría, no con la posición.
@@ -836,10 +841,40 @@ export class Visual implements IVisual {
     /** Funciones Pro que se dibujan: con licencia, o en la vista previa (editando) si el informe las pide. */
     private get cmpOn(): boolean { return !!this.model?.compareCol && this.previewOf("comparison"); }
     private get tgtOn(): boolean { return !!this.model?.targetCol && this.previewOf("targets"); }
-    private get segOn(): boolean { return !!this.model?.segmentCol && this.model.segments.length > 0 && this.previewOf("segments"); }
+    private get segOn(): boolean { return !!this.model?.segmentCol && this.model.segments.length > 0 && !this.segNested && this.previewOf("segments"); }
+
+    /**
+     * Jerarquía anidada en Segment (p. ej. Category = Marca, Segment = Familia): cada categoría con valor en un único
+     * segmento. El anillo exterior sería una partición inútil (cada sector al 100 % de sí mismo): no se dibuja y,
+     * editando, una nota propone intercambiar los campos.
+     */
+    private computeSegNested(): boolean {
+        const m = this.model;
+        if (!m?.segmentCol || !m.segments.length) return false;
+        let any = false;
+        for (const e of this.entries) for (const c of e.members) {
+            let n = 0;
+            for (const a of c.bySeg.values()) if (a.value > 0) n++;
+            if (n > 1) return false;
+            if (n === 1) any = true;
+        }
+        return any;
+    }
     private get smOn(): boolean { return !!this.model?.facetCol && this.model.facets.length > 0 && this.previewOf("small multiples"); }
     private get annOn(): boolean { return !!this.model?.annotationCol && this.settings.annotations?.show !== false && this.previewOf("annotations"); }
-    private get proColumns(): boolean { return this.cmpOn || this.tgtOn || this.annOn || this.segOn; }
+    /** Columnas Pro que la tabla dibuja de verdad (con su pozo, su licencia o vista previa y su interruptor en Legend). */
+    private get proColumns(): boolean {
+        const l = this.settings.legend ?? {};
+        return (this.cmpOn && l.colChange !== false) || (this.tgtOn && l.colTarget !== false) || (this.annOn && l.colNote !== false) || (this.segOn && !!l.segRows);
+    }
+
+    /** Content efectivo de la leyenda: Automatic = Table si hay Compare, Target o Annotation en los pozos; si no, Legend. */
+    private legendContent(): "legend" | "table" {
+        const c = String(this.settings.legend?.content ?? "auto");
+        if (c === "legend" || c === "table") return c;
+        const has = (r: string) => !!this.model?.hasRole(r);
+        return has("compare") || has("target") || has("annotation") ? "table" : "legend";
+    }
 
     private get cmpName(): string { return this.model?.compareCol?.source.displayName ?? ""; }
     private get tgtName(): string { return this.model?.targetCol?.source.displayName ?? ""; }
@@ -1038,6 +1073,10 @@ export class Visual implements IVisual {
                 out.push(this.tf("UI_TargetMismatch", "Target total {0} ≠ actual {1}", a, b));
             }
         }
+        if (this.editing && this.segNested && this.previewOf("segments")) {
+            const cat = m.categoryName, seg = m.segmentCol.source.displayName;
+            out.push(this.tf("UI_SegNested", "Each {0} belongs to one {1}: put {1} in Category and {0} in Segment", cat, seg));
+        }
         if (this.editing && m.annotationCol && m.annotationNotText > 0) out.push(this.t("UI_NotesNotText", "Annotations expects text: set the field to First"));
         return out;
     }
@@ -1050,12 +1089,13 @@ export class Visual implements IVisual {
         let pos = String(s.legend.position);
         const auto = pos === "auto";
         if (auto) pos = W / Math.max(1, H) >= 1.3 ? "right" : "bottom";
-        const ax = pad, ay = pad;
+        this.legendMode = pos !== "off" && this.legendContent() === "legend";
+        let ax = pad, ay = pad;
         let aw = W - 2 * pad, ah = H - 2 * pad;
         if (pos !== "off") {
-            let t = this.fitTable(pos, W, H, pad);
+            let t = this.legendMode ? this.fitLegend(pos, W, H, pad) : this.fitTable(pos, W, H, pad);
             // Con columnas Pro, en Automático se prueba también la otra posición y gana la que menos recorta.
-            if (auto && this.proColumns && (!t || t.score > 0)) {
+            if (!this.legendMode && auto && this.proColumns && (!t || t.score > 0)) {
                 const otra = pos === "right" ? "bottom" : "right";
                 const alt = this.fitTable(otra, W, H, pad);
                 if (alt && (!t || alt.score < t.score)) { if (t) t.el.remove(); t = alt; pos = otra; }
@@ -1064,14 +1104,17 @@ export class Visual implements IVisual {
             if (t) {
                 this.tableEl = t.el;
                 this.tableFs = t.fs;
-                if (pos === "right") {
-                    t.el.style.left = (W - pad - t.w) + "px";
+                t.el.setAttribute("data-pos", pos);
+                if (pos === "right" || pos === "left") {
+                    t.el.style.left = (pos === "right" ? W - pad - t.w : pad) + "px";
                     t.el.style.top = Math.max(pad, Math.round((H - t.h) / 2)) + "px";
                     aw = W - 3 * pad - t.w;
+                    if (pos === "left") ax = 2 * pad + t.w;
                 } else {
-                    t.el.style.top = (H - pad - t.h) + "px";
+                    t.el.style.top = (pos === "bottom" ? H - pad - t.h : pad) + "px";
                     t.el.style.left = Math.max(pad, Math.round((W - t.w) / 2)) + "px";
                     ah = H - 3 * pad - t.h;
+                    if (pos === "top") ay = 2 * pad + t.h;
                 }
             }
         } else {
@@ -1113,15 +1156,16 @@ export class Visual implements IVisual {
         const s = this.settings;
         const mini = W < 200 || H < 140;
         const pro = this.proColumns;
-        const maxW = pos === "right" ? Math.floor(W * (mini ? 0.55 : pro ? 0.64 : 0.5)) : W - 2 * pad;
-        const maxH = pos === "right" ? H - 2 * pad : Math.floor(H * (mini ? 0.6 : pro ? 0.56 : 0.5));
+        const side = pos === "right" || pos === "left";
+        const maxW = side ? Math.floor(W * (mini ? 0.55 : pro ? 0.64 : 0.5)) : W - 2 * pad;
+        const maxH = side ? H - 2 * pad : Math.floor(H * (mini ? 0.6 : pro ? 0.56 : 0.5));
         if (maxW < 40 || maxH < 12) return null;
         const fs0 = this.fz(Number(s.legend.fontSize));
         const floorFs = Math.max(this.minFs, Math.round(fs0 * 0.9 * 2) / 2);
         const o: TableOpts = {
             fs: fs0, expanded: this.otherExpanded, fold: 0, compact: false,
             header: !!s.legend.header, total: s.legend.totalRow === "on" || (s.legend.totalRow === "auto" && s.slices.shape === "pie"),
-            rounded: true, segRows: true, ann: true, bar: true, second: true,
+            rounded: true, segRows: !!s.legend.segRows, ann: s.legend.colNote !== false, bar: true, second: true,
         };
         let score = 0;
         let el: HTMLDivElement | null = null;
@@ -1150,13 +1194,106 @@ export class Visual implements IVisual {
             if (mini && o.header) { o.header = false; score += 20; continue; }
             if (o.total) { o.total = false; score += 20; continue; }
             if (o.header) { o.header = false; score += 30; continue; }
-            if (o.bar && this.cmpOn) { o.bar = false; score += 100; continue; }
-            if (o.second && this.cmpOn && s.compare.changeShown === "both") { o.second = false; score += 100; continue; }
+            const chgCol = this.cmpOn && s.legend.colChange !== false;
+            if (o.bar && chgCol) { o.bar = false; score += 100; continue; }
+            if (o.second && chgCol && s.compare.changeShown === "both") { o.second = false; score += 100; continue; }
             if (o.fs > this.minFs) { o.fs = Math.max(this.minFs, o.fs - 0.5); score += 1000; continue; }
             if (o.fold < this.entries.length - 1) { o.fold = o.fold === 0 ? 2 : o.fold + 1; score += 200; continue; }
             break;
         }
         return null;
+    }
+
+    /**
+     * Leyenda compacta (Content = Legend): muestra + nombre, como la nativa. Arriba/abajo fluye en horizontal y parte en
+     * varias líneas; a izquierda/derecha, lista vertical. La letra sigue las normas de la tabla (k común, nunca bajo
+     * 10 px ni bajo el mínimo de Accessibility, y las etiquetas nunca la superan). Un nombre que no cabe se recorta con
+     * elipsis (el tooltip del elemento lo da entero); no se quita ningún elemento salvo, al final, "+N more" si no caben.
+     */
+    private fitLegend(pos: string, W: number, H: number, pad: number): { el: HTMLDivElement; w: number; h: number; score: number; fs: number } | null {
+        const s = this.settings;
+        const side = pos === "right" || pos === "left";
+        const mini = W < 200 || H < 140;
+        const fs = Math.max(10, this.minFs, this.fz(Number(s.legend.fontSize)));
+        const maxW = side ? Math.floor(W * (mini ? 0.45 : 0.36)) : W - 2 * pad;
+        const maxH = side ? H - 2 * pad : Math.floor(H * (mini ? 0.42 : 0.3));
+        if (maxW < fs * 3 || maxH < fs * 1.3) return null;
+        const n = this.entries.length;
+        for (const withNotes of [true, false]) {
+            for (let fold = 0; fold <= n; fold = fold === 0 ? Math.min(2, n) : fold + 1) {
+                const el = this.buildLegend(side, fs, fold, maxW, withNotes);
+                el.style.visibility = "hidden";
+                el.style.left = "0px"; el.style.top = "0px";
+                el.style.width = "max-content";
+                this.root.appendChild(el);
+                let w = Math.ceil(el.getBoundingClientRect().width);
+                if (w > maxW) { el.style.width = maxW + "px"; w = maxW; }
+                const h = Math.ceil(el.getBoundingClientRect().height);
+                if (h <= maxH) {
+                    el.style.visibility = "";
+                    el.style.width = w + "px";
+                    return { el, w, h, score: fold, fs };
+                }
+                el.remove();
+                if (fold >= n) break;
+            }
+        }
+        return null;
+    }
+
+    private buildLegend(side: boolean, fs: number, fold: number, maxW: number, withNotes: boolean): HTMLDivElement {
+        const s = this.settings;
+        const el = document.createElement("div");
+        el.className = "dn-table dn-legend" + (side ? " dn-legend-v" : " dn-legend-h");
+        el.setAttribute("aria-label", this.t("Obj_legend", "Legend"));
+        const color = this.hc ? this.hcFg : String(s.legend.color || this.ink);
+        Object.assign(el.style, { fontSize: fs + "px", color });
+        const list = document.createElement("div");
+        list.className = "dn-litems";
+        list.setAttribute("role", "list");
+        el.appendChild(list);
+        const n = this.entries.length;
+        const f = Math.min(fold, n);
+        const itemMax = side ? maxW : Math.min(maxW, Math.max(Math.round(fs * 9), Math.floor(maxW * 0.45)));
+        this.entries.slice(0, n - f).forEach((e, idx) => {
+            const it = document.createElement("div");
+            it.className = "dn-li";
+            it.setAttribute("role", "listitem");
+            it.setAttribute("data-key", e.key);
+            it.setAttribute("data-row", e.key);
+            it.setAttribute("data-col", "name");
+            it.setAttribute("data-ri", String(idx));
+            it.setAttribute("aria-label", e.name);
+            it.style.maxWidth = itemMax + "px";
+            it.appendChild(this.swatch(e, this.arcIndexOf(e, idx), fs));
+            const nm = document.createElement("span");
+            nm.className = "dn-lname";
+            nm.textContent = e.name;
+            it.appendChild(nm);
+            list.appendChild(it);
+        });
+        if (f > 0) {
+            const rest = this.entries.slice(n - f);
+            const it = document.createElement("div");
+            it.className = "dn-li dn-lmore";
+            it.setAttribute("role", "listitem");
+            it.textContent = this.tf("UI_More", "+{0} more", String(rest.reduce((a, e) => a + (e.isOther ? e.members.length : 1), 0)));
+            it.style.color = this.mutedInk;
+            list.appendChild(it);
+        }
+        const notes = withNotes ? this.notesList(false) : [];
+        if (notes.length) {
+            const nd = document.createElement("div");
+            nd.className = "dn-note";
+            nd.style.fontSize = Math.max(this.minFs, fs * 0.85) + "px";
+            nd.style.color = this.mutedInk;
+            for (const t of notes) { const d = document.createElement("div"); d.textContent = t; nd.appendChild(d); }
+            el.appendChild(nd);
+        }
+        el.setAttribute("data-fold", String(f));
+        el.setAttribute("data-expanded", "false");
+        el.setAttribute("data-segrows", "false");
+        return el;
     }
 
     private buildTable(o: TableOpts): HTMLDivElement {
@@ -1165,15 +1302,18 @@ export class Visual implements IVisual {
         const el = document.createElement("div");
         el.className = "dn-table";
         el.setAttribute("role", "table");
-        el.setAttribute("aria-label", this.t("Obj_legend", "Legend table"));
+        el.setAttribute("aria-label", this.t("UI_LegendTable", "Legend table"));
         const color = this.hc ? this.hcFg : String(s.legend.color || this.ink);
         Object.assign(el.style, { fontSize: o.fs + "px", color });
-        const cmp = this.cmpOn, tgt = this.tgtOn;
+        const L = s.legend;
+        const cmp = this.cmpOn && L.colChange !== false, tgt = this.tgtOn && L.colTarget !== false;
         const shown = String(s.compare?.changeShown ?? "both");
         const showPP = cmp && shown !== "value";
         const showDV = cmp && (shown === "value" || (shown === "both" && o.second));
         const showBar = showPP && o.bar;
-        const cols: string[] = ["sw", "name", "val", "pct"];
+        const cols: string[] = ["sw", "name"];
+        if (L.colValue !== false) cols.push("val");
+        if (L.colShare !== false) cols.push("pct");
         if (showBar) cols.push("bar");
         if (showPP) cols.push("dpp");
         if (showDV) cols.push("dval");
@@ -2526,7 +2666,7 @@ export class Visual implements IVisual {
         const curKey = cur.kind === "entry" ? cur.e.key : cur.kind === "child" ? cur.c.key : cur.key;
         switch (e.key) {
             case "ArrowRight":
-                if (cur.kind === "entry" && cur.e.isOther && !this.otherExpanded) { this.setExpanded(true); break; }
+                if (cur.kind === "entry" && cur.e.isOther && !this.otherExpanded && !this.legendMode) { this.setExpanded(true); break; }
                 this.focusIdx = Math.min(items.length - 1, this.focusIdx + 1); break;
             case "ArrowDown": this.focusIdx = Math.min(items.length - 1, this.focusIdx + 1); break;
             case "ArrowLeft":
@@ -2829,7 +2969,8 @@ export class Visual implements IVisual {
             for (const g of c.groups) {
                 const spec = OBJECTS[g.obj];
                 const pie = this.settings.slices?.shape === "pie";
-                const slices = spec.props.filter(p => p.name !== g.toggle && !(g.obj === "slices" && p.name === "innerRadius" && pie))
+                const slices = spec.props.filter(p => p.name !== g.toggle && !(g.obj === "slices" && p.name === "innerRadius" && pie)
+                    && !(g.obj === "legend" && !this.legendPropVisible(p.name)))
                     .map(p => this.slice(g.obj, p));
                 spec.props.forEach(p => revert.push({ objectName: g.obj, propertyName: p.name }));
                 const grp: any = { uid: c.uid + "-" + g.obj + "-group", displayName: g.key ? this.t(g.key, g.label) : undefined, slices };
@@ -2853,6 +2994,28 @@ export class Visual implements IVisual {
             cards.push(card);
         }
         return { cards };
+    }
+
+    /**
+     * Qué propiedades de Legend salen en el panel: con Position = Off solo la posición; con Content = Legend nada de la
+     * tabla; con Table, cada columna Pro solo con su pozo puesto y el formato de números solo con su columna visible.
+     */
+    private legendPropVisible(name: string): boolean {
+        const l = this.settings.legend ?? {};
+        if (name === "position") return true;
+        if (l.position === "off") return false;
+        if (name === "content" || name === "fontSize" || name === "color") return true;
+        if (this.legendContent() === "legend") return false;
+        const has = (r: string) => !!this.model?.hasRole(r);
+        switch (name) {
+            case "colChange": return has("compare");
+            case "colTarget": return has("target");
+            case "colNote": return has("annotation");
+            case "segRows": return has("segment");
+            case "displayUnits": case "valueDecimals": return l.colValue !== false;
+            case "percentDecimals": return l.colShare !== false;
+        }
+        return true;
     }
 
     /**
@@ -2936,7 +3099,7 @@ export class Visual implements IVisual {
             case "slices": return [pick("slices", "shape"), pick("slices", "sort"), div, reset("slices"), nav("slices")] as any;
             case "labels": return [toggle("labels", "show"), pick("labels", "content"), pick("labels", "position"), div, reset("labels"), nav("labels")] as any;
             case "center": return [toggle("center", "show"), div, reset("center"), nav("center")] as any;
-            case "legend": return [pick("legend", "position"), toggle("legend", "header"), pick("legend", "totalRow"), div, reset("legend"), nav("legend")] as any;
+            case "legend": return [pick("legend", "position"), pick("legend", "content"), toggle("legend", "header"), pick("legend", "totalRow"), div, reset("legend"), nav("legend")] as any;
             case "scaleRing": return [pick("scaleRing", "mode"), div, reset("scaleRing"), nav("scaleRing")] as any;
             case "smallMultiples": return [toggle("smallMultiples", "titleBold"), toggle("smallMultiples", "border"), toggle("smallMultiples", "sizeByTotal"), div, reset("smallMultiples"), nav("smallMultiples")] as any;
         }

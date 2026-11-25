@@ -471,7 +471,7 @@ export const OBJECTS: Record<string, ObjSpec> = {
     "legend": {
         "name": "legend",
         "key": "Obj_legend",
-        "label": "Legend table",
+        "label": "Legend",
         "props": [
             {
                 "name": "position",
@@ -491,6 +491,16 @@ export const OBJECTS: Record<string, ObjSpec> = {
                         "Right"
                     ],
                     [
+                        "left",
+                        "Enum_position_left",
+                        "Left"
+                    ],
+                    [
+                        "top",
+                        "Enum_position_top",
+                        "Top"
+                    ],
+                    [
                         "bottom",
                         "Enum_position_bottom",
                         "Bottom"
@@ -499,6 +509,30 @@ export const OBJECTS: Record<string, ObjSpec> = {
                         "off",
                         "Enum_position_off",
                         "Off"
+                    ]
+                ]
+            },
+            {
+                "name": "content",
+                "type": "enum",
+                "def": "auto",
+                "key": "Prop_legend_content",
+                "label": "Content",
+                "items": [
+                    [
+                        "auto",
+                        "Enum_content_auto",
+                        "Automatic"
+                    ],
+                    [
+                        "legend",
+                        "Enum_content_legend",
+                        "Legend"
+                    ],
+                    [
+                        "table",
+                        "Enum_content_table",
+                        "Table"
                     ]
                 ]
             },
@@ -532,6 +566,48 @@ export const OBJECTS: Record<string, ObjSpec> = {
                         "Off"
                     ]
                 ]
+            },
+            {
+                "name": "colValue",
+                "type": "bool",
+                "def": true,
+                "key": "Prop_legend_colValue",
+                "label": "Value column"
+            },
+            {
+                "name": "colShare",
+                "type": "bool",
+                "def": true,
+                "key": "Prop_legend_colShare",
+                "label": "Share % column"
+            },
+            {
+                "name": "colChange",
+                "type": "bool",
+                "def": true,
+                "key": "Prop_legend_colChange",
+                "label": "Change column"
+            },
+            {
+                "name": "colTarget",
+                "type": "bool",
+                "def": true,
+                "key": "Prop_legend_colTarget",
+                "label": "% of target column"
+            },
+            {
+                "name": "colNote",
+                "type": "bool",
+                "def": true,
+                "key": "Prop_legend_colNote",
+                "label": "Notes"
+            },
+            {
+                "name": "segRows",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_legend_segRows",
+                "label": "Segment rows"
             },
             {
                 "name": "fontSize",
@@ -929,7 +1005,7 @@ export const PANE: CardSpec[] = [
     {
         "uid": "legend",
         "key": "Obj_legend",
-        "label": "Legend table",
+        "label": "Legend",
         "groups": [
             {
                 "obj": "legend",

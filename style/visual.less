@@ -105,3 +105,14 @@
     .dn-seg, .dn-ticon { cursor: pointer; }
     &.dn-motion .dn-segg { transition: opacity 120ms ease; }
 }
+
+// Leyenda compacta (Content = Legend): muestra + nombre; arriba/abajo fluye y parte líneas, a los lados lista vertical.
+.dn-table.dn-legend {
+    .dn-litems { display: flex; flex-wrap: wrap; column-gap: 1em; row-gap: 0.2em; align-items: center; }
+    &.dn-legend-h .dn-litems { justify-content: center; }
+    &.dn-legend-v .dn-litems { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+    .dn-li { display: flex; align-items: center; gap: 0.4em; min-width: 0; padding: 0.1em 0.15em; cursor: pointer; box-sizing: border-box; }
+    .dn-li svg { display: block; flex-shrink: 0; }
+    .dn-lname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dn-lmore { cursor: default; white-space: nowrap; }
+}

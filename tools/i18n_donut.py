@@ -158,3 +158,15 @@ P.update({
 "Status on slices": ["Estado nas fatias", "État sur les parts", "Status an den Segmenten", "Stato sulle fette", "Status op segmenten", "Stan na wycinkach", "スライス上の状態", "扇区上的状态", "조각에 상태 표시", "Estado en los sectores"],
 "Misses only": ["Só os não cumpridos", "Non atteints uniquement", "Nur verfehlte", "Solo non raggiunti", "Alleen niet gehaald", "Tylko nieosiągnięte", "未達のみ", "仅未达成", "미달만", "Solo los no cumplidos"],
 })
+
+# Leyenda configurable (25-11). Orden: pt, fr, de, it, nl, pl, ja, zh, ko, es
+P.update({
+"Table": ["Tabela", "Tableau", "Tabelle", "Tabella", "Tabel", "Tabela", "テーブル", "表", "표", "Tabla"],
+"Value column": ["Coluna de valor", "Colonne de valeur", "Wertspalte", "Colonna del valore", "Waardekolom", "Kolumna wartości", "値の列", "值列", "값 열", "Columna de valor"],
+"Share % column": ["Coluna de quota %", "Colonne de part %", "Spalte Anteil %", "Colonna quota %", "Kolom aandeel %", "Kolumna udziału %", "シェア % の列", "份额 % 列", "점유율 % 열", "Columna de cuota %"],
+"Change column": ["Coluna de variação", "Colonne de variation", "Spalte Änderung", "Colonna della variazione", "Kolom verandering", "Kolumna zmiany", "変化の列", "变化列", "변화 열", "Columna de cambio"],
+"% of target column": ["Coluna % da meta", "Colonne % de l’objectif", "Spalte % vom Ziel", "Colonna % dell’obiettivo", "Kolom % van doel", "Kolumna % celu", "目標比 % の列", "目标完成率列", "목표 대비 % 열", "Columna % del objetivo"],
+"Notes": ["Notas", "Notes", "Notizen", "Note", "Notities", "Notatki", "メモ", "备注", "메모", "Notas"],
+"Segment rows": ["Linhas de segmento", "Lignes de segment", "Segmentzeilen", "Righe dei segmenti", "Segmentrijen", "Wiersze segmentów", "セグメントの行", "细分行", "세그먼트 행", "Filas de segmento"],
+"Each {0} belongs to one {1}: put {1} in Category and {0} in Segment": ["Cada {0} pertence a um só {1}: coloque {1} em Categoria e {0} em Segmento", "Chaque {0} appartient à un seul {1} : placez {1} dans Catégorie et {0} dans Segment", "Jede(s) {0} gehört zu genau einem {1}: {1} in Kategorie und {0} in Segment ziehen", "Ogni {0} appartiene a un solo {1}: metti {1} in Categoria e {0} in Segmento", "Elke {0} hoort bij één {1}: zet {1} in Categorie en {0} in Segment", "Każdy element {0} należy do jednego {1}: umieść {1} w Kategorii, a {0} w Segmencie", "各 {0} は 1 つの {1} にのみ属します: {1} をカテゴリに、{0} をセグメントに入れてください", "每个 {0} 只属于一个 {1}：将 {1} 放入类别，{0} 放入细分", "각 {0}은(는) 하나의 {1}에만 속합니다. {1}을(를) 범주에, {0}을(를) 세그먼트에 넣으세요", "Cada {0} pertenece a un solo {1}: pon {1} en Categoría y {0} en Segmento"],
+})

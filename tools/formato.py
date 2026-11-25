@@ -80,10 +80,21 @@ OBJECTS = [
         ("mode", "Marks", "enum", "quarters", {"items": [("off", "Off"), ("quarters", "Quarters (25 %)"), ("tens", "Every 10 %")]}),
         ("color", "Color", "fill", "#605E5C", {}),
     ]),
-    ("legend", "Legend table", [
-        ("position", "Position", "enum", "auto", {"items": [("auto", "Automatic"), ("right", "Right"), ("bottom", "Bottom"), ("off", "Off")]}),
+    # Leyenda (nombre interno `legend`, lo detecta OKviz). Content: Legend = muestra + nombre, compacta como la nativa;
+    # Table = leyenda-tabla con columnas. Automatic = Table si hay Compare, Target o Annotation en los pozos; si no, Legend.
+    # Las columnas solo salen en el panel con Content = Table y cada una solo con su pozo puesto (getFormattingModel).
+    ("legend", "Legend", [
+        ("position", "Position", "enum", "auto", {"items": [("auto", "Automatic"), ("right", "Right"), ("left", "Left"),
+                                                             ("top", "Top"), ("bottom", "Bottom"), ("off", "Off")]}),
+        ("content", "Content", "enum", "auto", {"items": [("auto", "Automatic"), ("legend", "Legend"), ("table", "Table")]}),
         ("header", "Show header", "bool", True, {}),
         ("totalRow", "Show total row", "enum", "auto", {"items": [("auto", "Automatic (pie)"), ("on", "On"), ("off", "Off")]}),
+        ("colValue", "Value column", "bool", True, {}),
+        ("colShare", "Share % column", "bool", True, {}),
+        ("colChange", "Change column", "bool", True, {}),
+        ("colTarget", "% of target column", "bool", True, {}),
+        ("colNote", "Notes", "bool", True, {}),
+        ("segRows", "Segment rows", "bool", False, {}),
         ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
         ("color", "Text color", "fill", "#252423", {}),
     ] + NUM_FORMAT + PCT_FORMAT),
@@ -132,7 +143,7 @@ PANE = [
     ("labels", "Data labels", [("labels", None, "show")]),
     ("center", "Center", [("center", None, "show")]),
     ("scaleRing", "Scale ring", [("scaleRing", None, None)]),
-    ("legend", "Legend table", [("legend", None, None)]),
+    ("legend", "Legend", [("legend", None, None)]),
     ("compare", "Compare with (Pro)", [("compare", None, None)]),
     ("target", "Target (Pro)", [("target", None, None)]),
     ("annotations", "Annotations (Pro)", [("annotations", None, "show")]),

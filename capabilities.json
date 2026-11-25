@@ -614,7 +614,7 @@
       }
     },
     "legend": {
-      "displayName": "Legend table",
+      "displayName": "Legend",
       "displayNameKey": "Obj_legend",
       "properties": {
         "position": {
@@ -633,6 +633,16 @@
                 "displayNameKey": "Enum_position_right"
               },
               {
+                "value": "left",
+                "displayName": "Left",
+                "displayNameKey": "Enum_position_left"
+              },
+              {
+                "value": "top",
+                "displayName": "Top",
+                "displayNameKey": "Enum_position_top"
+              },
+              {
                 "value": "bottom",
                 "displayName": "Bottom",
                 "displayNameKey": "Enum_position_bottom"
@@ -641,6 +651,29 @@
                 "value": "off",
                 "displayName": "Off",
                 "displayNameKey": "Enum_position_off"
+              }
+            ]
+          }
+        },
+        "content": {
+          "displayName": "Content",
+          "displayNameKey": "Prop_legend_content",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Automatic",
+                "displayNameKey": "Enum_content_auto"
+              },
+              {
+                "value": "legend",
+                "displayName": "Legend",
+                "displayNameKey": "Enum_content_legend"
+              },
+              {
+                "value": "table",
+                "displayName": "Table",
+                "displayNameKey": "Enum_content_table"
               }
             ]
           }
@@ -673,6 +706,48 @@
                 "displayNameKey": "Enum_totalRow_off"
               }
             ]
+          }
+        },
+        "colValue": {
+          "displayName": "Value column",
+          "displayNameKey": "Prop_legend_colValue",
+          "type": {
+            "bool": true
+          }
+        },
+        "colShare": {
+          "displayName": "Share % column",
+          "displayNameKey": "Prop_legend_colShare",
+          "type": {
+            "bool": true
+          }
+        },
+        "colChange": {
+          "displayName": "Change column",
+          "displayNameKey": "Prop_legend_colChange",
+          "type": {
+            "bool": true
+          }
+        },
+        "colTarget": {
+          "displayName": "% of target column",
+          "displayNameKey": "Prop_legend_colTarget",
+          "type": {
+            "bool": true
+          }
+        },
+        "colNote": {
+          "displayName": "Notes",
+          "displayNameKey": "Prop_legend_colNote",
+          "type": {
+            "bool": true
+          }
+        },
+        "segRows": {
+          "displayName": "Segment rows",
+          "displayNameKey": "Prop_legend_segRows",
+          "type": {
+            "bool": true
           }
         },
         "fontSize": {

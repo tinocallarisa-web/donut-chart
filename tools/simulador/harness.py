@@ -62,8 +62,18 @@ def measure(name, role, values, fmt=None, highlights=None):
     return m
 
 
+def tabla_por_defecto(objects, seg_rows=False):
+    """Los casos anteriores al 25-11 prueban la leyenda-tabla: Content = Table explícito (Automatic con solo Values da
+    la leyenda compacta) y, en los de Segment, Segment rows encendidas (por defecto apagadas desde el 25-11)."""
+    lg = objects.setdefault("legend", {})
+    lg.setdefault("content", "table")
+    if seg_rows:
+        lg.setdefault("segRows", True)
+    return objects
+
+
 def dv_caso_a(objects=None, guia=False, highlights=None, negativos=False, colores=None, fmt=None):
-    objects = json.loads(json.dumps(objects or {}))
+    objects = tabla_por_defecto(json.loads(json.dumps(objects or {})))
     if not guia:
         objects.setdefault("style", {}).setdefault("guide", False)
     marcas = list(MARCAS)
@@ -82,7 +92,7 @@ def dv_caso_a(objects=None, guia=False, highlights=None, negativos=False, colore
 
 def dv_caso_a_filas(objects=None):
     """Las mismas marcas en filas Zona × Canal, ordenadas por valor (como llegan de Desktop): agregación por clave."""
-    objects = json.loads(json.dumps(objects or {}))
+    objects = tabla_por_defecto(json.loads(json.dumps(objects or {})), seg_rows=True)
     objects.setdefault("style", {}).setdefault("guide", False)
     g = defaultdict(float)
     for r in VENTAS:
@@ -99,7 +109,7 @@ def dv_caso_f(n=None, segmento=False):
     filas = DETALLE if n is None else DETALLE[:n]
     cats = [col("PDV", "category", [r["PDV"] for r in filas]), col("SKU", "facet", [r["SKU"] for r in filas])]
     ms = [measure("Litros", "values", [r["Litros"] for r in filas])]
-    md = {"objects": {"style": {"guide": False}}, "columns": [c["source"] for c in cats] + [m["source"] for m in ms]}
+    md = {"objects": {"style": {"guide": False}, "legend": {"content": "table"}}, "columns": [c["source"] for c in cats] + [m["source"] for m in ms]}
     if segmento:
         md["segment"] = {}
     return {"metadata": md, "categorical": {"categories": cats, "values": ms}}
@@ -108,10 +118,13 @@ def dv_caso_f(n=None, segmento=False):
 TOTAL_F = sum(r["Litros"] for r in DETALLE)
 
 
-def dv_ventas(objects=None, compare=False, target=False, nota=False, facet=None, segment=None, marcas_excl=(), sin_aa=()):
+def dv_ventas(objects=None, compare=False, target=False, nota=False, facet=None, segment=None, marcas_excl=(), sin_aa=(), legacy=True):
     """Hoja Ventas agregada como Desktop: una fila por Marca (× Zona × Canal si se piden), medidas por fila.
-    Nota llega como "First Nota" (texto o None). sin_aa: marcas con Litros AA vacío (para "new" con blanco)."""
+    Nota llega como "First Nota" (texto o None). sin_aa: marcas con Litros AA vacío (para "new" con blanco).
+    legacy: Content = Table y Segment rows encendidas, como se probaba antes del 25-11."""
     objects = json.loads(json.dumps(objects or {}))
+    if legacy:
+        tabla_por_defecto(objects, seg_rows=True)
     objects.setdefault("style", {}).setdefault("guide", False)
     keys = ["Marca"] + ([facet] if facet else []) + ([segment] if segment else [])
     g = OrderedDict()
