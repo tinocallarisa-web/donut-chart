@@ -198,5 +198,9 @@ P.update({
 "Value color": ["Cor do valor", "Couleur de la valeur", "Farbe des Werts", "Colore del valore", "Kleur waarde", "Kolor wartości", "値の色", "值颜色", "값 색", "Color del valor"],
 "Value size": ["Tamanho do valor", "Taille de la valeur", "Größe des Werts", "Dimensione del valore", "Grootte waarde", "Rozmiar wartości", "値のサイズ", "值大小", "값 크기", "Tamaño del valor"],
 "Data table": ["Tabela de dados", "Tableau de données", "Datentabelle", "Tabella dati", "Gegevenstabel", "Tabela danych", "データ テーブル", "数据表", "데이터 테이블", "Tabla de datos"],
+"Footnotes": ["Notas de rodapé", "Notes de bas de page", "Fußnoten", "Note a piè di pagina", "Voetnoten", "Przypisy", "脚注", "脚注", "각주", "Notas al pie"],
+"Show footnotes": ["Mostrar notas de rodapé", "Afficher les notes", "Fußnoten anzeigen", "Mostra note", "Voetnoten weergeven", "Pokaż przypisy", "脚注を表示", "显示脚注", "각주 표시", "Mostrar notas al pie"],
+"⚠ {0}: value up, share down": ["⚠ {0}: valor sobe, quota desce", "⚠ {0} : valeur en hausse, part en baisse", "⚠ {0}: Wert steigt, Anteil sinkt", "⚠ {0}: valore in aumento, quota in calo", "⚠ {0}: waarde omhoog, aandeel omlaag", "⚠ {0}: wartość rośnie, udział spada", "⚠ {0}: 値は増加、シェアは減少", "⚠ {0}：值上升，份额下降", "⚠ {0}: 값은 증가, 점유율은 감소", "⚠ {0}: el valor sube, la cuota baja"],
+"⚠ {0}: value down, share up": ["⚠ {0}: valor desce, quota sobe", "⚠ {0} : valeur en baisse, part en hausse", "⚠ {0}: Wert sinkt, Anteil steigt", "⚠ {0}: valore in calo, quota in aumento", "⚠ {0}: waarde omlaag, aandeel omhoog", "⚠ {0}: wartość spada, udział rośnie", "⚠ {0}: 値は減少、シェアは増加", "⚠ {0}：值下降，份额上升", "⚠ {0}: 값은 감소, 점유율은 증가", "⚠ {0}: el valor baja, la cuota sube"],
 })
 

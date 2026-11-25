@@ -1087,6 +1087,57 @@
         }
       }
     },
+    "footnotes": {
+      "displayName": "Footnotes",
+      "displayNameKey": "Obj_footnotes",
+      "properties": {
+        "show": {
+          "displayName": "Show footnotes",
+          "displayNameKey": "Prop_footnotes_show",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Automatic",
+                "displayNameKey": "Enum_show_auto"
+              },
+              {
+                "value": "off",
+                "displayName": "Off",
+                "displayNameKey": "Enum_show_off"
+              }
+            ]
+          }
+        },
+        "fontSize": {
+          "displayName": "Text size",
+          "displayNameKey": "Prop_footnotes_fontSize",
+          "type": {
+            "numeric": true
+          }
+        },
+        "fontFamily": {
+          "displayName": "Font",
+          "displayNameKey": "Prop_footnotes_fontFamily",
+          "type": {
+            "formatting": {
+              "fontFamily": true
+            }
+          }
+        },
+        "color": {
+          "displayName": "Text color",
+          "displayNameKey": "Prop_footnotes_color",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        }
+      }
+    },
     "summary": {
       "displayName": "Summary",
       "displayNameKey": "Obj_summary",

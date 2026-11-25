@@ -792,7 +792,7 @@ export class Visual implements IVisual {
             s.slices.shape === "pie" ? this.t("Enum_shape_pie", "Pie") : this.t("Enum_shape_donut", "Donut"),
             m.measureName, m.categoryName, String(m.cats.length), this.fmtFull(m.total, m.format)));
         if (!this.entries.length) {
-            this.message(W, H, this.t("UI_NoPositive", "No positive values to draw."), this.notesList());
+            this.message(W, H, this.t("UI_NoPositive", "No positive values to draw."), this.notesList({ pct: false }));
             this.renderGuide(W, H);
             this.updateWatermark();
             return;
@@ -1109,32 +1109,35 @@ export class Visual implements IVisual {
 
     // ── Notas bajo la tabla ──────────────────────────────────────────────────
 
-    private notesList(withRounded = true): string[] {
+    /**
+     * Notas al pie. Regla (Tino, 25-11): una nota solo sale si lo que explica está a la vista.
+     *  - Excluded (negativos, blancos, ceros) y filas incompletas o cargando: siempre (afectan al dibujo entero).
+     *  - Redondeo a 100 %: solo con porcentajes visibles (etiquetas con % o columna Share de la tabla).
+     *  - ⚠ de mezcla: solo por cada fila con ⚠ dibujado, con su nombre y el sentido («⚠ Zumos: value up, share down»).
+     *  - new / gone: solo si la tabla enseña esas marcas.
+     *  - El aviso «Target total ≠ actual» se retira: el % de objetivo de cada categoría no depende de él y el total ya
+     *    se compara con la suma de objetivos; al lector no le añadía nada.
+     * Footnotes = Off las quita todas; los avisos de configuración (solo editando) se quedan.
+     */
+    private notesList(v: { pct: boolean; mix?: { name: string; ch: Change }[]; tags?: boolean }): string[] {
         const m = this.model;
         if (!m) return [];
         const out: string[] = [];
-        const ex = m.excluded;
-        const parts: string[] = [];
-        if (ex.negative) parts.push(this.tf("UI_ExNeg", "{0} negative ({1})", this.int(ex.negative), this.fmtCompact(ex.negativeSum, m.format)));
-        if (ex.blank) parts.push(this.tf("UI_ExBlank", "{0} blank", this.int(ex.blank)));
-        if (ex.zero) parts.push(this.tf("UI_ExZero", "{0} zero", this.int(ex.zero)));
-        if (parts.length) out.push(this.tf("UI_Excluded", "Excluded: {0}", parts.join(", ")));
-        if (this.moreState === "incomplete") out.push(this.tf("UI_Incomplete", "Showing {0} rows; Other is incomplete", this.int(m.rowCount)));
-        else if (this.moreState === "loading") out.push(this.tf("UI_Loading", "Loading more rows: {0} so far", this.int(m.rowCount)));
-        if (withRounded && this.roundedNote) out.push(this.t("UI_Rounded", "Percentages rounded to add up to 100%"));
-        if (this.cmpOn) {
-            const chs: Change[] = [];
-            for (const e of this.entries.concat(this.goneEntries)) { if (e.ch) chs.push(e.ch); if (e.memberCh && this.otherExpanded) chs.push(...e.memberCh); }
-            if (chs.some(c => c.mix)) out.push(this.t("UI_MixNote", "⚠ Share and value move in opposite directions"));
-            if (chs.some(c => c.isNew || c.isGone)) out.push(this.tf("UI_NewNote", "new: no value in {0} · gone: no value now", this.cmpName));
-        }
-        if (this.tgtOn) {
-            const tt = this.targetTotals();
-            if (tt.mismatch) {
-                let a = this.fmtCompact(tt.tgt, m.format), b = this.fmtCompact(m.total, m.format);
-                if (a === b) { a = this.fmtFull(tt.tgt, m.format); b = this.fmtFull(m.total, m.format); }
-                out.push(this.tf("UI_TargetMismatch", "Target total {0} ≠ actual {1}", a, b));
-            }
+        if (this.settings.footnotes?.show !== "off") {
+            const ex = m.excluded;
+            const parts: string[] = [];
+            if (ex.negative) parts.push(this.tf("UI_ExNeg", "{0} negative ({1})", this.int(ex.negative), this.fmtCompact(ex.negativeSum, m.format)));
+            if (ex.blank) parts.push(this.tf("UI_ExBlank", "{0} blank", this.int(ex.blank)));
+            if (ex.zero) parts.push(this.tf("UI_ExZero", "{0} zero", this.int(ex.zero)));
+            if (parts.length) out.push(this.tf("UI_Excluded", "Excluded: {0}", parts.join(", ")));
+            if (this.moreState === "incomplete") out.push(this.tf("UI_Incomplete", "Showing {0} rows; Other is incomplete", this.int(m.rowCount)));
+            else if (this.moreState === "loading") out.push(this.tf("UI_Loading", "Loading more rows: {0} so far", this.int(m.rowCount)));
+            if (v.pct && this.roundedNote) out.push(this.t("UI_Rounded", "Percentages rounded to add up to 100%"));
+            const up = (v.mix ?? []).filter(x => (x.ch.dval ?? 0) > 0).map(x => x.name);
+            const down = (v.mix ?? []).filter(x => !((x.ch.dval ?? 0) > 0)).map(x => x.name);
+            if (up.length) out.push(this.tf("UI_MixUp", "⚠ {0}: value up, share down", up.join(", ")));
+            if (down.length) out.push(this.tf("UI_MixDown", "⚠ {0}: value down, share up", down.join(", ")));
+            if (v.tags) out.push(this.tf("UI_NewNote", "new: no value in {0} · gone: no value now", this.cmpName));
         }
         if (this.editing && this.segNested && this.previewOf("segments")) {
             const cat = m.categoryName, seg = m.segmentCol.source.displayName;
@@ -1142,6 +1145,24 @@ export class Visual implements IVisual {
         }
         if (this.editing && m.annotationCol && m.annotationNotText > 0) out.push(this.t("UI_NotesNotText", "Annotations expects text: set the field to First"));
         return out;
+    }
+
+    /** ¿Las etiquetas enseñan porcentajes? (para la nota de redondeo cuando no hay tabla). */
+    private get labelsShowPct(): boolean {
+        const s = this.settings;
+        if (!s.labels.show) return false;
+        const c = String(s.labels.content);
+        return c !== "value" && c !== "name";
+    }
+
+    /** Estilo de las notas al pie (Footnotes): tamaño con la k común, fuente y color propios. */
+    private styleFootnotes(el: HTMLElement, maxFs?: number): void {
+        const f = this.settings.footnotes ?? {};
+        let fs = Math.max(this.minFs, this.fz(Number(f.fontSize) || 9));
+        if (maxFs !== undefined) fs = Math.max(this.minFs, Math.min(fs, maxFs));
+        el.style.fontSize = fs + "px";
+        el.style.color = this.hc ? this.hcFg : String(f.color || this.mutedInk);
+        Visual.styleFont(el, this.fontOf("footnotes"));
     }
 
     // ── Disposición ──────────────────────────────────────────────────────────
@@ -1203,11 +1224,13 @@ export class Visual implements IVisual {
             if (t) { this.tableEl = t.el; this.tableFs = t.fs; place(t, tpos); }
         }
         if (!this.tableEl) {
-            const notes = this.notesList(false);
+            // Sin tabla no hay ⚠ ni marcas new/gone dibujadas: solo lo que afecta al dibujo y el redondeo si hay % en etiquetas.
+            const notes = this.notesList({ pct: this.labelsShowPct });
             if (notes.length) {
                 const n = document.createElement("div");
                 n.className = "dn-notes";
-                Object.assign(n.style, { left: ax + "px", width: aw + "px", fontSize: Math.max(this.minFs, this.fz(8.5)) + "px", color: this.mutedInk });
+                Object.assign(n.style, { left: ax + "px", width: aw + "px" });
+                this.styleFootnotes(n);
                 for (const t of notes) { const d = document.createElement("div"); d.textContent = t; n.appendChild(d); }
                 this.root.appendChild(n);
                 const h = n.offsetHeight;
@@ -1457,7 +1480,7 @@ export class Visual implements IVisual {
             it.style.color = this.mutedInk;
             list.appendChild(it);
         }
-        const notes = withNotes ? this.notesList(false) : [];
+        const notes = withNotes ? this.notesList({ pct: false }) : [];
         if (notes.length) {
             const nd = document.createElement("div");
             nd.className = "dn-note";
@@ -1712,14 +1735,25 @@ export class Visual implements IVisual {
             r.forEach(c => { c.style.borderTopColor = this.hc ? this.hcFg : alpha(color, 0.35); });
         }
         this.styleGrid(grid, cols.length, color);
-        // Avisos del pie: separados de la tabla por una línea fina y un punto menos de letra.
-        const notes = this.notesList(o.rounded);
+        // Avisos del pie: separados de la tabla por una línea fina y, como mucho, un punto menos de letra. Solo lo que la
+        // tabla enseña: el ⚠ de las filas que lo llevan dibujado, las marcas new/gone si salen, el redondeo si hay %.
+        const byKey = new Map<string, { name: string; ch: Change }>();
+        for (const e of this.entries) {
+            if (e.ch) byKey.set(e.key, { name: e.name, ch: e.ch });
+            if (e.memberCh) e.members.forEach((c, i) => { if (e.memberCh[i]) byKey.set(c.key, { name: c.name, ch: e.memberCh[i] }); });
+        }
+        const mixShown: { name: string; ch: Change }[] = [];
+        const vistos = new Set<string>();
+        grid.querySelectorAll(".dn-warn").forEach(w => {
+            const k = (w.closest("[data-row]") as HTMLElement | null)?.getAttribute("data-row");
+            if (k && !vistos.has(k) && byKey.has(k)) { vistos.add(k); mixShown.push(byKey.get(k)); }
+        });
+        const notes = this.notesList({ pct: o.rounded && (L.colShare !== false || this.labelsShowPct), mix: mixShown, tags: !!grid.querySelector(".dn-tag") });
         if (notes.length) {
             const nd = document.createElement("div");
             nd.className = "dn-note dn-foot";
-            nd.style.fontSize = Math.max(this.minFs, o.fs - 1) + "px";
+            this.styleFootnotes(nd, o.fs - 1);
             nd.style.borderTopColor = this.hc ? this.hcFg : alpha(color, 0.18);
-            nd.style.color = muted;
             for (const t of notes) { const d = document.createElement("div"); d.textContent = t; nd.appendChild(d); }
             el.appendChild(nd);
         }
@@ -3368,6 +3402,7 @@ export class Visual implements IVisual {
         const has = (r: string) => !!this.model?.hasRole(r);
         if (obj === "labels" && name === "segment") return has("segment");
         if (obj === "summary") return name === "show" || this.summaryOn;
+        if (obj === "footnotes") return name === "show" || this.settings.footnotes?.show !== "off";
         if (obj === "legend") return name === "position" || this.settings.legend?.position !== "off";
         if (obj !== "dataTable") return true;
         const l = this.settings.dataTable ?? {};

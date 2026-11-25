@@ -133,6 +133,13 @@ OBJECTS = [
         ("underline", "Underline", "bool", False, {}),
         ("color", "Text color", "fill", "#252423", {}),
     ] + NUM_FORMAT + PCT_FORMAT),
+    # Notas al pie: Automatic = solo las que explican algo visible (ver notesList en visual.ts); Off = ninguna.
+    ("footnotes", "Footnotes", [
+        ("show", "Show footnotes", "enum", "auto", {"items": [("auto", "Automatic"), ("off", "Off")]}),
+        ("fontSize", "Text size", "num", 9, {"min": 6, "max": 24}),
+        ("fontFamily", "Font", "font", "", {}),
+        ("color", "Text color", "fill", "", {}),
+    ]),
     # Frase de resumen arriba del gráfico. Automatic = encendida con Compare en los pozos. Cuotas: gratis; cambio y
     # objetivo: Pro (como sus columnas).
     ("summary", "Summary", [
@@ -194,6 +201,7 @@ FONTS = {
     "legend": [("font", "Font", "fontFamily", "fontSize", "bold", "italic", "underline")],
     "dataTable": [("font", "Font", "fontFamily", "fontSize", "bold", "italic", "underline")],
     "summary": [("font", "Font", "fontFamily", "fontSize", "bold", "italic", "underline")],
+    "footnotes": [("font", "Font", "fontFamily", "fontSize", None, None, None)],
     "smallMultiples": [("titleFont", "Title font", "titleFontFamily", "titleFontSize", "titleBold", "titleItalic", "titleUnderline")],
 }
 GROUPS = {"title": "Title", "value": "Value"}
@@ -207,6 +215,7 @@ PANE = [
     ("scaleRing", "Scale ring", [("scaleRing", None, None)]),
     ("legend", "Legend", [("legend", None, None)]),
     ("dataTable", "Data table", [("dataTable", None, None)]),
+    ("footnotes", "Footnotes", [("footnotes", None, None)]),
     ("summary", "Summary", [("summary", None, None)]),
     ("compare", "Compare with (Pro)", [("compare", None, None)]),
     ("target", "Target (Pro)", [("target", None, None)]),

@@ -496,7 +496,7 @@ async def bloque2(b):
                 check(f"{lbl}: ⚠ solo donde cuota y valor van al revés (Fruitia)", mix == ["Fruitia"], str(mix))
                 if W >= 500:
                     check(f"{lbl}: cabecera 'Total +4.1% vs Litros AA'", any("Total +4.1%" in c and "Litros AA" in c for c in i["cap"]), str(i["cap"]))
-                    check(f"{lbl}: nota al pie del aviso de mezcla", "opposite directions" in i["notes"], "")
+                    check(f"{lbl}: nota al pie del ⚠ con su nombre y sentido", "⚠ Fruitia: value up, share down" in i["notes"], i["notes"][-160:])
                 check(f"{lbl}: minibarras divergentes (Nord a la izquierda)", W < 500 or (n and n["bar"] == "-"), str(n))
             else:
                 check(f"{lbl}: con poco sitio sigue habiendo una columna de cambio", any(r["dval"] for r in fs), str(fs[:2]))
@@ -567,7 +567,7 @@ async def bloque2(b):
             check(f"{lbl}: Nord Cola cumple (✓)", nc and "✓" in nc["tgt"], str(nc))
             cf = fila(i, "Caf")
             check(f"{lbl}: Cafè Nord sin objetivo → —", cf and cf["tgt"] == "—", str(cf))
-        check(f"{lbl}: aviso de totales (14.0M ≠ 13.9M)", "Target total 14.0M ≠ actual 13.9M" in i["notes"] or W < 500, i["notes"][-140:])
+        check(f"{lbl}: sin el aviso «Target total ≠ actual» (retirado el 25-11)", "Target total" not in i["notes"], i["notes"][-140:])
         if W >= 500:
             ti = next((t for t in i["ticons"] if "T" in t["key"] and "Nord" in t["key"] and t["st"] == "✕"), None)
             check(f"{lbl}: icono ✕ en el borde del sector de Tè Nord", ti is not None, str([(t['key'], t['st']) for t in i["ticons"]]))
@@ -1434,6 +1434,57 @@ async def tanda_sm_titulos(b):
     await pg.close()
 
 
+# ── Notas al pie (25-11) ───────────────────────────────────────────────────────
+
+async def tanda_notas(b):
+    print("25-11 (6) · Notas al pie: solo si lo que explican está a la vista; Footnotes Automatic / Off")
+    NT = "() => Array.from(document.querySelectorAll('.dn-notes, .dn-foot')).map(e => e.textContent).join(' | ')"
+    for W, H in [(960, 540), (380, 260)]:
+        pg = await page(b, dv_ventas({"dataTable": {"position": "off"}, "legend": {"position": "left"}}, cat="Familia", compare=True, target=True, legacy=False), W, H, name=f"notas_tabla_off_{W}x{H}")
+        t = await pg.evaluate(NT)
+        hay_warn = await pg.evaluate("() => !!document.querySelector('.dn-warn')")
+        check(f"tabla Off {W}x{H} (caso de Tino): sin nota de ⚠ (no hay ⚠ dibujado)", not hay_warn and "⚠" not in t, t)
+        check(f"tabla Off {W}x{H}: sin nota de objetivo", "Target" not in t, t)
+        check(f"tabla Off {W}x{H}: la nota de redondeo solo si hay % en las etiquetas", ("rounded" not in t) or await pg.evaluate("() => Array.from(document.querySelectorAll('text.dn-label')).some(e => e.textContent.includes('%'))"), t)
+        await eventos(pg, f"notas tabla off {W}x{H}")
+        await pg.close()
+    pg = await page(b, dv_ventas({"dataTable": {"position": "off"}, "labels": {"content": "value"}}, compare=True, legacy=False), 960, 540)
+    t = await pg.evaluate(NT)
+    check("tabla Off y etiquetas solo con valor: sin nota de redondeo", "rounded" not in t, t)
+    await pg.close()
+    pg = await page(b, dv_ventas({}, compare=True, target=True, legacy=False), 960, 540, name="notas_tabla_on_960x540")
+    t = await pg.evaluate(NT)
+    warns = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-warn')).map(w => w.closest('[data-row]').getAttribute('data-row'))")
+    check("tabla On con ⚠ visible: la nota sale con el nombre y el sentido", warns and "⚠ Fruitia: value up, share down" in t, f"{warns} | {t}")
+    check("tabla On: sin nota de objetivo", "Target total" not in t, t)
+    await eventos(pg, "notas tabla on")
+    await pg.close()
+    pg = await page(b, dv_ventas({"dataTable": {"colChange": False}}, compare=True, target=True, legacy=False), 960, 540)
+    t = await pg.evaluate(NT)
+    check("tabla On sin columna Change: sin ⚠ ni su nota", "⚠" not in t and not await pg.evaluate("() => !!document.querySelector('.dn-warn')"), t)
+    await pg.close()
+    pg = await page(b, dv_ventas({}, compare=True, target=True, legacy=False), 960, 540, locale="es-ES")
+    t = await pg.evaluate(NT)
+    check("nota del ⚠ en español", "⚠ Fruitia: el valor sube, la cuota baja" in t, t)
+    await pg.close()
+    for nombre, dv in [("notas_off_tabla", dv_ventas({"footnotes": {"show": "off"}}, compare=True, target=True, legacy=False)),
+                       ("notas_off_negativos", dv_caso_a({"footnotes": {"show": "off"}}, negativos=True, legacy=False))]:
+        W, H = 960, 540
+        pg = await page(b, dv, W, H, name=nombre)
+        t = await pg.evaluate(NT)
+        check("Footnotes Off: ninguna nota al pie", t.strip(" |") == "", t)
+        await eventos(pg, "footnotes off")
+        await pg.close()
+    pg = await page(b, dv_caso_a({}, negativos=True, legacy=False), 960, 540)
+    t = await pg.evaluate(NT)
+    check("Footnotes Automatic: «Excluded» siempre que haya filas fuera del donut", "Excluded" in t, t)
+    await pg.close()
+    pg = await page(b, dv_ventas({"footnotes": {"fontSize": 12, "fontFamily": "Georgia", "color": {"solid": {"color": "#C00000"}}}}, compare=True, legacy=False), 960, 540)
+    st = await pg.evaluate("() => { const e = document.querySelector('.dn-foot, .dn-notes'); if (!e) return null; const c = getComputedStyle(e); return [c.fontFamily, c.color, parseFloat(c.fontSize), parseFloat(getComputedStyle(document.querySelector('.dn-table')).fontSize)]; }")
+    check("Footnotes: fuente y color propios; en la tabla, como mucho un punto menos que su letra", st and "Georgia" in st[0] and st[1] == "rgb(192, 0, 0)" and st[2] <= st[3] - 1 + 0.01, str(st))
+    await pg.close()
+
+
 def ventas_por_par(a, b_):
     d = defaultdict(float)
     for r in VENTAS:
@@ -1444,6 +1495,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--notas" in sys.argv:
+            await tanda_notas(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--smtitulos" in sys.argv:
             await tanda_sm_titulos(b)
             await b.close()
@@ -1767,6 +1824,7 @@ async def main():
         await tanda_25b(b)
         await tanda_fuentes(b)
         await tanda_sm_titulos(b)
+        await tanda_notas(b)
         await b.close()
     print()
     print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))

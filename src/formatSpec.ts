@@ -939,6 +939,55 @@ export const OBJECTS: Record<string, ObjSpec> = {
             }
         ]
     },
+    "footnotes": {
+        "name": "footnotes",
+        "key": "Obj_footnotes",
+        "label": "Footnotes",
+        "props": [
+            {
+                "name": "show",
+                "type": "enum",
+                "def": "auto",
+                "key": "Prop_footnotes_show",
+                "label": "Show footnotes",
+                "items": [
+                    [
+                        "auto",
+                        "Enum_show_auto",
+                        "Automatic"
+                    ],
+                    [
+                        "off",
+                        "Enum_show_off",
+                        "Off"
+                    ]
+                ]
+            },
+            {
+                "name": "fontSize",
+                "type": "num",
+                "def": 9,
+                "key": "Prop_footnotes_fontSize",
+                "label": "Text size",
+                "min": 6,
+                "max": 24
+            },
+            {
+                "name": "fontFamily",
+                "type": "font",
+                "def": "",
+                "key": "Prop_footnotes_fontFamily",
+                "label": "Font"
+            },
+            {
+                "name": "color",
+                "type": "fill",
+                "def": "",
+                "key": "Prop_footnotes_color",
+                "label": "Text color"
+            }
+        ]
+    },
     "summary": {
         "name": "summary",
         "key": "Obj_summary",
@@ -1376,6 +1425,17 @@ export const PANE: CardSpec[] = [
         ]
     },
     {
+        "uid": "footnotes",
+        "key": "Obj_footnotes",
+        "label": "Footnotes",
+        "groups": [
+            {
+                "obj": "footnotes",
+                "toggle": null
+            }
+        ]
+    },
+    {
         "uid": "summary",
         "key": "Obj_summary",
         "label": "Summary",
@@ -1511,6 +1571,18 @@ export const FONTS: Record<string, FontSpec[]> = {
             "bold": "bold",
             "italic": "italic",
             "underline": "underline"
+        }
+    ],
+    "footnotes": [
+        {
+            "uid": "font",
+            "key": "Font_footnotes_font",
+            "label": "Font",
+            "family": "fontFamily",
+            "size": "fontSize",
+            "bold": null,
+            "italic": null,
+            "underline": null
         }
     ],
     "smallMultiples": [
