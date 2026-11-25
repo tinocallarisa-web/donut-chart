@@ -48,6 +48,7 @@ import IVisualHost = powerbi.extensibility.visual.IVisualHost;
 import ISelectionManager = powerbi.extensibility.ISelectionManager;
 import ISelectionId = powerbi.visuals.ISelectionId;
 import IVisualEventService = powerbi.extensibility.IVisualEventService;
+import FilterAction = powerbi.FilterAction;
 import ILocalizationManager = powerbi.extensibility.ILocalizationManager;
 import DataView = powerbi.DataView;
 import DataViewCategoryColumn = powerbi.DataViewCategoryColumn;
@@ -221,6 +222,9 @@ export class Visual implements IVisual {
     private suppressClick = false;
     /** La selección actual es demasiado grande para filtrar fuera: solo se dibuja aquí. */
     private localOnly = false;
+    /** «Otros» filtrado hacia fuera con un BasicFilter NotIn (en vez de identidades) y el filtro que se recibió. */
+    private filterOn = false;
+    private lastFilterJson = "";
     private selN = 0;
     /** Por update: segmentos de cada categoría (top SEG_MAX + «Other») y sus valores (ver segListOf / segSplit). */
     private segLists = new Map<string, { sd: Dim; keys: string[] }[]>();
@@ -828,6 +832,7 @@ export class Visual implements IVisual {
             if (ids && ids.length) this.restoreSelection(ids);
         }
         this.pruneSelection();
+        if (this.canInteract) this.restoreOtherFilter(options);
         if (this.localOnly && !this.selKeys.size) { this.localOnly = false; this.showLocalNote(0); }
         this.root.setAttribute("aria-label", this.tf("UI_Aria", "{0} chart: {1} by {2}, {3} categories, total {4}",
             s.slices.shape === "pie" ? this.t("Enum_shape_pie", "Pie") : this.t("Enum_shape_donut", "Donut"),
@@ -3182,10 +3187,22 @@ export class Visual implements IVisual {
         try {
             const rows = this.selKeys.size ? this.selectedRows() : new Set<number>();
             n = rows.size;
-            this.localOnly = n > MAX_SELECT_IDS;
-            // Por encima del tope no se llama a select(): nada hacia fuera (y los marcadores no guardan esa selección).
-            if (!n || this.localOnly) this.selectionManager.clear();
-            else this.selectionManager.select(Array.from(rows).map(r => this.rowId(r)), false)?.catch?.(() => { /* el host rechazó la selección */ });
+            // Por encima del tope: si la selección es «Otros» (con o sin otras categorías enteras), un filtro NotIn de las
+            // nombradas no seleccionadas es exacto y cabe en pocos valores (Tino, 25-11). Las dos vías nunca a la vez.
+            const notIn = n > MAX_SELECT_IDS ? this.otherNotInFilter() : null;
+            if (notIn) {
+                this.localOnly = false;
+                this.selectionManager.clear();
+                this.host.applyJsonFilter(notIn as any, "general", "filter", FilterAction.merge);
+                this.filterOn = true;
+                this.lastFilterJson = JSON.stringify(notIn);
+            } else {
+                if (this.filterOn) this.removeOtherFilter();
+                this.localOnly = n > MAX_SELECT_IDS;
+                // Por encima del tope (y sin filtro posible) no se llama a select(): nada hacia fuera (ni a los marcadores).
+                if (!n || this.localOnly) this.selectionManager.clear();
+                else this.selectionManager.select(Array.from(rows).map(r => this.rowId(r)), false)?.catch?.(() => { /* el host rechazó la selección */ });
+            }
         } catch (e) {
             console.error("[DonutChart]", e);
         }
@@ -3195,6 +3212,71 @@ export class Visual implements IVisual {
     /** Un fallo en un callback de interacción nunca llega al host: se registra y el visual sigue. */
     private safe<A extends unknown[]>(fn: (...a: A) => void): (...a: A) => void {
         return (...a: A) => { try { fn(...a); } catch (e) { console.error("[DonutChart]", e); } };
+    }
+
+    /**
+     * Destino del filtro desde la columna de Category (como en Chip Slicer): {table, column} por la expresión o por
+     * queryName. Jerarquía (drilldown) o varias columnas de categoría: null (sigue el aviso).
+     */
+    private filterTarget(): { table: string; column: string } | null {
+        const m = this.model;
+        if (!m || m.catCols.length !== 1) return null;
+        const src: any = m.catCols[0].source;
+        const expr = src?.expr;
+        if (expr?.level || expr?.arg?.hierarchy) return null;
+        if (expr?.ref && expr?.source?.entity) return { table: expr.source.entity, column: expr.ref };
+        const q = String(src?.queryName ?? "");
+        const dot = q.indexOf(".");
+        return dot > 0 && q.indexOf(".", dot + 1) < 0 ? { table: q.slice(0, dot), column: q.slice(dot + 1) } : null;
+    }
+
+    /** Valor de la categoría para el filtro (como Chip Slicer: las fechas en JSON). */
+    private catValue(c: Cat): any {
+        const v = this.model.catCols[0].values[c.rows[0]];
+        return v instanceof Date ? v.toJSON() : v;
+    }
+
+    /**
+     * BasicFilter NotIn para una selección que es «Otros» entero (más, si acaso, categorías con nombre enteras): excluye
+     * las nombradas NO seleccionadas. null si la selección tiene pares, miembros sueltos o no hay destino de filtro.
+     */
+    private otherNotInFilter(): any {
+        if (!this.selKeys.has(OTHER_KEY)) return null;
+        for (const k of this.selKeys) if (!this.entryOf(k)) return null;
+        const target = this.filterTarget();
+        if (!target) return null;
+        const values = this.entries.filter(e => !e.isOther && !this.selKeys.has(e.key)).map(e => this.catValue(e.members[0]));
+        // BasicFilter (filterType 1) escrito a mano, sin añadir powerbi-models: el host lo reconoce por filterType.
+        return { target, filterType: 1, operator: "NotIn", values, requireSingleSelection: false };
+    }
+
+    private removeOtherFilter(): void {
+        this.filterOn = false;
+        this.lastFilterJson = "";
+        try { this.host.applyJsonFilter(null, "general", "filter", FilterAction.remove); } catch (e) { console.error("[DonutChart]", e); }
+    }
+
+    /**
+     * Marcadores y recarga: el filtro NotIn propio vuelve en jsonFilters. Si sus valores son nombradas actuales, se
+     * dibuja «Otros» (y las nombradas que no excluye) como seleccionado; si ya no cuadran (cambiaron los datos), se quita.
+     */
+    private restoreOtherFilter(options: VisualUpdateOptions): void {
+        const f: any = ((options as any).jsonFilters ?? []).find((x: any) => x && x.operator === "NotIn" && Array.isArray(x.values));
+        const json = f ? JSON.stringify(f) : "";
+        if (!f) { if (this.filterOn) { this.filterOn = false; this.lastFilterJson = ""; this.selKeys.delete(OTHER_KEY); } return; }
+        if (json === this.lastFilterJson && this.filterOn) return;
+        const other = this.entries.find(e => e.isOther);
+        const named = new Map<string, Entry>();
+        for (const e of this.entries) if (!e.isOther) named.set(JSON.stringify(this.catValue(e.members[0])), e);
+        const excl = new Set<string>((f.values as any[]).map(v => JSON.stringify(v)));
+        let ok = !!other;
+        for (const k of excl) if (!named.has(k)) ok = false;
+        if (!ok) { this.removeOtherFilter(); return; }
+        this.selKeys.clear();
+        this.selKeys.add(OTHER_KEY);
+        for (const [k, e] of named) if (!excl.has(k)) this.selKeys.add(e.key);
+        this.filterOn = true;
+        this.lastFilterJson = json;
     }
 
     private showLocalNote(n: number = this.selN): void {

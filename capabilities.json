@@ -161,6 +161,11 @@
               "formatString": true
             }
           }
+        },
+        "filter": {
+          "type": {
+            "filter": true
+          }
         }
       }
     },

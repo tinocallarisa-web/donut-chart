@@ -250,7 +250,8 @@ def generar():
         en[key + "_Desc"] = desc
         roles.append(r)
     caps["dataRoles"] = roles
-    objs = {"general": {"properties": {"formatString": {"type": {"formatting": {"formatString": True}}}}}}
+    # general.filter: el filtro NotIn de «Otros» cuando su selección pasaría del tope de identidades (25-11).
+    objs = {"general": {"properties": {"formatString": {"type": {"formatting": {"formatString": True}}}, "filter": {"type": {"filter": True}}}}}
     ts_objs = {}
     for name, label, props in OBJECTS:
         okey = "Obj_" + name
