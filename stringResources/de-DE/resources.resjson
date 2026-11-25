@@ -271,6 +271,7 @@
   "UI_ShareOf": "Anteil an {0}",
   "UI_Highlighted": "Hervorgehoben",
   "UI_LocalSel": "Zu viele Zeilen, um andere Visuals zu filtern ({0}) – wählen Sie weniger Elemente aus oder entfernen Sie Segment/Kleine Vielfache",
+  "UI_LocalSelOne": "Zu viele Elemente, um andere Visuals zu filtern ({0}) – wählen Sie weniger Elemente aus",
   "UI_AnnChange": "Anteil {0} Punkte, Wert {1} ggü. {2}",
   "UI_AnnTarget": "{0} vom Ziel, {1}",
   "UI_Pos": "{0} von {1}",

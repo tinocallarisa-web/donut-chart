@@ -271,6 +271,7 @@
   "UI_ShareOf": "Part de {0}",
   "UI_Highlighted": "Mis en surbrillance",
   "UI_LocalSel": "Trop de lignes pour filtrer les autres visuels ({0}) — sélectionnez moins d’éléments ou retirez Segment/Multiples",
+  "UI_LocalSelOne": "Trop d’éléments pour filtrer les autres visuels ({0}) — sélectionnez moins d’éléments",
   "UI_AnnChange": "Part {0} points, valeur {1} par rapport à {2}",
   "UI_AnnTarget": "{0} de l’objectif, {1}",
   "UI_Pos": "{0} sur {1}",

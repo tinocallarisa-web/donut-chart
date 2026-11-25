@@ -271,6 +271,7 @@
   "UI_ShareOf": "Quota de {0}",
   "UI_Highlighted": "Realçado",
   "UI_LocalSel": "Demasiadas linhas para filtrar outros visuais ({0}) — selecione menos itens ou retire Segmento/Pequenos múltiplos",
+  "UI_LocalSelOne": "Demasiados itens para filtrar outros visuais ({0}) — selecione menos itens",
   "UI_AnnChange": "Quota {0} pontos, valor {1} face a {2}",
   "UI_AnnTarget": "{0} do objetivo, {1}",
   "UI_Pos": "{0} de {1}",

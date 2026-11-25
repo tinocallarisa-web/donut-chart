@@ -271,6 +271,7 @@
   "UI_ShareOf": "Udział w {0}",
   "UI_Highlighted": "Wyróżnione",
   "UI_LocalSel": "Za dużo wierszy, by filtrować inne wizualizacje ({0}) — zaznacz mniej elementów lub usuń Segment/Małe wielokrotności",
+  "UI_LocalSelOne": "Za dużo elementów, by filtrować inne wizualizacje ({0}) — zaznacz mniej elementów",
   "UI_AnnChange": "Udział {0} pkt, wartość {1} wobec {2}",
   "UI_AnnTarget": "{0} celu, {1}",
   "UI_Pos": "{0} z {1}",

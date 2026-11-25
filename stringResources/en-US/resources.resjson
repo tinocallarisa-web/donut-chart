@@ -271,6 +271,7 @@
   "UI_ShareOf": "Share of {0}",
   "UI_Highlighted": "Highlighted",
   "UI_LocalSel": "Too many rows to filter other visuals ({0}) — select fewer items or remove Segment/Small multiples",
+  "UI_LocalSelOne": "Too many items to filter other visuals ({0}) — select fewer items",
   "UI_AnnChange": "Share {0} points, value {1} vs {2}",
   "UI_AnnTarget": "{0} of target, {1}",
   "UI_Pos": "{0} of {1}",

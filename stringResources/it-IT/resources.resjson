@@ -271,6 +271,7 @@
   "UI_ShareOf": "Quota di {0}",
   "UI_Highlighted": "Evidenziato",
   "UI_LocalSel": "Troppe righe per filtrare gli altri oggetti visivi ({0}) — seleziona meno elementi o rimuovi Segmento/Multipli",
+  "UI_LocalSelOne": "Troppi elementi per filtrare gli altri oggetti visivi ({0}) — seleziona meno elementi",
   "UI_AnnChange": "Quota {0} punti, valore {1} rispetto a {2}",
   "UI_AnnTarget": "{0} dell’obiettivo, {1}",
   "UI_Pos": "{0} di {1}",

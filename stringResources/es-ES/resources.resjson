@@ -271,6 +271,7 @@
   "UI_ShareOf": "Cuota de {0}",
   "UI_Highlighted": "Resaltado",
   "UI_LocalSel": "Demasiadas filas para filtrar otros visuales ({0}): selecciona menos elementos o quita Segment/Small multiples",
+  "UI_LocalSelOne": "Demasiados elementos para filtrar otros visuales ({0}): selecciona menos elementos",
   "UI_AnnChange": "Cuota {0} puntos, valor {1} frente a {2}",
   "UI_AnnTarget": "{0} del objetivo, {1}",
   "UI_Pos": "{0} de {1}",

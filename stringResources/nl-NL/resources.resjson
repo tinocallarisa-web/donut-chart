@@ -271,6 +271,7 @@
   "UI_ShareOf": "Aandeel van {0}",
   "UI_Highlighted": "Gemarkeerd",
   "UI_LocalSel": "Te veel rijen om andere visuals te filteren ({0}) — selecteer minder items of verwijder Segment/Kleine veelvouden",
+  "UI_LocalSelOne": "Te veel items om andere visuals te filteren ({0}) — selecteer minder items",
   "UI_AnnChange": "Aandeel {0} punten, waarde {1} t.o.v. {2}",
   "UI_AnnTarget": "{0} van doel, {1}",
   "UI_Pos": "{0} van {1}",

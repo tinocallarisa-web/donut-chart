@@ -221,6 +221,7 @@ export class Visual implements IVisual {
     private suppressClick = false;
     /** La selección actual es demasiado grande para filtrar fuera: solo se dibuja aquí. */
     private localOnly = false;
+    private selN = 0;
     /** Por update: segmentos de cada categoría (top SEG_MAX + «Other») y sus valores (ver segListOf / segSplit). */
     private segLists = new Map<string, { sd: Dim; keys: string[] }[]>();
     private splitCache = new Map<string, { sd: Dim; v: number; h: number }[]>();
@@ -838,6 +839,7 @@ export class Visual implements IVisual {
             return;
         }
         this.layoutAndDraw(W, H);
+        if (this.localOnly) this.showLocalNote();
         if (TEST_STAMP && W >= 200) {
             // Sello de las builds de prueba: abajo si arriba está Summary.
             const sy = this.root.querySelector(".dn-summary") ? H - 3 : 10;
@@ -2722,14 +2724,33 @@ export class Visual implements IVisual {
         // Value size y Title size escalan con k; si el valor no cabe en el agujero, encoge y el título con él (misma proporción).
         const fv0 = this.fz(Number(s.center.fontSize));
         const ratio = Math.max(0.2, Math.min(2, Number(s.center.titleFontSize) / Math.max(1, Number(s.center.fontSize))));
-        for (let fv = fv0; fv >= this.minFs && !chosen; fv -= 1) {
+        const build = (t: string, fv: number, v: string): { withAll: CL[]; noTitle: CL[] } => {
             const ft = Math.max(this.minFs, fv * ratio);
+            const withAll: CL[] = [{ text: t, fs: ft, bold: false }, { text: v, fs: fv, bold: true }];
+            if (sub) withAll.push({ text: sub, fs: ft, bold: false });
+            const noTitle: CL[] = sub ? [{ text: v, fs: fv, bold: true }, { text: sub, fs: ft, bold: false }] : [{ text: v, fs: fv, bold: true }];
+            return { withAll, noTitle };
+        };
+        if (focus && title) {
+            // Un elemento señalado o seleccionado siempre lleva su nombre (Tino, 25-11: «9.72M / 70%» sin decir qué era):
+            // antes que quitarlo, encoge el valor; después, solo la parte del segmento; al final, recortado.
+            const titles = [title];
+            const cut = title.lastIndexOf(" · ");
+            const short = cut > 0 ? title.slice(cut + 3) : title;
+            if (short !== title) titles.push(short);
+            for (let n = short.length - 1; n >= 3; n--) titles.push(short.slice(0, n).trimEnd() + "…");
+            outer: for (let fv = fv0; fv >= this.minFs; fv -= 1) {
+                for (const t of titles) for (const v of values) {
+                    const c = build(t, fv, v).withAll;
+                    if (fits(c)) { chosen = c; break outer; }
+                }
+            }
+        }
+        for (let fv = fv0; fv >= this.minFs && !chosen; fv -= 1) {
             for (const v of values) {
-                const withAll = [{ text: title, fs: ft, bold: false }, { text: v, fs: fv, bold: true }];
-                if (sub) withAll.push({ text: sub, fs: ft, bold: false });
-                const noTitle = sub ? [{ text: v, fs: fv, bold: true }, { text: sub, fs: ft, bold: false }] : [{ text: v, fs: fv, bold: true }];
-                if (title && fits(withAll)) { chosen = withAll; break; }
-                if (fits(noTitle)) { chosen = noTitle; break; }
+                const c = build(title, fv, v);
+                if (title && !focus && fits(c.withAll)) { chosen = c.withAll; break; }
+                if (fits(c.noTitle)) { chosen = c.noTitle; break; }
             }
         }
         if (!chosen) return;
@@ -3176,11 +3197,19 @@ export class Visual implements IVisual {
         return (...a: A) => { try { fn(...a); } catch (e) { console.error("[DonutChart]", e); } };
     }
 
-    private showLocalNote(n: number): void {
+    private showLocalNote(n: number = this.selN): void {
+        this.selN = n;
         let el = this.root.querySelector<HTMLDivElement>(".dn-selnote");
         if (!this.localOnly) { if (el) el.remove(); return; }
         if (!el) { el = document.createElement("div"); el.className = "dn-selnote"; this.root.appendChild(el); }
-        el.textContent = this.tf("UI_LocalSel", "Too many rows to filter other visuals ({0}) — select fewer items or remove Segment/Small multiples", this.int(n));
+        // Apilado encima de las notas del pie (y de los avisos de edición), sin pisarlas; el texto se ajusta en líneas.
+        let bottom = 4;
+        this.root.querySelectorAll<HTMLElement>(".dn-notes, .dn-table[data-pos=bottom], .dn-legend[data-pos=bottom]").forEach(nb => { bottom = Math.max(bottom, this.H - nb.offsetTop + 4); });
+        el.style.bottom = bottom + "px";
+        // El consejo depende de la estructura: con una sola columna no hay Segment ni small multiples que quitar.
+        el.textContent = this.model?.segmentCol || this.model?.facetCol
+            ? this.tf("UI_LocalSel", "Too many rows to filter other visuals ({0}) — select fewer items or remove Segment/Small multiples", this.int(n))
+            : this.tf("UI_LocalSelOne", "Too many items to filter other visuals ({0}) — select fewer items", this.int(n));
         this.styleFootnotes(el);
         el.style.background = this.hc ? this.hcBg : this.bgColor;
         this.live.textContent = el.textContent;

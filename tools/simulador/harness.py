@@ -1988,6 +1988,46 @@ async def tanda_muchas(b):
         print(f"    {tag}: {r.get('update_ms', '—')} ms · {r['filas']} filas · {r['ms']:.0f} ms · {r['enviadas']}")
 
 
+# ── Aviso de selección apilado y centro siempre con título (25-11) ─────────────
+
+AVISOS = r"""() => { const hr = document.getElementById('host').getBoundingClientRect();
+  const R = e => { const r = e.getBoundingClientRect(); return { x0: r.left - hr.left, y0: r.top - hr.top, x1: r.right - hr.left, y1: r.bottom - hr.top }; };
+  const sel = document.querySelector('.dn-selnote');
+  const otros = Array.from(document.querySelectorAll('.dn-notes, .dn-table, .dn-legend, .dn-summary')).map(e => ({ cls: e.className, ...R(e) }));
+  return { sel: sel ? { text: sel.textContent, ...R(sel) } : null, otros,
+           center: Array.from(document.querySelectorAll('.dn-center-text')).map(t => t.textContent) }; }"""
+
+
+async def tanda_avisos_centro(b):
+    print("25-11 (11) · Aviso de selección apilado sin pisar otros avisos; centro con título en la selección única")
+    casos = [
+        ("SKU × PDV, clic en el «Other (n)» exterior de Other (editando)", dv_detalle_pdv(cat="SKU", segment="PDV", objs={"style": {"guide": False}, "slices": {"maxSlices": 5}}),
+         "path.dn-seg[data-key='␟other␞␟segother']", "Segment/Small multiples", "Other ("),
+        ("PDV sola, clic en Otros (editando)", dv_detalle_pdv(), "path.dn-slice[data-key*='other']", "select fewer items", "Other (1741)"),
+    ]
+    for lbl, dvx, selector, texto, titulo in casos:
+        pg = await page(b, dvx, 960, 540, edit=True, name="avisos_" + ("sku_pdv" if "SKU" in lbl else "pdv"))
+        await pg.evaluate("(q) => { const p = document.querySelector(q); p.dispatchEvent(new MouseEvent('click', { bubbles: true })); }", selector)
+        await pg.mouse.move(3, 535)
+        await pg.wait_for_timeout(30)
+        A = await pg.evaluate(AVISOS)
+        await shot(pg, "avisos_" + ("sku_pdv" if "SKU" in lbl else "pdv") + "_seleccion")
+        check(f"{lbl}: aviso de selección con el texto según la estructura", A["sel"] and texto in A["sel"]["text"] and (texto != "select fewer items" or "Segment" not in A["sel"]["text"]), str(A["sel"]))
+        pis = [o["cls"] for o in A["otros"] if A["sel"] and overlap(A["sel"], o)]
+        check(f"{lbl}: el aviso no pisa otros avisos, la leyenda, la tabla ni el resumen", not pis, str(pis))
+        check(f"{lbl}: el centro lleva título ({titulo}…)", len(A["center"]) >= 2 and A["center"][0].startswith(titulo[:6]) or titulo in A["center"][0], str(A["center"]))
+        await eventos(pg, lbl)
+        await pg.close()
+    # Selección única de un par: siempre con nombre en el centro (aunque sea largo).
+    pg = await page(b, dv_ventas({}, cat="Familia", segment="Marca", legacy=False), 380, 260, name="centro_titulo_par_380x260")
+    await pg.evaluate("() => { const p = Array.from(document.querySelectorAll('path.dn-seg')).find(x => x.getAttribute('data-key').endsWith('Nord Mixer')); p.dispatchEvent(new MouseEvent('click', { bubbles: true })); }")
+    await pg.mouse.move(3, 255)
+    await pg.wait_for_timeout(30)
+    c = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-center-text')).map(t => [t.getAttribute('data-part'), t.textContent])")
+    check("par seleccionado a 380×260: el centro dice qué es (título presente)", c and c[0][0] == "title" and ("Nord Mixer" in c[0][1] or c[0][1].startswith("Nord")), str(c))
+    await pg.close()
+
+
 async def clic_otros(pg):
     """Clic en Otros: tiempo (selección + repintado), filas que cubriría, identidades enviadas y aviso."""
     return await pg.evaluate(r"""() => { const p = document.querySelector('path.dn-slice[data-key*="other"]');
@@ -2022,6 +2062,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--avisos" in sys.argv:
+            await tanda_avisos_centro(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--muchas" in sys.argv:
             await tanda_muchas(b)
             await b.close()
@@ -2382,6 +2428,7 @@ async def main():
         await tanda_centro_seleccion(b)
         await tanda_otros_seleccion(b)
         await tanda_muchas(b)
+        await tanda_avisos_centro(b)
         await b.close()
     check(f"global: ninguna llamada a select() con más de {MAX_IDS} identidades", MAXSEL[0] <= MAX_IDS, str(MAXSEL[0]))
     print()
