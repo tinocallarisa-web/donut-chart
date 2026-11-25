@@ -1,177 +1,143 @@
 # -*- coding: utf-8 -*-
-"""Infografías de la ficha (1366x768): docs/infographic.html y docs/infographic-pro.html, y sus PNG en assets/.
+"""Infografías y capturas de la ficha de Donut & Pie Chart by TCViz (1366x768, assets/) con la plantilla común de la web.
 
-Imágenes de entrada (tools/img/), ya limpias (sin sello de prueba ni marca de agua):
-- desktop_plan.png, desktop_regions.png, desktop_events.png: recortes de assets/Image_1-3.png (Power BI Desktop).
-- gaps_trend.png, target_steps.png, trend_zoom.png: simulador, versión gratuita.
-- annotations.png, sm_events.png, index.png, style_<estilo>.png: simulador, funciones Pro con licencia.
-python tools/gen_infographic.py
+El contenido sale de docs/WEBSITE-PRODUCT-PAGE.md (la entrada de data.jsx): se corrige la ficha, no la imagen.
+Las imágenes del visual son del simulador (tools/simulador/ficha.py), que carga el visual real con DonutChart_Dataset.xlsx
+(hoja Ventas); ninguna lleva la marca de agua "Pro preview" (la build de capturas fuerza Pro y quita el sello).
+
+Regla del rechazo 100.3.2.2 (Treemap, 25-11-2026): el visual se captura a menos px lógicos con dpr 3, de modo que aquí
+se AMPLÍA (≥ 1,28x) y su texto queda por encima de ~12 px; nunca rejillas de miniaturas.
+
+    node build-test.js --capturas && python tools/simulador/ficha.py && python tools/gen_infographic.py
+Salida: assets/infographic.png, infographic-pro.png, Screenshot_1..5.png; copia 2x para la web en
+datos/demo_rtm/export/infografias/donut-chart-infographic.png.
 """
-import asyncio, base64, io, os
+import html, json, os, re, shutil, subprocess, sys, tempfile
+sys.path.insert(0, r"C:\tcviz\datos\demo_rtm")
+import infografias as I
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-IMG = os.path.join(ROOT, "tools", "img")
-DOC = "https://tinocallarisa-web.github.io/line-chart/support.html"
-ESTILOS = ("boardroom", "ledger", "editorial", "signal", "aurora", "terrace")
+CAP = os.path.join(ROOT, "tools", "simulador", "capturas")
+ASSETS = os.path.join(ROOT, "assets")
+md = open(os.path.join(ROOT, "docs", "WEBSITE-PRODUCT-PAGE.md"), encoding="utf-8").read()
+js = re.search(r"```js\n(.*?)\n```", md, re.S).group(1).strip().rstrip(",")
+r = subprocess.run(["node", "-e", "process.stdout.write(JSON.stringify(eval('(' + require('fs').readFileSync(0,'utf8') + ')')))"],
+                   input=js, capture_output=True, text=True, encoding="utf-8", check=True)
+P = json.loads(r.stdout)
+e = html.escape
+CSS = I.CSS % {"pop": I.uri(os.path.join(I.BASE, "tema", "Poppins"))}
+LOGO = I.uri(os.path.join(I.WEB, "logos", "tcviz-logo-light.svg"))
+cap = lambda n: I.uri(os.path.join(CAP, n + ".png"))
 
 
-def data_uri(name, width, caja=None):
-    im = Image.open(os.path.join(IMG, name)).convert("RGB")
-    if caja:
-        im = im.crop(caja)
-    if im.width > width:
-        im = im.resize((width, round(im.height * width / im.width)), Image.LANCZOS)
-    b = io.BytesIO(); im.save(b, "JPEG", quality=90)
-    return "data:image/jpeg;base64," + base64.b64encode(b.getvalue()).decode()
+def render(h_html, png2x, png1x):
+    subprocess.run([I.EDGE, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=2",
+                    "--allow-file-access-from-files", f"--screenshot={png2x}", "--window-size=1366,768", I.uri(h_html)],
+                   capture_output=True, timeout=90)
+    Image.open(png2x).convert("RGB").resize((1366, 768), Image.LANCZOS).save(png1x, optimize=True)
+    print("  ", os.path.relpath(png1x, ROOT))
 
 
-CSS = """
-:root{--bg:#FAF9F5;--bg2:#EDE9DE;--line:#DAD9D4;--t1:#3D3929;--t2:#535146;--t3:#83827D;--acc:#2B6CB0;--accd:#1F4E80;--acc2:#3E9C5B;--acc2l:#E3F2E8;--red:#C0392B}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{background:#888;font-family:'Segoe UI',system-ui,sans-serif}
-#infographic{background:var(--bg);color:var(--t1);width:1366px;height:768px;overflow:hidden;padding:22px 34px 14px;display:flex;flex-direction:column;gap:12px}
-.head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px}
-.head h1{font-family:Poppins,'Segoe UI',sans-serif;font-size:32px;font-weight:700;line-height:1.05}
-.head h1 span{color:var(--acc)}
-.head p{font-size:15px;color:var(--t2);margin-top:6px;max-width:900px}
-.brand{font-size:12px;color:var(--t3);text-align:right;line-height:1.5}
-.brand b{color:var(--acc)}
-.grid{display:grid;gap:14px;flex:1;min-height:0}
-.col{display:flex;flex-direction:column;gap:12px;min-height:0}
-.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 16px;min-height:0}
-.card h3{font-size:12px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--t3);margin-bottom:8px}
-.shot{background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px;display:flex;flex-direction:column;min-height:0}
-.shot img{width:100%;height:auto;display:block}
-.shot .cap{font-size:12px;color:var(--t3);padding:6px 4px 0;line-height:1.35}
-.shot .cap b{color:var(--t1)}
-.row{display:grid;gap:12px}
-.fix img{height:var(--h);object-fit:contain;background:#fff}
-.steps{list-style:none;display:grid;gap:7px}
-.steps li{display:grid;grid-template-columns:24px 1fr;gap:8px;font-size:13px;color:var(--t2);align-items:start;line-height:1.35}
-.steps b.n{width:22px;height:22px;border-radius:50%;background:var(--acc2);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px}
-.steps strong,ul.l strong{color:var(--t1)}
-ul.l{list-style:none;display:grid;gap:6px}
-ul.l li{font-size:13px;color:var(--t2);padding-left:18px;position:relative;line-height:1.35}
-ul.l li::before{content:"";position:absolute;left:2px;top:6px;width:8px;height:8px;border-radius:2px;background:var(--acc)}
-ul.l.pro li::before{background:var(--acc2)}
-.chip{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.8px;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle}
-.chip.free{background:#E6EEF8;color:var(--accd)} .chip.pro{background:var(--acc2l);color:#2F7A47}
-.endlab{display:inline-block;white-space:nowrap;font-size:12px;font-weight:600;color:#1E88E5;background:#F4F8FC;border:1px solid #D6E4F2;border-radius:6px;padding:4px 8px;margin:2px 0 8px}
-.endlab em{font-style:normal;color:var(--red)}
-.styles{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;height:236px;align-content:start}
-.styles figure{position:relative;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
-.styles img{width:100%;height:auto!important;display:block}
-.styles figcaption{position:absolute;left:0;bottom:0;font-size:10.5px;font-weight:700;color:#fff;background:rgba(30,30,30,.72);padding:1px 7px;border-top-right-radius:6px}
-.foot{display:flex;justify-content:space-between;font-size:12px;color:var(--t3)}
-.foot b{color:var(--t2)}
-"""
+def cabecera(titulo, sub, tier='<span class="pill free">Free</span><span class="pill pro">Pro</span>'):
+    return (f'<div class="cab"><img class="logo" src="{LOGO}"><div class="sep"></div>'
+            f'<div><h1>{e(titulo)}</h1><p>{e(sub)}</p></div><div class="tier">{tier}</div></div><div class="raya"></div>')
 
 
-def page(title, body):
-    return (f'<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>{title}</title>'
-            '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap">'
-            f'<style>{CSS}</style></head><body><div id="infographic">{body}</div></body></html>\n')
+PIE = (f'<div class="fin"><span>tcviz.com · Power BI custom visual · {e(P["name"])}</span>'
+       f'<span>Sample data: Begudes Nord, a fictitious drinks company</span></div>')
 
 
-FOOT = f'<div class="foot"><span>{{izq}}</span><span>tcviz.com · Documentation: {DOC}</span></div>'
+def pagina(nombre, cuerpo, extra_css=""):
+    h = os.path.join(I.OUT, nombre + ".html")
+    open(h, "w", encoding="utf-8").write(f'<!doctype html><html><head><meta charset="utf-8"><style>{CSS}{extra_css}</style></head><body>{cuerpo}</body></html>')
+    return h
 
 
-def general():
-    body = f"""
-<div class="head"><div><h1>Line Chart <span>by TCViz</span></h1>
-<p>Are we on plan, and why did that month drop? Actual against plan with the gap shaded, the plan carried on past the last actual month, and empty months drawn as gaps, not zeros.</p></div>
-<div class="brand"><b>tcviz.com</b><br>Power BI custom visual · no network requests</div></div>
-<div class="grid" style="grid-template-columns:760px 1fr">
-  <div class="col">
-    <div class="shot"><img src="{data_uri('desktop_plan.png', 1600)}" alt="">
-      <div class="cap"><b>Actual vs plan</b> · green above, red below · the plan carries on dashed after <b>Actual | Plan</b> · target and end labels.</div></div>
-    <div class="row fix" style="grid-template-columns:repeat(3,1fr);--h:132px">
-      <div class="shot"><img src="{data_uri('gaps_trend.png', 600, (220, 250, 700, 520))}" alt=""><div class="cap"><b>Honest gaps</b> · an empty month breaks the line: Break, Connect or Zero.</div></div>
-      <div class="shot"><img src="{data_uri('target_steps.png', 600, (230, 20, 1000, 520))}" alt=""><div class="cap"><b>Target line</b> · flat, or stepped when the target changes by period.</div></div>
-      <div class="shot"><img src="{data_uri('trend_zoom.png', 600, (380, 0, 1000, 520))}" alt=""><div class="cap"><b>Trend and zoom</b> · Ctrl + wheel, the Y axis fits the zoomed range.</div></div>
-    </div>
-  </div>
-  <div class="col">
-    <div class="shot"><img src="{data_uri('desktop_regions.png', 1000)}" alt="">
-      <div class="cap"><b>Several series, one legend, a 2nd axis</b> · sales by region on the left, gross margin % on the right, peak marked.</div></div>
-    <div class="card" style="flex:1"><h3>Free <span class="chip free">FREE</span></h3><ul class="l">
-      <li><strong>Gap shading</strong> against Plan, or Prior year when there is no Plan</li>
-      <li>Plan and forecast <strong>dashed after the last actual</strong>, marked “Actual | Plan”</li>
-      <li><strong>Target line</strong> from a measure, flat or stepped</li>
-      <li><strong>End labels</strong> with the last value, kept apart so they do not overlap</li>
-      <li>Empty periods as <strong>gaps</strong>: Break, Connect or Zero, your choice</li>
-      <li>Up to 6 measures and a legend, up to 3 on a <strong>secondary axis</strong></li>
-      <li>Trend line (linear or moving average), peaks and lows</li>
-      <li>Zoom with Ctrl + wheel or the keyboard, optional zoom slider</li>
-      <li>Report theme, filtering, bookmarks, keyboard, <strong>12 languages</strong></li></ul></div>
-  </div>
+tmp = tempfile.mkdtemp()
+try:
+    # 1. Plantilla común de la web; imagen central: Compare + Target (620x218 lógicos, se pinta a ~852x300).
+    shutil.copy(os.path.join(CAP, "ficha_central.png"), os.path.join(tmp, "central_99.png"))
+    exp, I.EXP = I.EXP, tmp
+    h1 = os.path.join(I.OUT, "donut-chart-infographic.html")
+    ficha = I.ficha(P, 99, "Who is really gaining share?")
+    assert "Power BI Desktop, TCViz theme" in ficha   # la imagen es del simulador, no de Desktop
+    open(h1, "w", encoding="utf-8").write(ficha.replace("Power BI Desktop, TCViz theme", "drawn by the visual, Report theme"))
+    I.EXP = exp
+    render(h1, os.path.join(I.OUT, "donut-chart-infographic.png"), os.path.join(ASSETS, "infographic.png"))
+finally:
+    shutil.rmtree(tmp, ignore_errors=True)
+
+# 2. Free frente a Pro con el mismo dato (440x270 lógicos → ~619 px de ancho: 1,4x)
+DOS = """.dos{position:absolute;left:24px;right:24px;top:115px;bottom:40px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.dos .card{padding:14px 16px;display:flex;flex-direction:column}
+.dos img{width:100%;border-radius:4px;display:block;border:1px solid #EEE}
+.dos h2{font-size:16px} .dos .f h2{color:#3E9C5B} .dos .p h2{color:#2B6CB0}
+.dos ul{list-style:none;margin-top:10px;columns:2;column-gap:18px}
+.dos li{font-size:12.5px;line-height:1.35;padding-left:16px;position:relative;margin-bottom:6px;break-inside:avoid}
+.dos .f li:before{content:'✓';color:#3E9C5B;position:absolute;left:0;font-weight:700}
+.dos .p li:before{content:'+';color:#2B6CB0;position:absolute;left:0;font-weight:700}
+.sub{font-size:12.5px;color:#666;margin:-4px 0 8px}"""
+free_items = ["Labels inside, never cut", "Shares that add up to 100", "Honest Other you can open",
+              "Legend and data table", "Total in the center", "Lasso, drilldown, fx"]
+li = lambda xs: "".join(f"<li>{e(x)}</li>" for x in xs)
+h2 = pagina("donut-chart-infographic-pro", cabecera("Free reads the shares. Pro reads what moved.", f'{P["name"]} — the same data, without and with a licence.') + f"""
+<div class="dos">
+<div class="card f"><h2>Free — a complete donut</h2><div class="sub">Litres by brand, with the data table on.</div>
+<img src="{cap('ficha_free')}"><ul>{li(free_items)}</ul></div>
+<div class="card p"><h2>Pro — change and target in the table</h2><div class="sub">The same slices against last year and the plan.</div>
+<img src="{cap('ficha_pro')}"><ul>{li(P["freemium"]["pro"][:6])}</ul></div>
 </div>
-{FOOT.format(izq="<b>Pro</b> adds events from your own table, annotations, variance on the end label, small multiples, Show values as and six styles.")}
-"""
-    return page("Line Chart by TCViz — Visual Guide", body)
+<div class="fin"><span>tcviz.com · Power BI custom visual · {e(P["name"])}</span><span>Without a licence, Pro features are drawn working under a "Pro preview" watermark while you edit.</span></div>""", DOS)
+render(h2, os.path.join(I.OUT, "donut-chart-infographic-pro.png"), os.path.join(ASSETS, "infographic-pro.png"))
+
+# 3. Capturas de la ficha: una idea por imagen
+UNA = """.una{position:absolute;left:24px;right:24px;top:112px;bottom:40px;display:flex;gap:16px}
+.una .card{padding:14px;display:flex;align-items:center;justify-content:center;flex:1}
+.una img{max-width:100%;max-height:100%;display:block}
+.una .lado{flex:0 0 300px;flex-direction:column;align-items:flex-start;justify-content:flex-start}
+.una .lado h2{font-size:17px;margin-bottom:8px} .una .lado p{font-size:13.5px;line-height:1.45;color:#444;margin-bottom:10px}
+.tres{position:absolute;left:24px;right:24px;top:112px;bottom:40px;display:grid;grid-template-columns:1.55fr 1fr;grid-template-rows:1fr 1fr;gap:14px}
+.tres .card{padding:10px;display:flex;flex-direction:column;align-items:flex-start;min-height:0;overflow:hidden}
+.tres .l{grid-row:1 / span 2}
+.tres b{font-size:12.5px;margin-bottom:6px;color:#555}"""
+EST3 = """.est3{position:absolute;left:24px;right:24px;top:112px;bottom:40px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.est3 .card{padding:10px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.est3 img{flex:1 1 auto;min-height:0;width:100%;object-fit:contain;display:block;border-radius:3px} .est3 b{font-size:15px;margin-top:6px;color:#444}"""
 
 
-def pro():
-    estilos = "".join(
-        f'<figure><img src="{data_uri(f"style_{e}.png", 330, (600, 150, 1240, 600))}" alt=""><figcaption>{e.title()}</figcaption></figure>'
-        for e in ESTILOS)
-    body = f"""
-<div class="head"><div><h1>Line Chart <span>Pro</span></h1>
-<p>The context around the numbers: what happened, where, and how far from plan — from your own data, in Power BI.</p></div>
-<div class="brand"><b>tcviz.com</b><br>Pro preview while you edit · licence on Microsoft AppSource</div></div>
-<div class="grid" style="grid-template-columns:720px 1fr">
-  <div class="col">
-    <div class="shot"><img src="{data_uri('desktop_events.png', 1600)}" alt="">
-      <div class="cap"><b>Events</b> from a column of your own Events table · each one a vertical line with its text, so the reason for a jump is on the chart.</div></div>
-    <div class="row" style="grid-template-columns:1fr 1.12fr 1fr;flex:1">
-      <div class="card"><h3>Events in 3 steps <span class="chip pro">PRO</span></h3><ol class="steps">
-        <li><b class="n">1</b><span>A table <strong>Events</strong> with two columns: Date and Event</span></li>
-        <li><b class="n">2</b><span><strong>Relate</strong> Events[Date] to your calendar date</span></li>
-        <li><b class="n">3</b><span>Drag <strong>Events[Event]</strong> to Events and set it to <strong>First</strong></span></li></ol></div>
-      <div class="card"><h3>Variance label</h3>
-        <span class="endlab">Net sales €2.56M · <em>−4.8% vs plan</em></span>
-        <p style="font-size:12.5px;color:var(--t2);line-height:1.4">The last value and how far it is from plan, or from prior year: as a % or as the absolute difference.</p></div>
-      <div class="card"><h3>Try it on your data</h3>
-        <p style="font-size:12.5px;color:var(--t2);line-height:1.4">Without a licence, any Pro feature you turn on while editing is drawn on your own data under a “Pro preview” watermark. Report readers without a licence see the free chart.</p></div>
-    </div>
-  </div>
-  <div class="col">
-    <div class="row fix" style="grid-template-columns:1fr 1fr;--h:236px;flex:1">
-      <div class="shot"><img src="{data_uri('annotations.png', 700, (680, 40, 995, 330))}" alt=""><div class="cap"><b>Annotations</b> pinned to a point on the line.</div></div>
-      <div class="shot"><img src="{data_uri('index.png', 700, (640, 0, 994, 300))}" alt=""><div class="cap"><b>Show values as</b> · index (first visible period = 100), % change, running total.</div></div>
-    </div>
-    <div class="row fix" style="grid-template-columns:1fr 1fr;--h:236px;flex:1">
-      <div class="shot"><img src="{data_uri('sm_events.png', 700, (0, 0, 560, 620))}" alt=""><div class="cap"><b>Small multiples</b> · one chart per region, shared or separate Y axis.</div></div>
-      <div class="shot"><div class="styles">{estilos}</div><div class="cap"><b>Six collection styles</b> that match other TCViz visuals.</div></div>
-    </div>
-  </div>
-</div>
-{FOOT.format(izq="Everything is computed inside your report. No network requests.")}
-"""
-    return page("Line Chart by TCViz — Pro", body)
+def una(n, titulo, sub, img, lado_h, lado_p):
+    ps = "".join(f"<p>{e(x)}</p>" for x in lado_p)
+    h = pagina(f"donut-chart-shot-{n}", cabecera(titulo, sub) + f"""<div class="una"><div class="card"><img src="{cap(img)}"></div>
+<div class="card lado"><h2>{e(lado_h)}</h2>{ps}</div></div>""" + PIE, UNA)
+    render(h, os.path.join(I.OUT, f"donut-chart-shot-{n}.png"), os.path.join(ASSETS, f"Screenshot_{n}.png"))
 
 
-async def render(html_path, png_path):
-    from playwright.async_api import async_playwright
-    async with async_playwright() as p:
-        b = await p.chromium.launch()
-        pg = await b.new_page(viewport={"width": 1366, "height": 768})
-        await pg.goto("file:///" + html_path.replace("\\", "/"))
-        await pg.wait_for_timeout(800)
-        el = await pg.query_selector("#infographic")
-        await el.screenshot(path=png_path)
-        await b.close()
-
-
-def main():
-    os.makedirs(os.path.join(ROOT, "assets"), exist_ok=True)
-    for nombre, f, png in (("infographic.html", general, "infographic.png"), ("infographic-pro.html", pro, "infographic-pro.png")):
-        h = os.path.join(ROOT, "docs", nombre)
-        io.open(h, "w", encoding="utf-8", newline="\n").write(f())
-        asyncio.run(render(h, os.path.join(ROOT, "assets", png)))
-        print(nombre, "->", png, Image.open(os.path.join(ROOT, "assets", png)).size)
-
-
-if __name__ == "__main__":
-    main()
+una(1, "Who is really gaining share?", "Compare with and Target (Pro): the change in share and value, and the % of target, next to every slice.",
+    "ficha_compare", "Read it in one pass",
+    ["Δ pp is the change in share, with a mini bar; Δ % is the change in value.",
+     "⚠ marks a brand whose value grew while its share fell: the total grew faster.",
+     "✓ ≈ ✕ give the % of target with a shape as well as a colour.",
+     "The summary sentence says who leads, what the top three hold and the biggest shift."])
+una(2, "Family and brand in one chart", "Segment (Pro): an outer ring splits every family by brand, at the same angle as its slice.",
+    "ficha_segment", "Two levels, one reading",
+    ["The inner ring is the family, the outer ring its brands, each with its own label.",
+     "The data table can list the brands under each family, with value and share.",
+     "If the two fields are nested the wrong way round, a note says to swap them."])
+una(3, "One donut per channel", "Small multiples (Pro): the same Other, order and colours in every panel, and a shared table of the total.",
+    "ficha_sm", "Compare the mix across channels",
+    ["Each donut has its own total in the center and its title above.",
+     "The table is the total of all panels, with the change against last year.",
+     "Point at a table row to see its value in every panel."])
+# Las tres a la misma escala (1,35x): el texto del visual se lee igual en las tres (rechazo 100.3.2.2).
+h4 = pagina("donut-chart-shot-4", cabecera("Readable at any size", "The same visual in a large, medium and small slot, shown at the same scale: labels shorten or step aside, never cut.") + f"""
+<div class="tres"><div class="card l"><b>Large · 540 × 320</b><img src="{cap('ficha_size_l')}" style="flex:none;width:729px"></div>
+<div class="card"><b>Medium · 340 × 185</b><img src="{cap('ficha_size_m')}" style="flex:none;width:459px"></div>
+<div class="card"><b>Small · 230 × 130</b><img src="{cap('ficha_size_s')}" style="flex:none;width:311px"></div></div>""" + PIE, UNA)
+render(h4, os.path.join(I.OUT, "donut-chart-shot-4.png"), os.path.join(ASSETS, "Screenshot_4.png"))
+# Tres estilos grandes; los seis nombrados en el subtítulo (nunca seis miniaturas).
+est = "".join(f'<div class="card"><img src="{cap("ficha_style_" + s)}"><b>{s.title()}</b></div>' for s in ("boardroom", "ledger", "aurora"))
+h5 = pagina("donut-chart-shot-5", cabecera("Six collection styles", "Boardroom, Ledger, Editorial, Signal, Aurora and Terrace: the same looks as the rest of TCViz. Report theme and Classic are free; the six styles are Pro.") +
+            f'<div class="est3">{est}</div>' + PIE, UNA + EST3)
+render(h5, os.path.join(I.OUT, "donut-chart-shot-5.png"), os.path.join(ASSETS, "Screenshot_5.png"))
+print("ok")

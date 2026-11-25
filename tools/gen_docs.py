@@ -126,7 +126,7 @@ FAQ = [
     ("What is Other, and how do I open it?",
      "<p>Categories beyond <strong>Show at most</strong> (6 by default) or below <strong>Group below %</strong> (3% by default) go into "
      "Other, always the last slice, with its count: \"Other (5)\". In the data table, click <strong>Other (5) ▸</strong> to list its "
-     "members with their own values and percentages (→ on the keyboard). Clicking the Other slice filters the page by every item inside "
+     "members with their own values and percentages (→ on the keyboard). The five largest categories always keep their own slice, even below Group below %, so a donut is never all Other. Clicking the Other slice filters the page by every item inside "
      "it, not by a label. Set Show at most to 20 and Group below to 0 to draw every category.</p>"),
     ("Why is a value not drawn?",
      "<p>A slice is an angle of a whole, and it cannot be negative or empty. Negative, zero and blank values are left out and counted in "
@@ -177,6 +177,10 @@ FAQ = [
      "<p>Measures in <strong>Tooltips</strong> show when a slice is one row of data. With Segment or Small multiples a slice is made of "
      "several rows, and adding up a measure such as a margin % or an average across them would give a false figure, so it is left out. "
      "Use a report page tooltip instead: it is computed by Power BI for the slice.</p>"),
+    ("Why does a selection say \"shown here only\"?",
+     "<p>With Segment or Small multiples, a selection is passed to Power BI as rows. Above 5,000 rows — for example Other over tens of "
+     "thousands of points of sale — filtering the rest of the page would slow Power BI down, so the selection is drawn in the visual "
+     "only and a note says so. Select fewer slices, or filter the page with a slicer.</p>"),
     ("How many rows can it use?",
      "<p>Power BI sends up to 30,000 combinations of category, segment and panel at a time. When there are more, the visual asks for "
      "further blocks, up to 10 more, and adds them up (checked in Power BI Desktop with 54,662 rows). While it loads, a footnote says "
@@ -209,6 +213,7 @@ TROUBLE = [
     ("The change does not show", "Compare with is Pro and needs a measure for the prior period; check Format → Data table → Change column."),
     ("Annotations do not show", "Annotation expects text: in the field well, set the column to First."),
     ("Small multiples show fewer panels than values", "The panels would be too small to read: the visual says \"Showing N of M panels\". Make it larger or set fewer columns."),
+    ("\"A bar chart or treemap reads this better\" (while editing)", "More than 20 categories, and the named slices hold less than half of the total or Other more than 60%. A donut is not the form for this data."),
     ("\"Other is incomplete\"", "Power BI did not send every row. Filter the page or use a field with fewer values."),
     ("Clicks do not filter", "The report author has turned interactions off, or the visual is in format mode."),
 ]
