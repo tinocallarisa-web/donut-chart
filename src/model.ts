@@ -291,8 +291,12 @@ export function groupEntries(m: Model, o: GroupOptions): { entries: Entry[]; adj
     const share = (c: Cat) => (total > 0 ? (c.value / total) * 100 : 0);
     // Si todas caben en Show at most, solo cuenta el umbral; si no, se guardan max − 1 y el último hueco es "Otros".
     const limit = list.length <= max ? list.length : max - 1;
+    // Nunca un donut sin nombres (Tino, 25-11: 1.746 PDV acababan todos en «Otros (1746)» al 100 %): los K mayores se ven
+    // siempre, aunque queden bajo «Group below», con K = min(5, huecos antes de Otros). Cinco es lo que se distingue de un
+    // vistazo en un donut y lo que cabe con nombre a tamaño de tarjeta; el resto va a Otros, que sigue contando y se despliega.
+    const K = Math.min(MIN_NAMED, limit);
     const keep = new Set<Cat>();
-    list.slice().sort((a, b) => b.value - a.value).forEach((c, i) => { if (i < limit && share(c) >= o.groupBelow) keep.add(c); });
+    list.slice().sort((a, b) => b.value - a.value).forEach((c, i) => { if (i < limit && (i < K || share(c) >= o.groupBelow)) keep.add(c); });
     let shown = list.filter(c => keep.has(c));
     let rest = list.filter(c => !keep.has(c));
     // Con una sola categoría sobrante no hay "Otros": se ve mejor con su nombre.
@@ -319,6 +323,8 @@ export function groupEntries(m: Model, o: GroupOptions): { entries: Entry[]; adj
 }
 
 export const OTHER_KEY = "␟other";
+/** Sectores con nombre que siempre quedan visibles (los mayores), aunque estén bajo «Group below». */
+export const MIN_NAMED = 5;
 
 /** Compare with sumado (null si ningún miembro lo trae) y objetivo (null si algún miembro no lo tiene: nunca un % falso). */
 export function sumCmpTgt(members: Cat[]): { cmp: number | null; tgt: number | null } {

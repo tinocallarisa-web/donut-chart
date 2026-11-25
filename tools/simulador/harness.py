@@ -179,7 +179,7 @@ window.powerbi = { visuals: { plugins: {} }, extensibility: {} };
  const asignados = {}; let nAsig = 0;
  window.__host = {
   eventService: { renderingStarted(){ __ev.push('S'); }, renderingFinished(){ __ev.push('F'); }, renderingFailed(o,m){ __ev.push('X'); console.error('FAILED', m); } },
-  createSelectionManager(){ return { select(id, multi){ const a = Array.isArray(id) ? id : [id]; sel = multi ? sel.concat(a) : a; window.__sel = sel; return Promise.resolve(sel); },
+  createSelectionManager(){ return { select(id, multi){ const a = Array.isArray(id) ? id : [id]; window.__maxSel = Math.max(window.__maxSel || 0, a.length); window.__nSelect = (window.__nSelect || 0) + 1; sel = multi ? sel.concat(a) : a; window.__sel = sel; return Promise.resolve(sel); },
      clear(){ sel = []; window.__sel = []; return Promise.resolve(); }, getSelectionIds(){ return sel; },
      hasSelection(){ return sel.length > 0; }, registerOnSelectCallback(cb){ window.__onSel = cb; }, showContextMenu(id, p){ __menu.push(id && id.key); return Promise.resolve(); } }; },
   // Como Power BI: con varias columnas en categories (category, facet, segment), la identidad de categories[k].identity[i]
@@ -246,7 +246,12 @@ async def upd(pg, dv, W=None, H=None, op=0):
     await pg.wait_for_timeout(40)
 
 
+MAX_IDS = 1000
+MAXSEL = [0]
+
+
 async def eventos(pg, label):
+    MAXSEL[0] = max(MAXSEL[0], await pg.evaluate("() => window.__maxSel || 0"))
     ev = await pg.evaluate("() => __ev.join('')")
     n = ev.count("S")
     check(f"{label}: sin errores y eventos 1:1", not pg._errs and n == ev.count("F") and "X" not in ev, f"{ev[-16:]} {pg._errs[:2]}")
@@ -564,7 +569,10 @@ async def bloque2(b):
         comprobar_dibujo(i, W, H, lbl)
         te = fila(i, "Tè Nord")
         if te and te["tgt"]:
-            check(f"{lbl}: Tè Nord muy por debajo (✕ 71%)", "✕" in te["tgt"] and "71" in te["tgt"], str(te))
+            # El % de objetivo se trunca (25-11): 70,9 % → 70 %; un ≈ nunca sale como 100 %.
+            check(f"{lbl}: Tè Nord muy por debajo (✕ 70%, truncado)", "✕" in te["tgt"] and "70" in te["tgt"], str(te))
+            casi = [r["tgt"] for r in filas_datos(i) if r["tgt"] and r["tgt"].startswith("≈")]
+            check(f"{lbl}: ningún ≈ con «100%»", casi and not any("100" in t for t in casi), str(casi))
             nc = fila(i, "Nord Cola")
             check(f"{lbl}: Nord Cola cumple (✓)", nc and "✓" in nc["tgt"], str(nc))
             cf = fila(i, "Caf")
@@ -1172,7 +1180,8 @@ async def tanda_25b(b):
         pg = await page(b, dv_ventas({}, segment="Marca", cat="Familia", legacy=False), W, H, name=f"t2_fam_marca_legend_{W}x{H}")
         S = await sb(pg)
         comprobar_anillo(S, W, H, lbl, quiere=W >= 620)
-        check(f"{lbl}: leyenda compacta con los segmentos de cada familia", S["legend"] and len(S["lseg"]) >= (10 if W == 960 else 1), str(S["lseg"]))
+        # A tamaño pequeño, si los segmentos no caben la leyenda los quita antes de plegar categorías (25-11).
+        check(f"{lbl}: leyenda compacta con los segmentos de cada familia (o sin ellos si no caben)", S["legend"] and len(S["lseg"]) >= (10 if W == 960 else 0), str(S["lseg"]))
         check(f"{lbl}: sin Compare, Summary apagado (Automatic)", not S["summary"], str(S["summary"]))
         await eventos(pg, lbl)
         await pg.close()
@@ -1616,7 +1625,8 @@ async def tanda_lazo_bordes(b):
             B = await pg.evaluate(BORDES)
             n = await pg.evaluate(NSEC)
             if con:
-                check(f"{lbl} {W}x{H}: un borde por sector en los dos anillos, con su color y ancho", len(B) == n and all(x == esperado for x in B), f"{len(B)} vs {n} {B[:2]}")
+                # Un arco más fino que su borde va sin borde (25-11): casi todos llevan borde, todos con su color y ancho.
+                check(f"{lbl} {W}x{H}: borde en los dos anillos (salvo arcos más finos que el borde), con su color y ancho", n - 3 <= len(B) <= n and all(x == esperado for x in B), f"{len(B)} vs {n} {B[:2]}")
             else:
                 check(f"{lbl} {W}x{H}: sin trazo de borde", not B, str(B[:2]))
             sep = await pg.evaluate(SEP)
@@ -1888,6 +1898,105 @@ async def tanda_otros_seleccion(b):
         print(f"    {lbl}: {n} identidades · {('—' if env is None else format(env, ',.0f'))} · {cen} · {esp:,.0f}")
 
 
+# ── Muchas categorías: K sectores con nombre, aviso en edición y tiempos (25-11) ─
+
+def dv_detalle_pdv(facet=False, segment=None, cat="PDV", n_pdv=None, objs=None):
+    """Detalle como lo agrega Power BI: una fila por combinación de las columnas de categories (sin facet/segment,
+    una por PDV). n_pdv: solo los primeros PDV (para rozar el tope de identidades)."""
+    filas = DETALLE
+    if n_pdv:
+        keep = set(sorted({r["PDV"] for r in DETALLE})[:n_pdv])
+        filas = [r for r in DETALLE if r["PDV"] in keep]
+    keys = [cat] + (["SKU"] if facet else []) + ([segment] if segment else [])
+    g = OrderedDict()
+    for r in filas:
+        k = tuple(r[x] for x in keys)
+        g[k] = g.get(k, 0) + (r["Litros"] or 0)
+    cats = [col(cat, "category", [k[0] for k in g])]
+    if facet:
+        cats.append(col("SKU", "facet", [k[1] for k in g]))
+    if segment:
+        cats.append(col(segment, "segment", [k[-1] for k in g]))
+    ms = [measure("Litros", "values", list(g.values()))]
+    return {"metadata": {"objects": json.loads(json.dumps(objs or {"style": {"guide": False}})), "columns": [c["source"] for c in cats] + [m["source"] for m in ms]},
+            "categorical": {"categories": cats, "values": ms}}
+
+
+def _old_dv_detalle_pdv(facet=False):
+    cats = [col("PDV", "category", [r["PDV"] for r in DETALLE])]
+    ms = [measure("Litros", "values", [r["Litros"] for r in DETALLE])]
+    return {"metadata": {"objects": {"style": {"guide": False}}, "columns": [c["source"] for c in cats] + [m["source"] for m in ms]},
+            "categorical": {"categories": cats, "values": ms}}
+
+
+async def tanda_muchas(b):
+    print("25-11 (10) · Detalle por PDV (1.746): K sectores con nombre, aviso solo editando y tiempos de selección")
+    TIEMPOS = []
+    for facet in (False, True):
+        tag = "PDV × SKU (small multiples)" if facet else "PDV"
+        for edit in (True, False):
+            pg = await page(b, dv_detalle_pdv(facet), 960, 540, edit=edit, name=("muchas_pdv" + ("_sku" if facet else "") + ("_edicion" if edit else "_lectura")))
+            n_sl = await pg.evaluate("() => { const p = document.querySelector('.dn-panel'); return Array.from(p.querySelectorAll('path.dn-slice')).map(x => x.getAttribute('data-key')); }")
+            nombrados = [k for k in n_sl if "other" not in k.lower()]
+            ley = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-legend .dn-li')).map(e => e.textContent)")
+            notas = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-notes, .dn-note, .dn-foot')).map(e => e.textContent).join(' | ')")
+            modo = "edición" if edit else "lectura"
+            if not facet:
+                check(f"{tag} {modo}: 5 sectores con nombre + Otros aunque ninguno pase «Group below»", len(nombrados) == 5 and len(n_sl) == 6, str(n_sl))
+                check(f"{tag} {modo}: la leyenda nombra los 5 mayores y «Other (1741)»", len(ley) >= 6 and ley[5].startswith("Other (1741)"), str(ley[:6]))
+            else:
+                check(f"{tag} {modo}: cada panel con sectores con nombre (no solo Otros)", len(nombrados) >= 1, str(n_sl))
+            aviso = "1,746 categories: the top 5 hold" in notas
+            check(f"{tag} {modo}: aviso de «muchas categorías» {'sí' if edit else 'no'}", aviso == edit, notas[:160])
+            if not edit:
+                r = await clic_otros(pg)
+                TIEMPOS.append((tag, r))
+                check(f"{tag}: clic en Otros < 300 ms y nunca select() con más de {MAX_IDS} identidades", r["ms"] < 300 and r["maxSel"] <= MAX_IDS, str(r))
+                check(f"{tag}: Otros supera el tope → aviso visible y nada hacia fuera", r["filas"] > MAX_IDS and r["nota"] and r["enviadas"] == 0, str(r))
+            await eventos(pg, f"{tag} {modo}")
+            await pg.close()
+    # Justo por debajo del tope: 1.005 PDV → Otros con 1.000 filas → sí se envía.
+    pg = await page(b, dv_detalle_pdv(n_pdv=1005), 960, 540)
+    r = await clic_otros(pg)
+    check("Otros con 1.000 filas (justo en el tope): se envía entero y sin aviso", r["enviadas"] == 1000 and not r["nota"], str(r))
+    await eventos(pg, "tope justo")
+    await pg.close()
+    # Los grandes de Category × Segment (y el de Tino: Show at most 5, hueco 6, borde negro).
+    tino = {"style": {"guide": False}, "slices": {"maxSlices": 5, "gap": 6, "border": True, "borderColor": {"solid": {"color": "#000000"}}}}
+    for tag, dvx in [("PDV × SKU (Segment)", dv_detalle_pdv(segment="SKU")), ("SKU × PDV (Segment)", dv_detalle_pdv(cat="SKU", segment="PDV")),
+                     ("SKU × PDV, caso de Tino", dv_detalle_pdv(cat="SKU", segment="PDV", objs=tino))]:
+        pg = await page(b, None, 960, 540)
+        ms = await pg.evaluate("(dv) => { window.__cats = dv.categorical.categories; const t0 = performance.now(); __v.update({ dataViews: [dv], viewport: { width: 960, height: 540 }, type: 2, operationKind: 0, viewMode: 0, editMode: 0, jsonFilters: [] }); return performance.now() - t0; }", dvx)
+        await pg.wait_for_timeout(150)
+        arcos = await pg.evaluate("() => { const by = {}; document.querySelectorAll('.dn-segg').forEach(g => { const p = g.getAttribute('data-parent'); by[p] = (by[p] || 0) + 1; }); return Math.max(0, ...Object.values(by)); }")
+        ley = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-legend .dn-li[data-key]')).filter(e => !e.classList.contains('dn-lseg')).length")
+        check(f"{tag}: update completo < 500 ms", ms < 500, f"{ms:.0f} ms")
+        check(f"{tag}: anillo exterior con 7 arcos como mucho por categoría (6 + Other)", arcos <= 7, str(arcos))
+        check(f"{tag}: la leyenda nombra al menos los K sectores (nunca solo «+N more»)", ley >= 4, str(ley))
+        if "Tino" in tag:
+            finos = await pg.evaluate("() => document.querySelectorAll('path.dn-border').length")
+            check(f"{tag}: sin anillo de bordes (los arcos más finos que su borde van sin borde)", finos <= await pg.evaluate("() => document.querySelectorAll('path.dn-slice, path.dn-seg').length"), str(finos))
+            await shot(pg, "muchas_sku_pdv_tino")
+        r = await clic_otros(pg)
+        r["update_ms"] = round(ms)
+        TIEMPOS.append((tag, r))
+        check(f"{tag}: clic en Otros < 300 ms, sin select() por encima del tope y con aviso", r["ms"] < 300 and r["maxSel"] <= MAX_IDS and r["nota"], str(r))
+        await eventos(pg, tag)
+        await pg.close()
+    print("  Tiempos: caso · update · filas de Otros · clic en Otros (ms) · identidades enviadas")
+    for tag, r in TIEMPOS:
+        print(f"    {tag}: {r.get('update_ms', '—')} ms · {r['filas']} filas · {r['ms']:.0f} ms · {r['enviadas']}")
+
+
+async def clic_otros(pg):
+    """Clic en Otros: tiempo (selección + repintado), filas que cubriría, identidades enviadas y aviso."""
+    return await pg.evaluate(r"""() => { const p = document.querySelector('path.dn-slice[data-key*="other"]');
+        const t0 = performance.now(); p.dispatchEvent(new MouseEvent('click', { bubbles: true })); const ms = performance.now() - t0;
+        const nota = document.querySelector('.dn-selnote'); const m = nota ? /\(([\d,.]+)\)/.exec(nota.textContent) : null;
+        return { ms, enviadas: (window.__sel || []).length, maxSel: window.__maxSel || 0, nota: nota ? nota.textContent : '',
+                 filas: m ? parseInt(m[1].replace(/[,.]/g, ''), 10) : (window.__sel || []).length }; }""")
+
+
 def litros_identidades(sel):
     """Como Power BI: cada identidad filtra las filas de Ventas que coinciden en TODAS las columnas que lleva. Devuelve los
     Litros de la unión; None si dos identidades cubren la misma fila (doble conteo)."""
@@ -1913,6 +2022,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--muchas" in sys.argv:
+            await tanda_muchas(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--otros" in sys.argv:
             await tanda_otros_seleccion(b)
             await b.close()
@@ -2266,7 +2381,9 @@ async def main():
         await tanda_lazo_bordes(b)
         await tanda_centro_seleccion(b)
         await tanda_otros_seleccion(b)
+        await tanda_muchas(b)
         await b.close()
+    check(f"global: ninguna llamada a select() con más de {MAX_IDS} identidades", MAXSEL[0] <= MAX_IDS, str(MAXSEL[0]))
     print()
     print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
 

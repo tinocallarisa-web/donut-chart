@@ -38,7 +38,7 @@ import "./../style/visual.less";
 
 import { STRINGS } from "./strings";
 import { FONTS, FontSpec, GROUPS, OBJECTS, PANE, PropSpec } from "./formatSpec";
-import { buildModel, groupEntries, largestRemainder, computeChange, splitChange, Model, Entry, Cat, Change, Dim, OTHER_KEY } from "./model";
+import { buildModel, groupEntries, largestRemainder, computeChange, splitChange, Model, Entry, Cat, Change, Dim, OTHER_KEY, MIN_NAMED } from "./model";
 import { createProWatermark, renderProWatermark } from "./comun/watermark";
 
 import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructorOptions;
@@ -98,6 +98,17 @@ for (const k of PRO_STYLES) {
     TEMPLATES[k] = { labels: { color: t.text }, center: { color: t.text }, legend: { color: t.text }, dataTable: { color: t.text },
         scaleRing: { color: t.axis }, slices: { otherColor: luminance(t.bg) < 0.2 ? "#8C8C8C" : "#A19F9D" } };
 }
+/**
+ * Tope duro de identidades por select(). Power BI Desktop (2.160, nov-2026) convierte la lista en ORs anidados y los
+ * recorre recursivamente: con decenas de miles revienta su pila (RangeError en SelectRefFinder.visitOr, Tino, 25-11),
+ * fuera de nuestro alcance. Pila de V8 ≈ 10.000–12.000 marcos, unos 2 marcos por nivel de OR → techo teórico ≈ 5.000;
+ * 1.000 deja un margen de ×5 para el Servicio y otras pilas. Microsoft no documenta un límite (que sepamos). Por encima,
+ * la selección se ve solo dentro del visual, con aviso, y no se envía nada hacia fuera.
+ */
+const MAX_SELECT_IDS = 1000;
+/** Segmentos con nombre por categoría en el anillo exterior; el resto, en un «Other (n)» de la categoría. */
+const SEG_MAX = 6;
+const SEG_OTHER = "␟segother";
 /** Nota «Percentages rounded to add up to 100%»: desactivada (Tino, 25-11); se conserva por si se ofrece como opción. */
 const SHOW_ROUNDED_NOTE = false;
 const FONT_DEFAULT = "'Segoe UI', wf_segoe-ui_normal, helvetica, arial, sans-serif";
@@ -208,6 +219,13 @@ export class Visual implements IVisual {
     private drag: { x0: number; y0: number; x1: number; y1: number; on: boolean; add: boolean; id: number } | null = null;
     private lassoEl: SVGRectElement | null = null;
     private suppressClick = false;
+    /** La selección actual es demasiado grande para filtrar fuera: solo se dibuja aquí. */
+    private localOnly = false;
+    /** Por update: segmentos de cada categoría (top SEG_MAX + «Other») y sus valores (ver segListOf / segSplit). */
+    private segLists = new Map<string, { sd: Dim; keys: string[] }[]>();
+    private splitCache = new Map<string, { sd: Dim; v: number; h: number }[]>();
+    private segOrder: Map<string, number> | null = null;
+    private segDims: Map<string, Dim> | null = null;
     private pointerDown = false;
     /** Selección propia: claves de categoría (o OTHER_KEY). Se calcula aquí y se pasa entera a Power BI. */
     private selKeys = new Set<string>();
@@ -260,7 +278,7 @@ export class Visual implements IVisual {
             });
         }
 
-        this.root.addEventListener("keydown", (e: KeyboardEvent) => this.onKey(e));
+        this.root.addEventListener("keydown", this.safe((e: KeyboardEvent) => this.onKey(e)));
         // Un puntero apaga el modo teclado y borra un contorno que hubiera quedado (en Desktop el foco del iframe puede
         // llegar antes que el pointerdown y parecer de teclado).
         const offKb = () => { this.pointerDown = true; if (this.kbMode) { this.kbMode = false; this.paintState(); } };
@@ -279,13 +297,13 @@ export class Visual implements IVisual {
             this.announce();
         });
         this.root.addEventListener("blur", () => { this.hasFocus = false; this.kbMode = false; this.pointerDown = false; this.hideTip(); this.paintState(); });
-        this.root.addEventListener("pointerdown", (e: PointerEvent) => this.lassoStart(e));
-        this.root.addEventListener("pointermove", (e: PointerEvent) => this.lassoMove(e));
-        this.root.addEventListener("pointerup", (e: PointerEvent) => this.lassoEnd(e));
-        this.root.addEventListener("pointercancel", () => this.lassoCancel());
-        this.root.addEventListener("click", (e: MouseEvent) => this.onClick(e));
-        this.root.addEventListener("contextmenu", (e: MouseEvent) => this.onContext(e));
-        this.root.addEventListener("mousemove", (e: MouseEvent) => this.onMove(e));
+        this.root.addEventListener("pointerdown", this.safe((e: PointerEvent) => this.lassoStart(e)));
+        this.root.addEventListener("pointermove", this.safe((e: PointerEvent) => this.lassoMove(e)));
+        this.root.addEventListener("pointerup", this.safe((e: PointerEvent) => this.lassoEnd(e)));
+        this.root.addEventListener("pointercancel", this.safe(() => this.lassoCancel()));
+        this.root.addEventListener("click", this.safe((e: MouseEvent) => this.onClick(e)));
+        this.root.addEventListener("contextmenu", this.safe((e: MouseEvent) => this.onContext(e)));
+        this.root.addEventListener("mousemove", this.safe((e: MouseEvent) => this.onMove(e)));
         this.root.addEventListener("mouseleave", () => { if (this.hoverKey !== null) { this.hoverKey = null; this.paintState(); } this.hideTip(); });
     }
 
@@ -701,8 +719,10 @@ export class Visual implements IVisual {
             if (this.formatMode) this.subSelectionHelper.updateOutlinesFromSubSelections((options as any).subSelections ?? [], true);
             this.events.renderingFinished(options);
         } catch (e) {
-            this.events.renderingFailed(options, String(e));
+            // Nunca una excepción hacia el host: se avisa dentro del visual y se cierra el evento de render.
             console.error("[DonutChart]", e);
+            try { this.clearDrawing(); this.message(this.W || 300, this.H || 200, this.t("UI_RenderError", "This data could not be drawn. Try fewer categories or segments.")); } catch { /* nada */ }
+            this.events.renderingFailed(options, String(e));
         }
         if (fetchNow) {
             let ok = false;
@@ -772,6 +792,10 @@ export class Visual implements IVisual {
         this.svg.attr("width", W).attr("height", H);
         this.aplicarAspecto();
         this.idCache.clear();
+        this.segLists.clear();
+        this.splitCache.clear();
+        this.segOrder = null;
+        this.segDims = null;
         this.k = Math.max(0.6, Math.min(1.8, Math.min(W, H) / 300));
         this.minFs = Math.max(8, Number(this.settings.accessibility.minFontSize) || 8);
 
@@ -803,6 +827,7 @@ export class Visual implements IVisual {
             if (ids && ids.length) this.restoreSelection(ids);
         }
         this.pruneSelection();
+        if (this.localOnly && !this.selKeys.size) { this.localOnly = false; this.showLocalNote(0); }
         this.root.setAttribute("aria-label", this.tf("UI_Aria", "{0} chart: {1} by {2}, {3} categories, total {4}",
             s.slices.shape === "pie" ? this.t("Enum_shape_pie", "Pie") : this.t("Enum_shape_donut", "Donut"),
             m.measureName, m.categoryName, String(m.cats.length), this.fmtFull(m.total, m.format)));
@@ -1035,20 +1060,55 @@ export class Visual implements IVisual {
         });
     }
 
+    /**
+     * Segmentos de una categoría (en el anillo exterior, la leyenda, la tabla, el teclado y la selección): los que tienen
+     * valor, en el orden del campo; con más de SEG_MAX + 1, los SEG_MAX mayores y el resto en un «Other (n)» propio de
+     * la categoría. Miles de arcos no se ven ni se pueden leer (Detalle: 1.746 PDV por SKU). Una pasada por los mapas
+     * bySeg de sus miembros; se calcula una vez por update.
+     */
+    private segListOf(e: Entry): { sd: Dim; keys: string[] }[] {
+        let l = this.segLists.get(e.key);
+        if (l) return l;
+        const m = this.model;
+        if (!this.segOrder) {
+            this.segOrder = new Map();
+            this.segDims = new Map();
+            m.segments.forEach((sd, i) => { this.segOrder.set(sd.key, i); this.segDims.set(sd.key, sd); });
+        }
+        const tot = new Map<string, number>();
+        for (const c of e.members) for (const [k, a] of c.bySeg) if (a.value > 0) tot.set(k, (tot.get(k) ?? 0) + a.value);
+        const ord = (k: string) => this.segOrder.get(k) ?? 0;
+        let top = Array.from(tot.keys());
+        let rest: string[] = [];
+        if (top.length > SEG_MAX + 1) {
+            top.sort((a, b) => tot.get(b) - tot.get(a) || ord(a) - ord(b));
+            rest = top.slice(SEG_MAX);
+            top = top.slice(0, SEG_MAX);
+        }
+        top.sort((a, b) => ord(a) - ord(b));
+        l = top.map(k => ({ sd: this.segDims.get(k), keys: [k] }));
+        if (rest.length) l.push({ sd: { key: SEG_OTHER, name: this.t("UI_Other", "Other") + " (" + rest.length + ")" }, keys: rest });
+        this.segLists.set(e.key, l);
+        return l;
+    }
+
     /** Valores de cada segmento de una fila (en un panel o en total) y sus % por resto mayor dentro de los de la fila. */
     private segSplit(e: Entry, fkey: string | null, units: number): { sd: Dim; v: number; h: number; pct: number }[] {
-        const m = this.model;
-        const vals = m.segments.map(sd => {
-            let v = 0, h = 0;
-            for (const c of e.members) {
-                const a = fkey !== null ? c.parts.get(fkey + "␟" + sd.key) : c.bySeg.get(sd.key);
-                if (a) { v += a.value; h += a.hl; }
-            }
-            return { sd, v: Math.max(0, v), h, pct: 0 };
-        });
-        const lr = largestRemainder(vals.map(x => x.v), units).out;
-        vals.forEach((x, i) => { x.pct = lr[i]; });
-        return vals;
+        const ck = e.key + "|" + (fkey ?? "");
+        let base = this.splitCache.get(ck);
+        if (!base) {
+            base = this.segListOf(e).map(it => {
+                let v = 0, h = 0;
+                for (const c of e.members) for (const k of it.keys) {
+                    const a = fkey !== null ? c.parts.get(fkey + "␟" + k) : c.bySeg.get(k);
+                    if (a) { v += a.value; h += a.hl; }
+                }
+                return { sd: it.sd, v: Math.max(0, v), h };
+            });
+            this.splitCache.set(ck, base);
+        }
+        const lr = largestRemainder(base.map(x => x.v), units).out;
+        return base.map((x, i) => ({ sd: x.sd, v: x.v, h: x.h, pct: lr[i] }));
     }
 
     /** Tono de un segmento: el color de su categoría mezclado con el fondo, más claro cuanto más atrás va el segmento. */
@@ -1066,8 +1126,10 @@ export class Visual implements IVisual {
         const i = key.indexOf("␞");
         const e = this.entryOf(key.slice(0, i));
         const sk = key.slice(i + 1);
-        const si = this.model.segments.findIndex(s => s.key === sk);
-        return e && si >= 0 ? { e, sd: this.model.segments[si], si } : null;
+        if (!e) return null;
+        const l = this.segListOf(e);
+        const si = l.findIndex(it => it.sd.key === sk);
+        return si >= 0 ? { e, sd: l[si].sd, si } : null;
     }
 
     /** Estado frente al objetivo: ✓ (≥ Met at) · ≈ (≥ Close at) · ✕; forma y color. null sin objetivo. */
@@ -1077,6 +1139,7 @@ export class Visual implements IVisual {
         const close = Math.min(met, Number(this.settings.target?.closeAt) || 90);
         const pct = v / t * 100;
         const look = this.look;
+        // El % se enseña truncado (Math.floor en quien lo pinta): un ≈ nunca sale como «100 %» (Nord 0,0: 99,5 %).
         if (pct >= met) return { pct, glyph: "✓", color: this.hc ? this.hcFg : (look ? look.up : "#107C10"), word: this.t("UI_Met", "met") };
         if (pct >= close) return { pct, glyph: "≈", color: this.hc ? this.hcFg : "#B86E00", word: this.t("UI_Close", "close") };
         return { pct, glyph: "✕", color: this.hc ? this.hcFg : (look ? look.down : "#C4314B"), word: this.t("UI_Miss", "below") };
@@ -1158,7 +1221,18 @@ export class Visual implements IVisual {
             const cat = m.categoryName, seg = m.segmentCol.source.displayName;
             out.push(this.tf("UI_SegNested", "Each {0} belongs to one {1}: put {1} in Category and {0} in Segment", cat, seg));
         }
-        if (this.editing && m.annotationCol && m.annotationNotText > 0) out.push(this.t("UI_NotesNotText", "Annotations expects text: set the field to First"));
+        // Muchas categorías y poco peso con nombre: un donut no es la forma (solo editando, como el aviso de anidado).
+        const other = this.entries.find(e => e.isOther);
+        if (this.editing && other && m.cats.length > 20) {
+            const units = 100 * Math.pow(10, this.pctDec("labels"));
+            const named = this.entries.filter(e => !e.isOther);
+            const namedPct = named.reduce((a, e) => a + e.pct, 0);
+            if (namedPct < units * 0.5 || other.pct > units * 0.6) {
+                out.push(this.tf("UI_ManyCats", "{0} categories: the top {1} hold {2}. A bar chart or treemap reads this better.",
+                    this.int(m.cats.length), String(named.length), this.fmtPct(namedPct)));
+            }
+        }
+                if (this.editing && m.annotationCol && m.annotationNotText > 0) out.push(this.t("UI_NotesNotText", "Annotations expects text: set the field to First"));
         return out;
     }
 
@@ -1438,8 +1512,17 @@ export class Visual implements IVisual {
         const maxH = side ? H - 2 * pad : Math.floor(H * (mini ? 0.42 : 0.3));
         if (maxW < fs * 3 || maxH < fs * 1.3) return null;
         const n = this.entries.length;
-        for (let fold = 0; fold <= n; fold = fold === 0 ? Math.min(2, n) : fold + 1) {
-            const el = this.buildLegend(side, fs, fold, maxW, false);
+        // Primero con los segmentos de cada categoría; si no caben, sin ellos; después se pliegan las últimas en «+N more»,
+        // pero nunca por debajo de los K sectores con nombre (si ni eso cabe, se recorta el alto: nunca solo «+N more»).
+        const keepMin = Math.min(MIN_NAMED, n);
+        const maxFold = n - keepMin;
+        const tries: [boolean, number][] = [];
+        if (this.segOn) tries.push([true, 0]);
+        tries.push([false, 0]);
+        for (let f = 2; f <= maxFold; f++) tries.push([false, f]);
+        let last: { el: HTMLDivElement; w: number; h: number; lines: number; fold: number } | null = null;
+        for (const [withSeg, fold] of tries) {
+            const el = this.buildLegend(side, fs, fold, maxW, false, withSeg);
             el.style.visibility = "hidden";
             el.style.left = "0px"; el.style.top = "0px";
             el.style.width = "max-content";
@@ -1451,15 +1534,19 @@ export class Visual implements IVisual {
                 el.style.visibility = "";
                 el.style.width = w + "px";
                 const tops = new Set(Array.from(el.querySelectorAll<HTMLElement>(".dn-li")).map(x => Math.round(x.getBoundingClientRect().top)));
+                if (last) last.el.remove();
                 return { el, w, h, score: fold, fs, lines: tops.size };
             }
-            el.remove();
-            if (fold >= n) break;
+            if (last) last.el.remove();
+            last = { el, w, h, lines: 0, fold };
         }
-        return null;
+        if (!last) return null;
+        // Ni los K mayores caben: se quedan, recortados al alto disponible.
+        Object.assign(last.el.style, { visibility: "", width: last.w + "px", height: maxH + "px", overflow: "hidden" });
+        return { el: last.el, w: last.w, h: maxH, score: last.fold + 100, fs, lines: 0 };
     }
 
-    private buildLegend(side: boolean, fs: number, fold: number, maxW: number, withNotes: boolean): HTMLDivElement {
+    private buildLegend(side: boolean, fs: number, fold: number, maxW: number, withNotes: boolean, withSeg = true): HTMLDivElement {
         const s = this.settings;
         const el = document.createElement("div");
         el.className = "dn-legend" + (side ? " dn-legend-v" : " dn-legend-h");
@@ -1496,7 +1583,7 @@ export class Visual implements IVisual {
         };
         this.entries.slice(0, n - f).forEach((e, idx) => {
             const ci = item(e.key, e.name, this.swatch(e, this.arcIndexOf(e, idx), fs), "");
-            if (!this.segOn) { list.appendChild(ci); return; }
+            if (!this.segOn || !withSeg) { list.appendChild(ci); return; }
             const grp = document.createElement("div");
             grp.className = "dn-lgroup";
             grp.appendChild(ci);
@@ -1642,7 +1729,7 @@ export class Visual implements IVisual {
             g.style.color = st.color;
             g.setAttribute("aria-label", st.word);
             sp.appendChild(g);
-            sp.appendChild(document.createTextNode(" " + this.fmtPct(Math.round(st.pct), 0)));
+            sp.appendChild(document.createTextNode(" " + this.fmtPct(Math.floor(st.pct), 0)));
             return sp;
         };
         const mark = (ch: Change | undefined) => (c: HTMLDivElement, col: string) => {
@@ -1653,7 +1740,9 @@ export class Visual implements IVisual {
             if (ch.isGone) c.setAttribute("data-gone", "1");
         };
         const hColor = this.hc ? this.hcFg : String(L.headerColor || color);
-        if (o.header) {
+        // Con small multiples el título «Total» se queda aunque la cabecera se retire por falta de sitio: sin él no se sabe
+        // que la tabla es la de todos los paneles.
+        if (o.header || this.smOn) {
             if (cmp || this.smOn) {
                 const tc = cmp ? this.cmpTotal() : 0;
                 // Con small multiples la tabla es la del total de todos los paneles: lo dice su título.
@@ -1668,6 +1757,7 @@ export class Visual implements IVisual {
                     el.insertBefore(c, grid);
                 }
             }
+            if (o.header) {
             const hb = (col: string, text: string): Node => {
                 const b = document.createElement("button");
                 b.type = "button";
@@ -1696,6 +1786,7 @@ export class Visual implements IVisual {
                 c.style.borderBottomColor = this.hc ? this.hcFg : alpha(color, 0.35);
                 if (hBg) c.style.backgroundColor = hBg;
             });
+            }
         }
         const noteRows = (notes: string[], rowKey: string, prefix?: string) => {
             if (!o.ann || !this.annOn) return;
@@ -1981,7 +2072,8 @@ export class Visual implements IVisual {
         if (this.segOn) {
             // Segmentos: tramas propias (puntos, rayas…) para distinguirlos sin color.
             const sk = ["", "dots", "v", "d135", "cross", "h", "grid", "d45"];
-            this.model.segments.forEach((_s, si) => { if (si > 0) mk(this.segPatternId(si), sk[1 + ((si - 1) % (sk.length - 1))], this.hc ? this.hcFg : "rgba(0,0,0,0.45)"); });
+            const nSeg = Math.max(0, ...this.entries.map(e => this.segListOf(e).length));
+            for (let si = 1; si < nSeg; si++) ((_s: number) => { mk(this.segPatternId(si), sk[1 + ((si - 1) % (sk.length - 1))], this.hc ? this.hcFg : "rgba(0,0,0,0.45)"); })(si);
         }
     }
 
@@ -2218,8 +2310,9 @@ export class Visual implements IVisual {
         const bw = bColor ? Math.max(0.5, Number(s.slices.borderWidth) || 1) : 0;
         const pad = (r: number) => (p.arcs.length > 1 ? gap / Math.max(r, 1) : 0);
         const arcGen = d3.arc<any>().innerRadius(ri).outerRadius(Rin).padRadius(Rin).padAngle(pad(Rin)).cornerRadius(0);
-        const border = (grp: Sel<SVGGElement>, d: string) => {
-            if (bColor) grp.append("path").attr("class", "dn-border").attr("d", d).attr("fill", "none").attr("stroke", bColor).attr("stroke-width", bw)
+        // Un arco más fino que su borde sería solo borde (Tino: anillo negro de bordes): ese arco va sin borde.
+        const border = (grp: Sel<SVGGElement>, d: string, arcLen = Infinity) => {
+            if (bColor && arcLen >= 2 * bw + 3) grp.append("path").attr("class", "dn-border").attr("d", d).attr("fill", "none").attr("stroke", bColor).attr("stroke-width", bw)
                 .attr("stroke-linejoin", "round").style("pointer-events", "none");
         };
         const g = pg.append("g").attr("class", "dn-slices");
@@ -2236,7 +2329,7 @@ export class Visual implements IVisual {
                 sg.append("path").attr("class", "dn-pat dn-pat-other").attr("d", d).attr("fill", "url(#" + this.otherPatternId(e) + ")").style("pointer-events", "none");
             }
             if (this.patternsOn && gi > 0) sg.append("path").attr("class", "dn-pat").attr("d", d).attr("fill", "url(#" + this.patternId(gi, e) + ")").style("pointer-events", "none");
-            if (!this.hc) border(sg as unknown as Sel<SVGGElement>, d);
+            if (!this.hc) border(sg as unknown as Sel<SVGGElement>, d, (a.a1 - a.a0) * Rin - gap);
             if (hasHl) {
                 // Resaltado parcial: la parte resaltada con área proporcional (radio en √), el resto atenuado.
                 const ratio = e.value > 0 ? Math.max(0, Math.min(1, (e.hl || 0) / e.value)) : 0;
@@ -2272,7 +2365,7 @@ export class Visual implements IVisual {
                     if (this.hc) path.attr("stroke", this.hcFg).attr("stroke-width", 1);
                     else if (!bColor) path.attr("stroke", this.bgColor).attr("stroke-width", 0.5);
                     if (this.patternsOn && si > 0) sgg.append("path").attr("class", "dn-pat").attr("d", d).attr("fill", "url(#" + this.segPatternId(si) + ")").style("pointer-events", "none");
-                    if (!this.hc) border(sgg as unknown as Sel<SVGGElement>, d);
+                    if (!this.hc) border(sgg as unknown as Sel<SVGGElement>, d, (sgA.a1 - sgA.a0) * r1 - gap);
                     if (hasHl) {
                         const ratio = x.v > 0 ? Math.max(0, Math.min(1, x.h / x.v)) : 0;
                         path.attr("fill-opacity", 0.35);
@@ -2716,7 +2809,7 @@ export class Visual implements IVisual {
             this.toggle(key, e.ctrlKey || e.metaKey);
         } else {
             this.selKeys.clear();
-            this.selectionManager.clear();
+            this.pushSelection();
             // Clic en vacío: también fuera el estado de foco (el siguiente Tab/flecha empieza de nuevo).
             this.kbMode = false;
             this.focusIdx = -1;
@@ -2782,9 +2875,7 @@ export class Visual implements IVisual {
         if (!keys.length) return;
         if (!d.add) this.selKeys.clear();
         for (const k of keys) this.selKeys.add(k);
-        const ids: ISelectionId[] = [];
-        ids.push(...this.selectionIds());
-        if (ids.length) this.selectionManager.select(ids, false); else this.selectionManager.clear();
+        this.pushSelection();
         this.paintState();
     }
 
@@ -2871,7 +2962,7 @@ export class Visual implements IVisual {
             const st = this.tgtStatus(value, tgt);
             if (st) {
                 items.push({ displayName: this.tgtName, value: this.fmtFull(tgt, fmt) });
-                items.push({ displayName: this.t("UI_OfTarget", "% of target"), value: st.glyph + " " + this.fmtPct(Math.round(st.pct), 0) + " · " + st.word });
+                items.push({ displayName: this.t("UI_OfTarget", "% of target"), value: st.glyph + " " + this.fmtPct(Math.floor(st.pct), 0) + " · " + st.word });
             }
         }
     }
@@ -2890,7 +2981,7 @@ export class Visual implements IVisual {
             const base = P ? P.total : m.total;
             const ee = P ? P.entries.find(x => x.key === pr.e.key) : pr.e;
             items.push({ displayName: m.categoryName, value: pr.e.name, color: this.hc ? this.hcFg : pr.e.color });
-            items.push({ displayName: m.segmentCol.source.displayName, value: pr.sd.name, color: this.hc ? this.hcFg : this.segColor(pr.e.color, pr.si, m.segments.length) });
+            items.push({ displayName: m.segmentCol.source.displayName, value: pr.sd.name, color: this.hc ? this.hcFg : this.segColor(pr.e.color, pr.si, this.segListOf(pr.e).length) });
             items.push({ displayName: m.measureName, value: this.fmtFull(v, pr.e.members[0].fmt) });
             items.push({ displayName: this.t("UI_Share", "Share"), value: this.fmtPctRaw(base > 0 ? v / base : 0) });
             items.push({ displayName: this.tf("UI_ShareOf", "Share of {0}", pr.e.name), value: this.fmtPctRaw(ee && ee.value > 0 ? v / ee.value : 0) });
@@ -3015,7 +3106,8 @@ export class Visual implements IVisual {
         const pr = this.segOn ? this.pairOf(key) : null;
         if (pr) {
             const out: number[] = [];
-            for (const c of pr.e.members) out.push(...(c.bySeg.get(pr.sd.key)?.rows ?? []));
+            const keys = this.segListOf(pr.e)[pr.si].keys;
+            for (const c of pr.e.members) for (const k of keys) { const a = c.bySeg.get(k); if (a) for (const r of a.rows) out.push(r); }
             return out;
         }
         const e = this.entryOf(key);
@@ -3036,7 +3128,7 @@ export class Visual implements IVisual {
     private normalizeSel(): void {
         if (!this.selKeys.size || !this.model) return;
         for (const e of this.entries) {
-            const segKeys = this.segOn ? this.model.segments.filter(sd => e.members.some(c => (c.bySeg.get(sd.key)?.rows.length ?? 0) > 0)).map(sd => Visual.pairKey(e.key, sd.key)) : [];
+            const segKeys = this.segOn ? this.segListOf(e).map(it => Visual.pairKey(e.key, it.sd.key)) : [];
             if (!this.selKeys.has(e.key) && segKeys.length && segKeys.every(k => this.selKeys.has(k))) this.selKeys.add(e.key);
             if (e.isOther && !this.selKeys.has(e.key) && e.members.length && e.members.every(c => this.selKeys.has(c.key))) this.selKeys.add(e.key);
             if (this.selKeys.has(e.key)) {
@@ -3049,10 +3141,49 @@ export class Visual implements IVisual {
 
     /** Identidades de la selección: las de todas las filas que cubre, sin repetir ninguna (la unión es exacta). */
     private selectionIds(): ISelectionId[] {
+        return Array.from(this.selectedRows()).map(r => this.rowId(r));
+    }
+
+    /** Filas de la selección (normalizada), sin repetir. Se cuentan antes de construir identidades (tope MAX_SELECT_IDS). */
+    private selectedRows(): Set<number> {
         this.normalizeSel();
         const rows = new Set<number>();
         for (const k of this.selKeys) for (const r of this.rowsOf(k)) rows.add(r);
-        return Array.from(rows).map(r => this.rowId(r));
+        return rows;
+    }
+
+    /**
+     * Envía la selección a Power BI. Si pasa del tope de identidades, no filtra fuera: la selección se dibuja solo aquí
+     * y un aviso lo dice (y la región viva lo lee). Nunca persistProperties.
+     */
+    private pushSelection(): void {
+        let n = 0;
+        try {
+            const rows = this.selKeys.size ? this.selectedRows() : new Set<number>();
+            n = rows.size;
+            this.localOnly = n > MAX_SELECT_IDS;
+            // Por encima del tope no se llama a select(): nada hacia fuera (y los marcadores no guardan esa selección).
+            if (!n || this.localOnly) this.selectionManager.clear();
+            else this.selectionManager.select(Array.from(rows).map(r => this.rowId(r)), false)?.catch?.(() => { /* el host rechazó la selección */ });
+        } catch (e) {
+            console.error("[DonutChart]", e);
+        }
+        this.showLocalNote(n);
+    }
+
+    /** Un fallo en un callback de interacción nunca llega al host: se registra y el visual sigue. */
+    private safe<A extends unknown[]>(fn: (...a: A) => void): (...a: A) => void {
+        return (...a: A) => { try { fn(...a); } catch (e) { console.error("[DonutChart]", e); } };
+    }
+
+    private showLocalNote(n: number): void {
+        let el = this.root.querySelector<HTMLDivElement>(".dn-selnote");
+        if (!this.localOnly) { if (el) el.remove(); return; }
+        if (!el) { el = document.createElement("div"); el.className = "dn-selnote"; this.root.appendChild(el); }
+        el.textContent = this.tf("UI_LocalSel", "Too many rows to filter other visuals ({0}) — select fewer items or remove Segment/Small multiples", this.int(n));
+        this.styleFootnotes(el);
+        el.style.background = this.hc ? this.hcBg : this.bgColor;
+        this.live.textContent = el.textContent;
     }
 
     /** Cuánto de una categoría está seleccionado: entera, en parte (pares o miembros de «Otros») o nada. */
@@ -3070,17 +3201,14 @@ export class Visual implements IVisual {
         if (multi && pr && this.selKeys.has(pr.e.key)) {
             // Ctrl+clic en un par de una categoría seleccionada entera: queda la categoría menos ese par.
             this.selKeys.delete(pr.e.key);
-            for (const sd of this.model.segments) {
-                const k = Visual.pairKey(pr.e.key, sd.key);
-                if (k !== key && pr.e.members.some(c => (c.bySeg.get(sd.key)?.rows.length ?? 0) > 0)) this.selKeys.add(k);
+            for (const it of this.segListOf(pr.e)) {
+                const k = Visual.pairKey(pr.e.key, it.sd.key);
+                if (k !== key) this.selKeys.add(k);
             }
         } else if (multi) { if (this.selKeys.has(key)) this.selKeys.delete(key); else this.selKeys.add(key); }
         else if (this.selKeys.size === 1 && this.selKeys.has(key)) this.selKeys.clear();
         else { this.selKeys.clear(); this.selKeys.add(key); }
-        const ids: ISelectionId[] = [];
-        ids.push(...this.selectionIds());
-        if (ids.length) this.selectionManager.select(ids, false);
-        else this.selectionManager.clear();
+        this.pushSelection();
         this.paintState();
     }
 
@@ -3117,9 +3245,9 @@ export class Visual implements IVisual {
                 else for (const c of sel) this.selKeys.add(c.key);
             } else if (all(e.members[0].rows)) this.selKeys.add(e.key);
             if (this.segOn && !this.selKeys.has(e.key)) {
-                for (const sd of this.model.segments) {
-                    const rows = this.rowsOf(Visual.pairKey(e.key, sd.key));
-                    if (all(rows)) this.selKeys.add(Visual.pairKey(e.key, sd.key));
+                for (const it of this.segListOf(e)) {
+                    const pk = Visual.pairKey(e.key, it.sd.key);
+                    if (all(this.rowsOf(pk))) this.selKeys.add(pk);
                 }
             }
         }
@@ -3132,7 +3260,7 @@ export class Visual implements IVisual {
         for (const e of this.entries) {
             valid.add(e.key);
             for (const c of e.members) valid.add(c.key);
-            if (this.segOn) for (const sd of this.model.segments) valid.add(Visual.pairKey(e.key, sd.key));
+            if (this.segOn) for (const it of this.segListOf(e)) valid.add(Visual.pairKey(e.key, it.sd.key));
         }
         for (const k of Array.from(this.selKeys)) if (!valid.has(k)) this.selKeys.delete(k);
     }
@@ -3236,9 +3364,7 @@ export class Visual implements IVisual {
             if (e.isOther && this.otherExpanded && this.tableEl && this.tableEl.getAttribute("data-expanded") === "true") {
                 e.members.forEach((c, i) => out.push({ kind: "child", e, c, i }));
             }
-            if (this.segOn) this.model.segments.forEach((sd, si) => {
-                if (e.members.some(c => (c.bySeg.get(sd.key)?.value ?? 0) > 0)) out.push({ kind: "seg", e, sd, si, key: Visual.pairKey(e.key, sd.key) });
-            });
+            if (this.segOn) this.segListOf(e).forEach((it, si) => out.push({ kind: "seg", e, sd: it.sd, si, key: Visual.pairKey(e.key, it.sd.key) }));
         }
         return out;
     }
@@ -3253,7 +3379,7 @@ export class Visual implements IVisual {
         }
         if (this.tgtOn) {
             const st = this.tgtStatus(value, tgt);
-            if (st) txt += ". " + this.tf("UI_AnnTarget", "{0} of target, {1}", this.fmtPct(Math.round(st.pct), 0), st.word);
+            if (st) txt += ". " + this.tf("UI_AnnTarget", "{0} of target, {1}", this.fmtPct(Math.floor(st.pct), 0), st.word);
         }
         return txt;
     }
@@ -3320,7 +3446,7 @@ export class Visual implements IVisual {
                 if (this.canInteract) this.toggle(curKey, e.ctrlKey || e.metaKey);
                 break;
             case "Escape":
-                if (this.canInteract) { this.selKeys.clear(); this.selectionManager.clear(); }
+                if (this.canInteract) { this.selKeys.clear(); this.pushSelection(); }
                 break;
             case "ContextMenu": case "F10": {
                 if (e.key === "F10" && !e.shiftKey) { handled = false; break; }
@@ -3390,7 +3516,7 @@ export class Visual implements IVisual {
         const titles = mk("div");
         titles.appendChild(mk("div", "dn-l-title", "Donut & Pie Chart by TCViz"));
         if (size !== "s") titles.appendChild(mk("div", "dn-l-tag", size === "l"
-            ? this.t("Landing_Tagline", "Shares that read at any size: a legend table always visible, labels that never truncate and percentages that add up to 100.")
+            ? this.t("Landing_Tagline", "Shares that read at any size: a clear legend, a data table when you compare or set targets, labels that never truncate and percentages that add up to 100.")
             : this.t("Landing_TaglineShort", "Shares that read at any size.")));
         head.appendChild(titles);
         el.appendChild(head);
@@ -3544,12 +3670,21 @@ export class Visual implements IVisual {
         return svg;
     }
 
+    /**
+     * Al cambiar de estilo editando, se quitan los colores guardados que el estilo nuevo define (si no, taparían su
+     * paleta). Solo editando y solo cuando el estilo cambia (update() lo compara con tplVisto, que se actualiza en el
+     * mismo update: el update que provoca el persist ve el mismo estilo y no repite). Solo las propiedades que de verdad
+     * están guardadas: sin ninguna, no se llama a persistProperties y no hay update extra. Nunca en la selección.
+     */
     private aplicarPlantilla(nombre: string): void {
+        if (!this.editing) return;
         const t = TEMPLATES[nombre] ?? {};
-        const remove: any[] = Object.keys(t).map(obj => ({
-            objectName: obj, selector: null,
-            properties: Object.keys(t[obj]).reduce((acc: any, p) => { acc[p] = null; return acc; }, {}),
-        }));
+        const saved: any = this.dataView?.metadata?.objects ?? {};
+        const remove: any[] = [];
+        for (const obj of Object.keys(t)) {
+            const props = Object.keys(t[obj]).filter(p => saved?.[obj]?.[p] !== undefined);
+            if (props.length) remove.push({ objectName: obj, selector: null, properties: props.reduce((acc: any, p) => { acc[p] = null; return acc; }, {}) });
+        }
         if (remove.length) this.host.persistProperties({ remove });
     }
 

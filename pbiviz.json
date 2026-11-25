@@ -5,7 +5,7 @@
     "guid": "donutChartTCViz5449856DE5A343AFB84B575BC5FDB5E8",
     "visualClassName": "Visual",
     "version": "1.0.0.0",
-    "description": "Donut and pie chart that reads at any size: a legend table always visible, labels that never truncate, honest Other and percentages that add up to 100; Pro adds share and value change, targets, nested ring, small multiples and annotations.",
+    "description": "Donut and pie chart that reads at any size: a clear legend, a data table when you compare or set targets, labels that never truncate, honest Other and percentages that add up to 100; Pro adds share and value change, targets, nested ring, small multiples and annotations.",
     "supportUrl": "https://tinocallarisa-web.github.io/donut-chart/support.html",
     "privacyTermsLink": "https://tinocallarisa-web.github.io/donut-chart/privacy.html",
     "gitHubUrl": "https://github.com/tinocallarisa-web/donut-chart"
