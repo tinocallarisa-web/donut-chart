@@ -1,23 +1,24 @@
 # -*- coding: utf-8 -*-
-"""Páginas publicadas (docs/) de Line Chart by TCViz.
+"""Páginas publicadas (docs/) de Donut & Pie Chart by TCViz.
 
-Mismo enfoque que Radar (tools/gen_docs.py): estilo, cabecera y buscador de Word Cloud. El contenido describe lo que
-hace el código (capabilities.json, src/visual.ts, src/model.ts, src/formatSpec.ts); si cambia una función, cambiarla
-aquí y regenerar:   python tools/gen_docs.py
-Para OKviz: "conditional formatting (fx)" y "dynamic format strings" van escritos tal cual.
+Armazón del Treemap (tools/gen_docs.py): estilo, cabecera y buscador de Word Cloud. El contenido describe lo que hace
+el código (capabilities.json, src/visual.ts, src/model.ts, src/formatSpec.ts) y lo que comprueba el simulador
+(tools/simulador/harness.py). Si cambia una función, cambiarla aquí y regenerar:   python tools/gen_docs.py
+Para OKviz, los nombres de criterio van escritos tal cual: "Dynamic format strings", "Conditional formatting (fx)",
+"On-object formatting", "Small multiples", "Report page tooltips", "Drilldown", "Lasso selection".
 El changelog.html sale de CHANGELOG.md (raíz).
 """
 import io, json, os, re, html
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WC = r"C:\tcviz\dev\WordCloud\docs"
-NAME = "Line Chart by TCViz"
-BASE = "https://tinocallarisa-web.github.io/line-chart/"
-REPO = "https://github.com/tinocallarisa-web/line-chart"
-PRODUCT = "https://tcviz.com/product/line-chart/"
+NAME = "Donut & Pie Chart by TCViz"
+BASE = "https://tinocallarisa-web.github.io/donut-chart/"
+REPO = "https://github.com/tinocallarisa-web/donut-chart"
 VERSION = json.load(io.open(os.path.join(ROOT, "pbiviz.json"), encoding="utf-8"))["visual"]["version"]
-FECHA = "10 November 2026"
-VIDEO = "https://www.youtube.com/watch?v=R7EQ3PDNhMs"
+FECHA = "25 November 2026"
+# Pendiente: la URL la da Tino cuando el vídeo esté en YouTube. Solo la forma canónica https://www.youtube.com/watch?v=<id>.
+VIDEO = ""
 
 plantilla = io.open(os.path.join(WC, "privacy.html"), encoding="utf-8").read()
 HEAD = plantilla[:plantilla.index("<body>")]
@@ -27,15 +28,15 @@ SCRIPT = sup[sup.rindex("<script"):sup.rindex("</script>") + len("</script>")]
 
 
 def page(title, sub, body, nav="", search=False):
-    head = HEAD.replace("Privacy Policy – Word Cloud by TCViz", f"{title} – {NAME}")
-    hdr = HEADER.replace("Word Cloud by TCViz", NAME).replace(">Privacy Policy<", f">{html.escape(sub)}<")
+    head = HEAD.replace("Privacy Policy – Word Cloud by TCViz", f"{title} – {html.escape(NAME)}")
+    hdr = HEADER.replace("Word Cloud by TCViz", html.escape(NAME)).replace(">Privacy Policy<", f">{html.escape(sub)}<")
     sb = ""
     if search:
         sb = '''<div class="searchbar">
   <div class="searchbox">
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-    <input id="docsearch" type="search" placeholder="Search the documentation — try &quot;plan&quot;, &quot;gap&quot;, &quot;events&quot;, &quot;zoom&quot;…"
+    <input id="docsearch" type="search" placeholder="Search the documentation — try &quot;Other&quot;, &quot;target&quot;, &quot;labels&quot;…"
            autocomplete="off" aria-label="Search the documentation">
     <button id="searchclear" type="button" aria-label="Clear search" hidden>&times;</button>
   </div>
@@ -49,150 +50,167 @@ def page(title, sub, body, nav="", search=False):
     <a href="{BASE}terms.html">Terms of Use</a>
     <a href="{BASE}changelog.html">Changelog</a>
     <a href="{REPO}/discussions" target="_blank">Discussions</a>
-    <a href="{REPO}/issues" target="_blank">Issues</a>
-    <a href="{PRODUCT}" target="_blank">tcviz.com</a>
+    <a href="{REPO}" target="_blank">GitHub</a>
+    <a href="https://tcviz.com" target="_blank">tcviz.com</a>
   </div>
-  <p>© 2026 TCViz · {NAME} · <a href="mailto:support@tcviz.com">support@tcviz.com</a></p>
+  <p>© 2026 TCViz · {html.escape(NAME)} · <a href="mailto:support@tcviz.com">support@tcviz.com</a></p>
 </footer>
 '''
     return (head + "<body>\n" + hdr + "\n" + nav + sb + body + foot + (SCRIPT if search else "") + "\n</body>\n</html>\n")
 
 
-# ── Datos comunes ────────────────────────────────────────────────────────────
-# Límites de campos: capabilities.json → dataViewMappings[0].conditions. Filas: window de 30.000.
+# ── Datos comunes (contrastados con capabilities.json, src/visual.ts y el simulador, 25-11-2026) ────────────────────
 
 FIELDS = [
-    ("Axis", "Grouping", "Yes, one field", "A date gives a real time axis: points sit at their true distance and a missing period is a gap. A date hierarchy, text or numbers give a category axis with evenly spaced points. A hierarchy gives drilldown."),
-    ("Legend", "Grouping", "No, one field", "One line per value (region, brand, team) for every measure. Colours are set per legend value."),
-    ("Values", "Measure", "Yes, up to 6", "One line per measure, on the left axis."),
-    ("Secondary values", "Measure", "No, up to 3", "Measures in other units (margin %, units) on a right-hand axis."),
-    ("Plan", "Measure", "No, one field", "Drawn as a thin dashed line. With gap shading on, the area between actual and plan is green above and red below. After the last actual period it carries on, marked “Actual | Plan”."),
-    ("Prior year", "Measure", "No, one field", "Same as Plan, with its own dash. Gap shading uses it when there is no Plan."),
-    ("Forecast", "Measure", "No, one field", "Your own forecast measure, drawn dashed; it also carries on after the last actual period."),
-    ("Target line", "Measure", "No, one field", "A horizontal line when the target is the same for every period, or a stepped line when it changes by period."),
-    ("Events", "Measure", "No — Pro, one field", "A vertical line with its text wherever the field is not blank. A text column set to <strong>First</strong>, or a text measure."),
-    ("Annotations", "Measure", "No — Pro, one field", "A note on the line wherever the field is not blank (first measure). A text column set to First, or a text measure."),
-    ("Small multiples", "Grouping", "No — Pro, one field", "One chart per value (region, plant), with a shared or separate Y axis."),
-    ("Tooltips", "Measure", "No", "Extra measures in the tooltip. Report page tooltips are supported."),
+    ("Category", "Grouping", "Yes — one field", "The field that names the slices: brand, region, channel. A hierarchy gives drilldown."),
+    ("Values", "Measure", "Yes — one measure", "The measure the slices share. Its total goes in the center. Negative, zero and blank values are not drawn, because a slice cannot be negative or empty; they are counted in a footnote, negatives with their sum."),
+    ("Segment", "Grouping", "No — Pro, one field", "An outer ring that splits every slice by a second field, at the same angle as its slice: family by brand, channel by subchannel."),
+    ("Compare with", "Measure", "No — Pro, one measure", "The same measure for another period, usually last year: the change in share (Δ pp) and in value (Δ %) for every category."),
+    ("Target", "Measure", "No — Pro, one measure", "The plan or budget of each category: % of target with ✓ ≈ ✕, and status icons on the slices."),
+    ("Annotation", "Measure", "No — Pro, one text field", "A comment per category, shown under its row in the data table and in the tooltip. Use a text column set to First."),
+    ("Small multiples", "Grouping", "No — Pro, one field", "One donut per value — channel, zone, year — all with the same Other, order and colours."),
+    ("Tooltips", "Measure", "No, up to 5", "Extra values in the tooltip of a slice that is one row of data."),
 ]
 
 FREE_PRO = [
-    ("Real date axis: an empty period is a gap, never a zero (Break, Connect or Zero, your choice)", "✓", "✓"),
-    ("Several measures, a legend and a secondary axis at the same time", "✓", "✓"),
-    ("End labels with the last non-empty value, kept apart so they do not overlap", "✓", "✓"),
-    ("Plan, prior year and forecast as their own fields", "✓", "✓"),
-    ("Gap shading between actual and plan (or prior year), green above and red below, split exactly where the lines cross", "✓", "✓"),
-    ("Split actual and plan: the plan carries on dashed after the last actual period, marked “Actual | Plan”", "✓", "✓"),
-    ("Target line from a measure, flat or stepped", "✓", "✓"),
-    ("Trend line (linear or moving average) and peaks &amp; lows", "✓", "✓"),
-    ("Smooth lines that never overshoot the data (monotone curve)", "✓", "✓"),
-    ("Zoom with Ctrl + mouse wheel or the keyboard, optional zoom slider, Y axis that fits the zoomed range", "✓", "✓"),
-    ("Sort categories, source note under the chart", "✓", "✓"),
-    ("Colour, line style, width and markers per series; conditional formatting (fx) on the series colour (without a legend) and on the target line", "✓", "✓"),
-    ("Report theme and Classic templates; setup guide and start screen", "✓", "✓"),
-    ("Cross-filtering, multi-select, highlight, bookmarks, drilldown, context menu, report page tooltips, keyboard, high contrast", "✓", "✓"),
-    ("Number format of the measure, dynamic format strings included; format on the canvas; 12 languages", "✓", "✓"),
-    ("Variance in the end label (“+4.2% vs plan” or the absolute difference)", "—", "✓"),
-    ("Six collection styles: Boardroom, Ledger, Editorial, Signal, Aurora, Terrace", "—", "✓"),
-    ("Small multiples", "—", "✓"),
-    ("Events: vertical lines with their text, from a column of your own Events table or a measure", "—", "✓"),
-    ("Annotations pinned to a point", "—", "✓"),
-    ("Show values as: index (first visible period = 100), % change from the first visible period, running total", "—", "✓"),
+    ("Donut or pie; inner radius, start angle, Space between slices, Border, order by value or by the data", "✓", "✓"),
+    ("Data labels inside the slices, all with the same content and the same text size; a label that does not fit is left out, never cut with \"…\"; outside with leader lines when there is no legend or table", "✓", "✓"),
+    ("Total in the center; point at, select or focus a slice to see its name, value and percent — with several selected, their sum", "✓", "✓"),
+    ("An honest Other: Show at most and Group below %; it opens in the data table, and selecting it selects every item in it", "✓", "✓"),
+    ("Percentages that add up to 100 (largest remainder rounding)", "✓", "✓"),
+    ("Legend and Data table, independent, each with its own position; the table with value and share columns, header, total row, gridlines and banding; sort by clicking a header", "✓", "✓"),
+    ("Summary sentence above the chart; Footnotes for excluded values and incomplete rows", "✓", "✓"),
+    ("Scale ring with marks at 25, 50 and 75% or every 10%", "✓", "✓"),
+    ("A selectable font in the labels, the center, the legend, the data table, the summary and the footnotes", "✓", "✓"),
+    ("Conditional formatting (fx) on the slice colours, the border and the table header background", "✓", "✓"),
+    ("Lasso selection, Drilldown, cross-filtering, highlight, bookmarks, multi-visual selection, context menu, keyboard navigation", "✓", "✓"),
+    ("Report page tooltips; a tooltip with value and share, and for Other up to ten of its members", "✓", "✓"),
+    ("Accessibility card: high contrast, patterns, focus colour and width, minimum text size, reduce motion", "✓", "✓"),
+    ("Number format of the measure, Dynamic format strings included; On-object formatting; 12 languages", "✓", "✓"),
+    ("Report theme and Classic styles; setup guide inside the visual; start screen in three sizes", "✓", "✓"),
+    ("Compare with: Δ pp with a mini bar, Δ %, new and gone, ⚠ where share and value move apart, the change in the labels", "—", "✓"),
+    ("Target: % of target with ✓ ≈ ✕, Status on slices, a summary of how many categories miss it", "—", "✓"),
+    ("Segment: an outer ring with its own labels, and segment rows in the data table", "—", "✓"),
+    ("Annotations: a comment per category in the data table and the tooltip", "—", "✓"),
+    ("Small multiples: one donut per value with a shared table of the total, the same size or sized by total", "—", "✓"),
+    ("Six collection style templates: Boardroom, Ledger, Editorial, Signal, Aurora, Terrace", "—", "✓"),
 ]
 
 FORMAT = [
-    ("Style template", "Report theme (default: the colours of your report theme, like a native visual), Classic, and the six collection styles Boardroom, Ledger, Editorial, Signal, Aurora and Terrace (Pro). A template only fills what you have not set yourself. Setup guide: turn it back on to see the guide again."),
-    ("Lines", "Line width; markers (auto, on, off) and marker size; missing values — Break the line, Connect over the gap, or Zero; smooth lines; Show values as (Pro): value, index (first visible period = 100), % change from the first visible period, running total; the base follows the zoom. With Show values as on, the target line is not drawn (an absolute target has no index), and a series whose base value is 0 is left empty. <strong>Colors</strong>: colour, line style (solid, dashed, dotted), width and markers per series. Without a Legend field the colour accepts conditional formatting (fx) rules, evaluated per point on the markers."),
-    ("End labels", "Show; content — name and value, value, or name; maximum labels; text size; use the series colour or a fixed colour; variance vs plan or prior year (Pro): % or absolute."),
-    ("Events (Pro)", "Show; line colour and style; show labels; label position top or bottom; text size. The full text is always in the tooltip."),
-    ("Annotations (Pro)", "Show; text size and colour; background colour and opacity."),
-    ("Plan, prior year and forecast", "Show; line colour — grey or the series colour; width; show in legend; gap shading with the colours above and below the reference and its opacity; split actual and plan."),
-    ("Target line", "Show; colour, with conditional formatting (fx) rules per period; width; line style; label and text size."),
-    ("Trend line", "Show; type — linear or moving average, with the number of periods; apply to all series or the first; width; opacity. The linear trend runs from the first to the last point: it is not a forecast."),
-    ("Peaks &amp; lows", "Show; mark the highest, the lowest or both; first series or all; text size. Calculated on the visible (zoomed) range."),
-    ("Axes", "X axis: show, text size and colour, title, sort categories (data order, value descending or ascending, alphabetical — category axes only). Y axis: show, text size and colour, title, start at zero, gridlines and their colour. Secondary Y axis: show, text size, title, start at zero."),
-    ("Legend", "Show; position top or bottom; text size and colour; title."),
-    ("Small multiples (Pro)", "Columns (0 = automatic); space between panels; title size, colour, bold and alignment; panel background and border; shared Y axis."),
-    ("Source note", "Show; text; size; colour; alignment. A line under the chart for the data source."),
-    ("Interactions", "Zoom; Y auto-fit when zoomed; zoom slider."),
-]
-
-USE_CASES = [
-    ("Monthly sales against plan",
-     "Axis = Month, Values = Sales, Plan = Sales plan. Turn on <strong>Gap shading</strong>: months above plan in green, below in red. The plan carries on after the last actual month, so the rest of the year is on the same chart."),
-    ("This year against last year",
-     "Prior year = a time-intelligence measure such as <code>CALCULATE([Sales], SAMEPERIODLASTYEAR('Date'[Date]))</code>. With Pro, the end label can show the variance: “+4.2% vs PY”."),
-    ("Regions with a margin on a second axis",
-     "Values = Sales, Legend = Region, Secondary values = Margin %. Each region has its end label with its last value, and the margin reads on the right-hand axis."),
-    ("Daily data with a trend",
-     "A daily date on Axis, a Trend line (moving average of 7 periods) and Peaks &amp; lows. Ctrl + wheel zooms into a month; the Y axis fits the zoomed range."),
-    ("Campaigns, price changes and incidents (Pro)",
-     "An Events table with Date and Event, related to the calendar: each event is a vertical line with its text, so the reason for a jump is on the chart."),
-    ("Comparing growth, not size (Pro)",
-     "Show values as → Index: every line starts at 100 in the first visible period, so a small region that grew 30% is visibly ahead of a large one that grew 5%."),
-]
-
-TROUBLE = [
-    ("My line drops to zero in an empty month",
-     "<p>The line is drawn from your data: a zero is a real zero returned by the measure. Measures that wrap the result in <code>+ 0</code> or <code>COALESCE(…, 0)</code> turn a blank into zero; return BLANK() instead and the month is a gap. "
-     "If you do want the line to go to zero, choose <strong>Lines → Missing values → Zero</strong>; <strong>Connect</strong> draws straight over the gap.</p>"),
-    ("The axis shows categories, not a time axis",
-     "<p>The time axis needs a single date column (Date data type) on Axis. A date hierarchy (Year, Quarter, Month) gives evenly spaced categories, like any category axis. In the field well, choose the date field itself instead of Date Hierarchy.</p>"),
-    ("“Events expects text: set the field to First”",
-     "<p>A text column in Events or Annotations is summarised as Count by default, so the visual receives numbers. In the field well, open the field menu and choose <strong>First</strong>. Or use a text measure.</p>"),
-    ("Two events in the same period show only one",
-     "<p>With <strong>First</strong>, Power BI sends one text per period. Use a measure that joins them: "
-     "<code>Event text = CONCATENATEX ( VALUES ( Events[Event] ), Events[Event], \" · \" )</code>.</p>"),
-    ("“Power BI sent only part of the data”",
-     "<p>Power BI sends up to 30,000 combinations of axis, small multiples panel and legend value. Above that, the visual draws what arrived and says so. Filter the page, use a coarser axis (week instead of day) or fewer legend values.</p>"),
-    ("“N values without a date on the axis”",
-     "<p>Some rows have a blank date. They cannot be placed on a time axis, so they are left out and counted in the note. Check the relationship between your fact table and the calendar.</p>"),
-    ("Gap shading or the variance label does not appear",
-     "<p>Both need a <strong>Plan</strong> or a <strong>Prior year</strong> field: without a reference there is nothing to compare against. Gap shading is in <em>Plan, prior year and forecast → Gap shading</em>. It is not drawn at very small sizes (compact and sparkline layouts).</p>"),
-    ("Zoom does nothing",
-     "<p>Zoom uses Ctrl + mouse wheel (Cmd on a Mac) or the + and − keys with the chart focused. It is off in format mode, when <em>Interactions → Zoom</em> is off, or when the report author turned interactions off. Esc or the <em>Reset zoom</em> button goes back to the full range.</p>"),
-    ("I see a “Pro preview” watermark",
-     "<p>A Pro feature is turned on and you are editing without a licence. Turn it off to remove the watermark, or get a licence. Readers of the report without a licence see the free chart, with no watermark.</p>"),
+    ("Style template", "Report theme (free), Classic (free) or one of the six collection styles (Pro). Setup guide: turn it back on to see the guide again."),
+    ("Slices", "Shape donut or pie; inner radius (20–85%); start angle; Space between slices (0–8 px); Border on/off, width and colour (with fx); order by value or as in the data; Show at most (2–20, default 6) and Group below % (0–20, default 3) for Other, and its colour; Lasso selection on/off. Colors: All slices (fx) and one colour per category."),
+    ("Data labels", "Show; content Automatic, Percent, Value, Name, Name and percent, Value and percent, or All; position Automatic, Inside or Outside; Segment labels (Pro); font, size, bold, italic, underline; colour of the labels outside; display units and decimals of value and percent."),
+    ("Center", "Show the total; title (blank = the measure name), its font, size and colour; value font, size, bold, colour, display units and decimals."),
+    ("Scale ring", "Marks Off, Quarters (25/50/75%) or Every 10%; colour (kept at a contrast of at least 3:1 with the background)."),
+    ("Legend", "Position Automatic, Top, Bottom, Left, Right or Off; font, size, bold, italic, underline, colour."),
+    ("Data table", "Position Automatic, Right, Left, Bottom or Off; header, its text colour and background (with fx); total row Automatic (on in the pie), On or Off; columns Value, Share %, Change, % of target, Notes and Segment rows; gridlines None, Horizontal or All, their colour and width; row banding; font; display units and decimals."),
+    ("Footnotes", "Automatic or Off; font, size and colour."),
+    ("Summary", "Automatic (on when Compare with has a field), On or Off; font, size, bold, italic, underline and colour."),
+    ("Compare with (Pro)", "Change shown: Δ pp, Δ % or both; Sort by change."),
+    ("Target (Pro)", "Met at (default 100%) and Close at (default 90%); Status on slices: misses only, all or off."),
+    ("Annotations (Pro)", "Show annotations."),
+    ("Small multiples (Pro)", "Columns (0 = automatic); space between panels; title font, size, colour, bold, italic, underline and alignment; panel background and border; Size by total."),
+    ("Accessibility", "High contrast Automatic or On; patterns; focus colour and width; minimum text size (8–16 px); reduce motion."),
 ]
 
 FAQ = [
-    ("Why does an empty month break the line?",
-     "<p>Because a missing value is not a zero. A line that drops to zero in a month without data tells the meeting that sales collapsed, when the data was simply not there. "
-     "If your measure returns 0 instead of BLANK(), the month is a real zero and is drawn as one; return BLANK() and it is a gap. By default the line stops and starts again; you can connect over the gap or draw zero in <strong>Lines → Missing values</strong>.</p>"),
-    ("How does gap shading choose its colour?",
-     "<p>The area between the actual line and the reference (Plan, or Prior year when there is no plan) is green where actual is above and red where it is below, split exactly at the point where the lines cross. "
-     "For costs, where lower is better, swap the two colours in <em>Plan, prior year and forecast</em>. The Forecast field is never used for gap shading. "
-     "Gap shading is not drawn at very small sizes, when the visual switches to its compact or sparkline layout.</p>"),
-    ("What does “Split actual and plan” do?",
-     "<p>When the plan or forecast has values after the last actual period, that part is drawn with a longer dash and a thin vertical line marks <strong>Actual | Plan</strong>. Turn it off in <em>Plan, prior year and forecast</em>.</p>"),
-    ("How do I add events?",
-     "<ol style=\"padding-left:20px\"><li>Make a table <strong>Events</strong> with two columns: Date and Event.</li>"
-     "<li>Relate Events[Date] to your calendar date.</li>"
-     "<li>Drag Events[Event] to the <strong>Events</strong> field and set it to <strong>First</strong>.</li></ol>"
-     "<p>Two events in the same period? Use a measure instead: <code>Event text = CONCATENATEX ( VALUES ( Events[Event] ), Events[Event], \" · \" )</code>. Events are part of Pro.</p>"),
-    ("Is the trend line a forecast?",
-     "<p>No. The linear trend is a least-squares line from the first to the last point of the series, and it is not extended. The moving average looks back N periods inside each stretch of the line, so it does not cross a gap. For a forecast, use your own measure in <strong>Forecast</strong>.</p>"),
-    ("How many fields and rows can it use?",
-     "<p>Axis, Legend and Small multiples take one field each; Values up to 6 measures; Secondary values up to 3; Plan, Prior year, Forecast, Target line, Events and Annotations one each. "
-     "Power BI sends up to 30,000 combinations of axis, panel and legend value; when more exist, a note in the visual says the chart is incomplete. The limits are the same in the free version and in Pro.</p>"),
-    ("Why does the target line disappear with Show values as?",
-     "<p>With <strong>Show values as</strong> (Pro) set to index, % change or running total, the target line is not drawn: an absolute target has no index. "
-     "Index and % change use the first visible period of each series as the base, so the base moves when you zoom. If that base value is 0, there is nothing to divide by and the series is left empty.</p>"),
-    ("Does it use my number formats?",
-     "<p>Yes: the number format of each measure from the model, <strong>dynamic format strings</strong> included, in the report's language. Show values as (Pro) uses its own format for index and %.</p>"),
-    ("Does it follow my report theme?",
-     "<p>Yes. <strong>Report theme</strong> is the default template: series colours and text come from your theme, like a native visual. Colours you set yourself always win.</p>"),
-    ("Do bookmarks keep my selection?",
-     "<p>Bookmarks keep the points you select and the filters of the page. Like every Power BI visual, they do not keep formatting.</p>"),
-    ("What is the “Pro preview” watermark?",
-     "<p>While you edit a report without a licence, Pro features you turn on are drawn working on your own data under a watermark that names them, and Power BI shows its licence notice. "
-     "Reading view shows the free chart. With small multiples, the preview draws the first 4 panels and reading view without a licence shows the first panel. "
-     "Where Power BI provides no licence information (for example when you are not signed in to Power BI Desktop), the free chart is shown.</p>"),
+    ("Why does a slice have no label?",
+     "<p>Every label has the same content and the same text size, so they read as one set. When the legend or the data table is "
+     "visible, labels always go inside the slices: the text gets smaller down to the minimum, then the content gets shorter "
+     "(the change, then the value, then the name; the percent goes last). A slice too thin for even the shortest label is left "
+     "without one — never with a cut text — and its figure stays in the table and the tooltip. With the legend and the table off, "
+     "a label that does not fit inside goes outside with a leader line.</p>"),
+    ("Why do the percentages add up to exactly 100?",
+     "<p>Rounded independently, percentages often add up to 99 or 101. The visual rounds by the largest remainder method, so the "
+     "labels, the table and the total row always add up to 100 at the decimals you choose. The tooltip uses the same rounding.</p>"),
+    ("What is Other, and how do I open it?",
+     "<p>Categories beyond <strong>Show at most</strong> (6 by default) or below <strong>Group below %</strong> (3% by default) go into "
+     "Other, always the last slice, with its count: \"Other (5)\". In the data table, click <strong>Other (5) ▸</strong> to list its "
+     "members with their own values and percentages (→ on the keyboard). Clicking the Other slice filters the page by every item inside "
+     "it, not by a label. Set Show at most to 20 and Group below to 0 to draw every category.</p>"),
+    ("Why is a value not drawn?",
+     "<p>A slice is an angle of a whole, and it cannot be negative or empty. Negative, zero and blank values are left out and counted in "
+     "a footnote — \"Excluded: 1 negative (−0.3M), 1 blank\" — so nothing disappears in silence. Percentages use the positive total.</p>"),
+    ("What does the center show?",
+     "<p>The total of Values, with the measure name as its title (or your own title). Point at a slice, select it or move to it with "
+     "the keyboard and the center shows its name, value and percent; with several slices selected, it shows how many and their sum. "
+     "The pie has no center. With small multiples each donut shows its own total.</p>"),
+    ("Legend or Data table?",
+     "<p>They are independent and can show together. The <strong>Legend</strong> is the classic one: swatch and name. The "
+     "<strong>Data table</strong> adds the value and the share of every slice, the Pro columns and the footnotes. In Automatic the "
+     "table appears when Compare with, Target or Annotation has a field; set its position to Right, Left or Bottom to show it "
+     "without them. Click a header to sort the table and the slices; the order is not saved with the report.</p>"),
+    ("How do I show the change against last year?",
+     "<p>Add the same measure for the prior period to <strong>Compare with</strong> (Pro) — for example with SAMEPERIODLASTYEAR, with "
+     "one year in the filter context. The data table adds <strong>Δ pp</strong> (the change in share, in percentage points, with a "
+     "mini bar) and <strong>Δ %</strong> (the change in value); its title gives the change of the total. Labels add the Δ pp when it "
+     "fits. A category with no prior value says <em>new</em>; one with no current value is listed as <em>gone</em>, never with an "
+     "invented change. A ⚠ marks the rows where share and value move in opposite directions — value up but share down because "
+     "the total grew faster — with a footnote that names them.</p>"),
+    ("Every category says \"new\", or the change does not show. Why?",
+     "<p>The Compare with measure returns blank, usually because the time-intelligence function has no single year in context. "
+     "Filter the page or the visual to one year, or use a prior-year column in the model.</p>"),
+    ("How do targets work?",
+     "<p>Add the plan or budget to <strong>Target</strong> (Pro). The table shows the % of target of each category with ✓ (at or above "
+     "Met at, 100% by default), ≈ (at or above Close at, 90%) or ✕ (below) — a shape and a colour, so it does not rely on colour. "
+     "<strong>Status on slices</strong> puts the icon on the outer edge of the slices that miss the target, of all of them, or of none. "
+     "The summary says how many categories miss it.</p>"),
+    ("What does Segment do?",
+     "<p>Segment (Pro) adds an outer ring: each slice is split by a second field at the same angle — family by brand, channel by "
+     "subchannel. The ring has its own labels (Format → Data labels → Segment labels) and the table can list segment rows under each "
+     "category. When every category belongs to a single segment (for example Brand in Category and Family in Segment), the ring would "
+     "say nothing: it is not drawn and, while you edit, a note suggests swapping the two fields.</p>"),
+    ("How do small multiples work?",
+     "<p>Add a field to <strong>Small multiples</strong> (Pro). Every donut uses the same Other, order and colours, so you compare like "
+     "with like; each one shows its own total in the center and its title above. The data table is shared and shows the total of all "
+     "panels (its title says Total); the tooltip of a table row gives the value in each panel. <strong>Size by total</strong> makes "
+     "the area of each donut proportional to its total. When the panels would be too small to read, the visual shows the ones that fit "
+     "and says how many: \"Showing N of M panels\".</p>"),
+    ("What does the Summary sentence say?",
+     "<p>The leader and its share, and what the top three add up to; with Pro, the biggest shift against Compare with and how many "
+     "categories miss the target. It uses the same rounded figures as the labels and is read by screen readers. Automatic shows it "
+     "when Compare with has a field; turn it On or Off in <strong>Format → Summary</strong>.</p>"),
+    ("Can I use conditional formatting (fx)?",
+     "<p>Yes, in the free version: <strong>Format → Slices → Colors → All slices (fx)</strong> colours every slice by a rule or a "
+     "field; a colour set for one category takes precedence. The border colour and the table header background accept fx too.</p>"),
+    ("Why does a tooltip measure not show?",
+     "<p>Measures in <strong>Tooltips</strong> show when a slice is one row of data. With Segment or Small multiples a slice is made of "
+     "several rows, and adding up a measure such as a margin % or an average across them would give a false figure, so it is left out. "
+     "Use a report page tooltip instead: it is computed by Power BI for the slice.</p>"),
+    ("How many rows can it use?",
+     "<p>Power BI sends up to 30,000 combinations of category, segment and panel at a time. When there are more, the visual asks for "
+     "further blocks, up to 10 more, and adds them up (checked in Power BI Desktop with 54,662 rows). While it loads, a footnote says "
+     "\"Loading more rows\"; if rows are still missing, it says \"Showing 30,000 rows; Other is incomplete\".</p>"),
+    ("Can I change the font?",
+     "<p>Yes: the labels, the center (title and value), the legend, the data table, the summary, the footnotes and the small multiples "
+     "titles each have a font, size and style. Blank uses the font of the style.</p>"),
+    ("What is the \"Pro preview\" watermark?",
+     "<p>While you edit a report without a licence, Pro features you turn on are drawn working, on your own data, under a watermark that "
+     "names them, and Power BI shows its licence notice; small multiples show their first 4 panels. Reading view shows the free chart. "
+     "Where Power BI provides no licence information (for example when you are not signed in to Power BI Desktop), the free chart is "
+     "shown.</p>"),
     ("How do I get Pro?",
-     "<p>On the visual's Microsoft AppSource page, choose <strong>Buy now</strong> (not Install free). Licences are per user and managed by Microsoft; "
-     "every person who should see the Pro features needs one. Restart Power BI Desktop after the licence is assigned. See <a href=\"https://tcviz.com/licensing.html\">tcviz.com/licensing</a>.</p>"),
+     "<p>On the visual's Microsoft AppSource page, choose <strong>Buy now</strong> (not Install free): 0.99 USD per user per month or "
+     "9.99 USD per user per year, with no trial. Licences are per user and managed by Microsoft; restart Power BI Desktop after the "
+     "licence is assigned. See <a href=\"https://tcviz.com/licensing.html\">tcviz.com/licensing</a>.</p>"),
+    ("How are numbers formatted?",
+     "<p>With the number format of the measure from the model, <strong>dynamic format strings</strong> included, in the report's "
+     "language. A measure with no format gets thousands separators and no stray decimals. The labels, the center and the table each "
+     "have their own display units and decimals.</p>"),
     ("Is my data sent anywhere?",
-     "<p>No. The visual makes no network requests and stores nothing outside your report. The links on the start screen open only when you click them, through Power BI.</p>"),
+     "<p>No. The visual makes no network requests, declares no privileges and stores nothing outside your report.</p>"),
+]
+
+TROUBLE = [
+    ("The visual shows the start screen", "Add a field to Category and a measure to Values."),
+    ("A slice has no label", "It is too thin for the shortest label. Make the visual larger, lower the text size, or read the figure in the data table or the tooltip."),
+    ("The data table does not show", "In Automatic it appears with a field in Compare with, Target or Annotation. Set Format → Data table → Position to Right, Left or Bottom."),
+    ("The outer ring does not show", "Segment is Pro. If every category belongs to one segment, the ring is not drawn: put the broader field in Category and the finer one in Segment."),
+    ("The change does not show", "Compare with is Pro and needs a measure for the prior period; check Format → Data table → Change column."),
+    ("Annotations do not show", "Annotation expects text: in the field well, set the column to First."),
+    ("Small multiples show fewer panels than values", "The panels would be too small to read: the visual says \"Showing N of M panels\". Make it larger or set fewer columns."),
+    ("\"Other is incomplete\"", "Power BI did not send every row. Filter the page or use a field with fewer values."),
+    ("Clicks do not filter", "The report author has turned interactions off, or the visual is in format mode."),
 ]
 
 
@@ -202,139 +220,152 @@ def table(headers, rows):
     return f"<table><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table>"
 
 
-def details(items):
-    return "".join(f'<details><summary>{html.escape(q)}</summary><div class="faq-body">{a}</div></details>' for q, a in items)
+def esc_rows(rows):
+    return [tuple(html.escape(c) for c in r) for r in rows]
+
+
+def illus():
+    """Dibujo de 'How to read it' con las cifras del dataset (Litros vs Litros AA y Plan litros, hoja Ventas)."""
+    import math
+    cuotas = [(0.240, "#118DFF", "24%"), (0.160, "#12239E", "16%"), (0.158, "#E66C37", "16%"), (0.099, "#6B007B", "10%"), (0.343, "#A19F9D", "34%")]
+    cx, cy, R, r = 115, 118, 95, 55
+    out, a0 = [], 0.0
+    for f, col, txt in cuotas:
+        a1 = a0 + f * 2 * math.pi
+        big = 1 if a1 - a0 > math.pi else 0
+        P = lambda a, rr: (cx + rr * math.sin(a), cy - rr * math.cos(a))
+        (x0, y0), (x1, y1), (x2, y2), (x3, y3) = P(a0, R), P(a1, R), P(a1, r), P(a0, r)
+        out.append(f'<path d="M{x0:.1f},{y0:.1f} A{R},{R} 0 {big},1 {x1:.1f},{y1:.1f} L{x2:.1f},{y2:.1f} A{r},{r} 0 {big},0 {x3:.1f},{y3:.1f} Z" fill="{col}" stroke="#FFFFFF" stroke-width="2"/>')
+        tx, ty = P((a0 + a1) / 2, (R + r) / 2)
+        out.append(f'<text x="{tx:.0f}" y="{ty + 4:.0f}" text-anchor="middle" fill="{"#252423" if col == "#A19F9D" else "#FFFFFF"}" font-weight="600">{txt}</text>')
+        a0 = a1
+    filas = [("Aigua Serena", "3.3M", "24%", "+0.8", "≈ 99%"), ("Nord Cola", "2.2M", "16%", "+0.0", "✓ 104%"),
+             ("Nord", "2.2M", "16%", "−1.5", "≈ 95%"), ("Fruitia", "1.4M", "10%", "⚠ −0.1", "≈ 99%")]
+    cols = [250, 345, 395, 440, 510]
+    t = ['<text x="250" y="20" fill="#605E5C">Total +4.1% vs Litros AA</text>']
+    for x, h in zip(cols, ["Brand", "Litres", "%", "Δ pp", "% of target"]):
+        t.append(f'<text x="{x}" y="42" font-weight="700" fill="#252423">{h}</text>')
+    for i, f in enumerate(filas):
+        for x, c in zip(cols, f):
+            t.append(f'<text x="{x}" y="{62 + 18 * i}">{html.escape(c)}</text>')
+    t.append('<text x="250" y="134" fill="#605E5C">Other (6) ▸</text>')
+    t.append('<text x="250" y="170" font-weight="700" fill="#252423">Center</text><text x="300" y="170">the total, or what you point at or select</text>')
+    t.append('<text x="250" y="190" font-weight="700" fill="#252423">Δ pp (Pro)</text><text x="322" y="190">change in share; ⚠ share and value move apart</text>')
+    t.append('<text x="250" y="210" font-weight="700" fill="#252423">✓ ≈ ✕ (Pro)</text><text x="330" y="210">% of target, a shape and a colour</text>')
+    return ('<svg viewBox="0 0 640 230" role="img" aria-label="Annotated donut: center total, labels, Other and the data table with the change and the target" '
+            'style="width:100%;max-width:640px;display:block;margin:0 auto"><g font-family="Segoe UI, sans-serif" font-size="12" fill="#535146">'
+            + "".join(out) + f'<text x="{cx}" y="{cy - 6}" text-anchor="middle" font-size="10">Litros</text>'
+            f'<text x="{cx}" y="{cy + 14}" text-anchor="middle" font-size="18" font-weight="700" fill="#252423">13.9M</text>' + "".join(t) + "</g></svg>")
 
 
 def support():
     nav = '''<nav>
   <a href="#quickstart" class="active">Quick Start</a>
   <a href="#read">How to read it</a>
-  <a href="#usecases">Use cases</a>
   <a href="#fields">Field Wells</a>
   <a href="#freepro">Free and Pro</a>
-  <a href="#events">Events</a>
   <a href="#format">Format Pane</a>
-  <a href="#interaction">Selection and zoom</a>
+  <a href="#interaction">Selection</a>
   <a href="#accessibility">Accessibility</a>
-  <a href="#troubleshooting">Troubleshooting</a>
   <a href="#faq">FAQ</a>
+  <a href="#trouble">Troubleshooting</a>
   <a href="changelog.html">Changelog</a>
   <a href="#contact">Contact</a>
 </nav>
 '''
-    video = (f'<div class="video-wrap"><iframe src="https://www.youtube.com/embed/{VIDEO.split("v=")[-1]}" title="{NAME} video" '
-             f'allowfullscreen></iframe></div>\n<p style="font-size:13px;color:var(--t3);margin:8px 0 0">Video on YouTube: '
-             f'<a href="{VIDEO}" target="_blank">{VIDEO}</a></p>') if VIDEO else ""
-    uses = "".join(f'<div class="card"><h3>{html.escape(t)}</h3><p>{d}</p></div>' for t, d in USE_CASES)
+    video = (f'<div class="video-wrap"><iframe src="https://www.youtube.com/embed/{VIDEO.split("v=")[-1]}" title="{html.escape(NAME)} video" '
+             f'allowfullscreen></iframe></div>') if VIDEO else ""
+    faq = "".join(f'<details><summary>{html.escape(q)}</summary><div class="faq-body">{a}</div></details>' for q, a in FAQ)
+    ILLUS = illus()
     body = f'''<div class="wrap">
 
 <div class="verpill">Visual v{VERSION} &nbsp;·&nbsp; docs updated {FECHA} &nbsp;·&nbsp; <a href="changelog.html">what's new</a></div>
 
-<p class="lead">A line chart for business time series that answers the question the meeting is about: are we on plan? Actual against
-plan and prior year with the gap shaded green or red, the plan carried on past the last actual month, the last value at the end of every
-line, and an empty month drawn as a gap, never as a zero. <strong>Pro</strong> adds the context around the numbers: events and annotations
-on the timeline, the variance in the end label, small multiples, “Show values as” and six collection styles.</p>
+<p class="lead">A donut and pie chart that reads at any size: labels inside every slice with the same content and text size and never
+cut, percentages that add up to 100, an honest Other you can open, a legend and a data table you can place where you want, and the
+total in the center. <strong>Pro</strong> adds the change in share and value against another period, targets with ✓ ≈ ✕, an outer
+Segment ring, annotations, small multiples and six style templates.</p>
 {video}
 <h2 id="quickstart">Quick Start</h2>
 <div class="card">
 <ol style="padding-left:20px;font-size:14px;color:var(--t2)">
 <li>Add <strong>{html.escape(NAME)}</strong> to the page. With no fields it shows a start screen with these steps.</li>
-<li>Drag a date to <strong>Axis</strong> — the date column itself, for a real time axis.</li>
-<li>Drag a measure to <strong>Values</strong> — Sales. Add a <strong>Legend</strong> (Region) for one line per value.</li>
-<li>Drag your plan measure to <strong>Plan</strong>, and turn on <em>Plan, prior year and forecast → Gap shading</em>.</li>
-<li>The setup guide in the corner lists the optional fields and lets you try each Pro feature on your data.</li>
+<li>Drag the field that names the slices to <strong>Category</strong> — brand, region, channel.</li>
+<li>Drag the measure the slices share to <strong>Values</strong> — sales, litres, units.</li>
+<li>While you edit, the setup guide in the corner lists the optional fields and lets you try the styles.</li>
+<li>Pro: add last year to <strong>Compare with</strong> and the plan to <strong>Target</strong>; add a second field to <strong>Segment</strong> or <strong>Small multiples</strong>.</li>
 </ol>
+<p style="font-size:13px;color:var(--t3);margin-top:8px">Sample data used in the screenshots:
+<a href="{REPO}/blob/main/DonutChart_Dataset.xlsx" target="_blank">DonutChart_Dataset.xlsx</a> (Begudes Nord, a fictitious drinks company):
+sheet <em>Ventas</em> with brand, family, zone, channel, litres, last year's litres and the plan.</p>
+<p style="font-size:13px;color:var(--t3)">Three to eight categories read best as a donut. With more, or with a hierarchy, a treemap reads better.</p>
 </div>
 
 <h2 id="read">How to read it</h2>
 <div class="card">
 <figure style="margin:0 0 14px">
-<svg viewBox="0 0 640 230" role="img" aria-label="Annotated line chart: actual, plan, gap shading, Actual | Plan mark, event and end label" style="width:100%;max-width:640px;display:block;margin:0 auto">
-  <g font-family="Segoe UI, sans-serif" font-size="12" fill="#535146">
-    <path d="M30 200 H440" stroke="#D6D4D0"/>
-    <path d="M30 120 L80 108 L130 100 L155.7 109.3 L130 113.5 L80 121.75 L30 130 Z" fill="#3E9C5B" fill-opacity="0.22"/>
-    <path d="M155.7 109.3 L180 118 L230 124 L280 96 L280 88.75 L230 97 L180 105.25 Z" fill="#C62828" fill-opacity="0.18"/>
-    <path d="M30 130 L280 88.75" fill="none" stroke="#83827D" stroke-width="1.5" stroke-dasharray="6 3"/>
-    <path d="M280 88.75 L430 64" fill="none" stroke="#83827D" stroke-width="1.5" stroke-dasharray="12 4"/>
-    <path d="M30 120 L80 108 L130 100 L180 118 L230 124 L280 96" fill="none" stroke="#2B6CB0" stroke-width="2.5"/>
-    <path d="M280 30 V200" stroke="#83827D" stroke-dasharray="1 3"/>
-    <text x="276" y="26" text-anchor="end" font-size="10">Actual</text><text x="284" y="26" font-size="10">Plan</text>
-    <path d="M180 40 V200" stroke="#3D3929" stroke-dasharray="4 3"/><text x="184" y="52" font-size="10">Price change</text>
-    <text x="288" y="104" font-weight="700" fill="#2B6CB0">1,284</text>
-    <text x="470" y="40" font-weight="700" fill="#2B6CB0">Actual</text><text x="470" y="56">ends with its last value</text>
-    <text x="470" y="86" font-weight="700" fill="#83827D">Plan (dashed)</text><text x="470" y="102">carries on after “Actual | Plan”</text>
-    <text x="470" y="132" font-weight="700" fill="#3E9C5B">Gap shading</text><text x="470" y="148">green above plan, red below</text>
-    <text x="470" y="178" font-weight="700" fill="#3D3929">Event (Pro)</text><text x="470" y="194">a vertical line with its text</text>
-  </g>
-</svg>
+{ILLUS}
+<figcaption style="font-size:12px;color:var(--t3);text-align:center">Drawing based on the sample data (litres 2026 vs 2025 and plan), not a screenshot; the data table is shortened.</figcaption>
 </figure>
-<p>Read the actual line against the plan: the shaded area is the gap, split where the lines cross. Past the “Actual | Plan” mark only the
-plan (or forecast) continues. A break in a line is a period without data, not a zero.</p>
+<p>The angle of each slice is its share of the total. The labels and the table use the same percentages, rounded so they add up to
+100. Other is always last and grey. What is not drawn — negative, zero or blank values, rows Power BI did not send — is said in a
+footnote.</p>
 </div>
-
-<h2 id="usecases">Use cases</h2>
-{uses}
 
 <h2 id="fields">Field Wells</h2>
-{table(["Field", "Kind", "Required / limit", "What it does"], [(f"<strong>{a}</strong>", b, c, d) for a, b, c, d in FIELDS])}
-<p>Power BI sends up to 30,000 combinations of axis, small multiples panel and legend value. When there are more, a note in the visual
-says the chart is incomplete. The limits are the same in the free version and in Pro.</p>
+{table(["Field", "Kind", "Required", "What it does"], [(f"<strong>{a}</strong>", b, c, html.escape(d)) for a, b, c, d in FIELDS])}
+<p>Each well takes one field (Tooltips up to five). Rows: up to 30,000 combinations at a time; the visual asks Power BI for up to 10 more
+blocks and says it in a footnote if rows are still missing. The limits are the same in Free and Pro.</p>
 
 <h2 id="freepro">Free and Pro</h2>
-{table(["Capability", "Free", "Pro"], FREE_PRO)}
-<p>Turn on a Pro capability without a licence while editing and it is drawn working on your own data under a “Pro preview” watermark that
-names it. Reading view shows the free chart. Pro is sold per user on Microsoft AppSource.</p>
-
-<h2 id="events">Events in one minute (Pro)</h2>
-<div class="card">
-<ol style="padding-left:20px;font-size:14px;color:var(--t2)">
-<li>Make a table <strong>Events</strong> with two columns: <strong>Date</strong> and <strong>Event</strong>.</li>
-<li>Relate Events[Date] to your calendar date (many-to-one, single direction).</li>
-<li>Drag Events[Event] to the <strong>Events</strong> field and set it to <strong>First</strong>.</li>
-</ol>
-<p>Two events in the same period? Use a measure instead:</p>
-<p><code>Event text = CONCATENATEX ( VALUES ( Events[Event] ), Events[Event], " · " )</code></p>
-<p>Annotations work the same way: any text column set to First, or a text measure, in <strong>Annotations</strong> pins a note to the first measure's line.</p>
-</div>
+{table(["Capability", "Free", "Pro"], esc_rows(FREE_PRO))}
+<p>Turn on a Pro capability without a licence while editing and it is drawn working under a "Pro preview" watermark that names it.
+Reading view shows the free chart. Pro is sold per user on Microsoft AppSource: 0.99 USD per month or 9.99 USD per year, no trial.</p>
 
 <h2 id="format">Format Pane</h2>
-{table(["Card", "Settings"], [(f"<strong>{a}</strong>", b) for a, b in FORMAT])}
-<p>Format on the canvas: in format mode, click the lines, the plan and gap shading, the end labels, the axes, the legend, the target and trend lines, events, annotations or the source note to format them where they are.</p>
+{table(["Card", "Settings"], [(f"<strong>{html.escape(a)}</strong>", html.escape(b)) for a, b in FORMAT])}
+<p>The Pro cards appear when their field well has a field. <strong>On-object formatting</strong>: in format mode, click the slices, the
+labels, the center, the legend, the data table, the scale ring or a small multiples title to format it where it is.</p>
 
-<h2 id="interaction">Selection, zoom and interaction</h2>
+<h2 id="interaction">Selection and interaction</h2>
 <div class="card">
 <ul>
-<li>Click a point to filter the rest of the page; with a Legend field, click a legend item to select the whole series. Ctrl/Cmd + click adds; click again or click the background to clear.</li>
-<li>Highlight: when another visual filters this one, the highlighted values are drawn over a faded line.</li>
-<li>Tooltip with a crosshair; report page tooltips are supported. At a period with an event, the tooltip shows its full text.</li>
-<li>Zoom: Ctrl/Cmd + mouse wheel, or + and − with the chart focused; drag the optional zoom slider under the axis. Esc or <em>Reset zoom</em> goes back. The Y axis fits the zoomed range unless you turn that off.</li>
-<li>Bookmarks restore the selection. Right-click opens the Power BI context menu. A hierarchy in Axis gives drilldown.</li>
-<li>When the report author turns interactions off, clicks do not filter and zoom is off.</li>
+<li>Click a slice, a legend item or a table row to filter the rest of the page. Ctrl/Cmd + click adds; click the background to clear.</li>
+<li><strong>Lasso selection</strong>: drag on the chart to draw a rectangle and select every slice it touches, in every panel; Ctrl or Shift + drag adds. Turn it off in Format → Slices.</li>
+<li>Clicking Other filters by every item inside it. In the data table, Other ▸ opens its members, and each one can be selected.</li>
+<li>With Segment, the outer ring selects the category and segment pair.</li>
+<li>The center shows what you point at or select; with several slices selected, their sum.</li>
+<li>Highlight: when another visual filters this one, the highlighted part of each slice is drawn and the rest is dimmed, Other included.</li>
+<li>Bookmarks restore the selection. Right-click opens the Power BI context menu. A hierarchy in Category gives <strong>Drilldown</strong>.</li>
+<li>Click a header of the data table to sort by it; click again to reverse. The order is not saved with the report.</li>
+<li><strong>Report page tooltips</strong> are supported. When the report author turns interactions off, clicks do not filter.</li>
 </ul>
 </div>
 
 <h2 id="accessibility">Accessibility</h2>
 <div class="card">
 <ul>
-<li>Keyboard: Tab into the visual; left and right arrows move along the axis, up and down between series; Home/End and PageUp/PageDown jump; Enter or Space selects; Esc clears (or resets the zoom); the context-menu key or Shift + F10 opens the menu. With small multiples, Shift + left/right moves between panels.</li>
-<li>Each point is announced to screen readers with its series, date and value; the chart describes how many series and points it has.</li>
-<li>High contrast: the visual uses the colours of the Windows contrast theme and tells series apart by line pattern and marker shape.</li>
-<li>The layout adapts to the size of the visual: in small sizes labels, legend and axes give way, down to a sparkline.</li>
+<li>Keyboard: Tab into the visual (one stop); arrows move from slice to slice, with the focus on the slice and on its table row; Home/End jump to the first/last; Enter or Space selects, Ctrl+Enter adds; Esc clears; → on Other opens it and ← closes it; Shift+F10 or the context-menu key opens the menu.</li>
+<li>A live region reads the name, value, share and, with Pro, the change and the target of the focused slice; the summary sentence is part of the description.</li>
+<li>High contrast: the visual uses the colours of the Windows contrast theme, with every slice outlined and patterns on.</li>
+<li>Patterns tell slices apart without relying on colour; targets use ✓ ≈ ✕ and the mix warning uses ⚠, shapes as well as colours.</li>
+<li>A minimum text size (8–16 px) applies to every text; focus colour and width can be set.</li>
+<li>Reduce motion turns off the fades on hover and selection; they are also off when the system asks for reduced motion.</li>
+<li>Text scales with the size of the visual, and the layout adapts: legend and table move, labels shorten, rows fold into "+N more" in very small visuals.</li>
 </ul>
 </div>
 
-<h2 id="troubleshooting">Troubleshooting</h2>
-{details(TROUBLE)}
-
 <h2 id="faq">FAQ</h2>
-{details(FAQ)}
+{faq}
+
+<h2 id="trouble">Troubleshooting</h2>
+{table(["What you see", "What to do"], esc_rows(TROUBLE))}
 
 <h2 id="contact">Contact</h2>
 <div class="contact-box"><div class="icon">✉</div><div>
 <h3>Questions, bugs, ideas</h3>
-<p>Ask in <a href="{REPO}/discussions" target="_blank">GitHub Discussions</a>, report a bug in <a href="{REPO}/issues" target="_blank">GitHub Issues</a>,
-or write to <a href="mailto:support@tcviz.com">support@tcviz.com</a>. Product page: <a href="{PRODUCT}" target="_blank">tcviz.com/product/line-chart</a>.</p>
+<p>Write to <a href="mailto:support@tcviz.com">support@tcviz.com</a> — a person reads and replies — or open a thread in
+<a href="{REPO}/discussions" target="_blank">GitHub Discussions</a>. Bugs: <a href="{REPO}/issues" target="_blank">GitHub Issues</a>.</p>
 </div></div>
 
 </div>
@@ -347,17 +378,16 @@ def privacy():
 <h1>Privacy Policy</h1>
 <p><strong>Last updated:</strong> {FECHA} (version {VERSION})</p>
 <h2>1. Overview</h2>
-<p>{NAME} is a Power BI custom visual developed by TCViz (Tino Callarisa). This policy describes how data is handled when you use it.</p>
+<p>{html.escape(NAME)} is a Power BI custom visual developed by TCViz (Tino Callarisa). This policy describes how data is handled when you use it.</p>
 <h2>2. Data collection</h2>
-<p>The visual <strong>does not collect, transmit or store any data</strong>. Every calculation — gaps, gap shading, trend lines, peaks,
-variances, index and running totals — happens inside Power BI, on the data of your report.</p>
+<p>The visual <strong>does not collect, transmit or store any data</strong>. Every calculation — the slices, the percentages, the change against Compare with, the
+% of target — happens inside Power BI, on the data of your report.</p>
 <h2>3. No network access</h2>
 <p>The visual declares <strong>no network privileges</strong> (<code>"privileges": []</code>), so Power BI does not let it make any web request.
-Everything it draws, including the start-screen icon, is bundled inside the visual.</p>
-<p>The <em>Guide</em>, <em>Product page</em> and <em>Video</em> links on the start screen ask Power BI to open those pages in your browser, only
-when you click them (Power BI Desktop asks first). The visual sends nothing.</p>
+The start screen has no links, and its icon is bundled inside the visual.</p>
 <h2>4. Cookies and storage</h2>
-<p>No cookies and no browser storage. Formatting settings are saved in your report by Power BI, like those of any visual.</p>
+<p>No cookies and no browser storage. Formatting settings are saved in your report by Power BI, like those of any visual. The order you choose by
+clicking a table header is kept in memory only.</p>
 <h2>5. Licensing</h2>
 <p>To know whether you have a Pro licence, the visual asks Microsoft's licensing API in Power BI (<code>IVisualLicenseManager</code>). TCViz receives
 no data from this check. See the <a href="https://privacy.microsoft.com/privacystatement">Microsoft Privacy Statement</a>.</p>
@@ -371,24 +401,20 @@ no data from this check. See the <a href="https://privacy.microsoft.com/privacys
 
 
 def terms():
-    def plain(t):
-        return html.unescape(re.sub(r"<[^>]+>", "", t))
-    corto = {"Show values as: index (first visible period = 100), % change from the first visible period, running total":
-             "Show values as: index, % change, running total"}
-    free = "; ".join(plain(r[0][0].lower() + r[0][1:]) for r in FREE_PRO if r[1] == "✓")
-    pro = "; ".join(plain((lambda t: t[0].lower() + t[1:])(corto.get(r[0], r[0]))) for r in FREE_PRO if r[1] == "—")
+    free = "; ".join(r[0][0].lower() + r[0][1:] for r in FREE_PRO if r[1] == "✓")
+    pro = "; ".join(r[0][0].lower() + r[0][1:] for r in FREE_PRO if r[1] == "—")
     body = f'''<div class="wrap prose">
 <h1>Terms of Use</h1>
 <p><strong>Effective date:</strong> {FECHA} &nbsp;·&nbsp; applies to version {VERSION} and later</p>
 <h2>1. Acceptance</h2>
-<p>By installing or using {NAME} ("the Visual"), you agree to these Terms of Use. If you do not agree, do not install or use the Visual.</p>
+<p>By installing or using {html.escape(NAME)} ("the Visual"), you agree to these Terms of Use. If you do not agree, do not install or use the Visual.</p>
 <h2>2. License grant</h2>
 <p>TCViz grants you a non-exclusive, non-transferable, revocable license to use the Visual within Microsoft Power BI, subject to these Terms
 and any applicable Microsoft AppSource subscription terms.</p>
 <p><strong>Free tier:</strong> available to all users at no cost. Includes: {html.escape(free)}.</p>
 <p><strong>Pro tier:</strong> available through a Microsoft AppSource subscription, licensed per user. Adds: {html.escape(pro)}.
-Without an active licence, Pro features are shown in edit mode only, as a preview marked with a watermark; reading view shows the free result.
-Field and row limits are the same in both tiers.</p>
+Without an active licence, Pro features are shown in edit mode only, as a preview marked with a watermark; reading view shows the free chart.
+Data limits (one field per well, 30,000 rows per block of data) are the same in both tiers.</p>
 <h2>3. Restrictions</h2>
 <ul>
 <li>Do not reverse-engineer, decompile or disassemble the Visual, except where applicable law permits it.</li>
@@ -424,38 +450,16 @@ def changelog():
         cab, _, cuerpo = p.partition("\n")
         items = "".join(f"<li>{html.escape(l[2:].strip())}</li>" for l in cuerpo.splitlines() if l.startswith("- "))
         bloques.append(f'<div class="card"><h3>{html.escape(cab.strip())}</h3><ul>{items}</ul></div>')
-    body = f'<div class="wrap prose"><h1>Changelog</h1><p>{NAME} · current version {VERSION}</p>{"".join(bloques)}</div>\n'
+    body = f'<div class="wrap prose"><h1>Changelog</h1><p>{html.escape(NAME)} · current version {VERSION}</p>{"".join(bloques)}</div>\n'
     return page("Changelog", "Changelog", body)
-
-
-def tips_plain():
-    """docs/TIPS-AND-HINTS-PLAIN.txt desde docs/TIPS-AND-HINTS.md (la fuente es el .md: editar allí)."""
-    md = io.open(os.path.join(ROOT, "docs", "TIPS-AND-HINTS.md"), encoding="utf-8").read()
-    out = []
-    for l in md.splitlines():
-        l = re.sub(r"<(https?://[^>]+)>", r"\1", l).replace("`", "").replace("**", "").replace("—", "--")
-        if l.startswith("# "):
-            t = l[2:].upper()
-            out += [t, "=" * len(t)]
-        elif l.startswith("## "):
-            t = l[3:].upper()
-            out += [t, "-" * len(t)]
-        elif l.startswith("|---"):
-            continue
-        elif l.startswith("|"):
-            out.append("- " + " | ".join(c.strip() for c in l.strip("|").split("|")))
-        else:
-            out.append(l)
-    return "\n".join(out).rstrip() + "\n"
 
 
 def main():
     os.makedirs(os.path.join(ROOT, "docs"), exist_ok=True)
-    io.open(os.path.join(ROOT, "docs", "TIPS-AND-HINTS-PLAIN.txt"), "w", encoding="utf-8", newline="\n").write(tips_plain())
     for nombre, f in (("support.html", support), ("privacy.html", privacy), ("terms.html", terms), ("changelog.html", changelog)):
         io.open(os.path.join(ROOT, "docs", nombre), "w", encoding="utf-8", newline="\n").write(f())
     io.open(os.path.join(ROOT, "docs", "index.html"), "w", encoding="utf-8", newline="\n").write(
-        f'<!DOCTYPE html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=support.html"><title>{NAME}</title><a href="support.html">Documentation</a>\n')
+        f'<!DOCTYPE html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=support.html"><title>{html.escape(NAME)}</title><a href="support.html">Documentation</a>\n')
     print("docs:", sorted(os.listdir(os.path.join(ROOT, "docs"))))
 
 

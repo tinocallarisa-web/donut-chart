@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documentation – Donut &amp; Pie Chart by TCViz</title>
+<style>
+  :root {
+    --bg: #FAF9F5; --bg2: #EDE9DE; --bd: #F5F3ED; --line: #DAD9D4;
+    --t1: #3D3929; --t2: #535146; --t3: #83827D;
+    --acc: #2B6CB0; --accd: #1F4E80; --acc2: #3E9C5B;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--t1); line-height: 1.65; }
+
+  /* ── Header ── */
+  header { background: var(--t1); color: #fff; padding: 28px 48px; display: flex; align-items: center; gap: 20px; }
+  header svg { flex-shrink: 0; }
+  header .title { font-size: 22px; font-weight: 700; }
+  header .sub   { font-size: 13px; color: #b5b3aa; margin-top: 2px; }
+
+  /* ── Nav ── */
+  nav { background: var(--bg2); border-bottom: 1px solid var(--line); padding: 0 48px; display: flex; gap: 0; overflow-x: auto; }
+  nav a { display: block; padding: 14px 14px; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--t2);
+          text-decoration: none; border-bottom: 3px solid transparent; transition: color .2s, border-color .2s; }
+  nav a:hover, nav a.active { color: var(--acc); border-bottom-color: var(--acc); }
+
+  /* ── Layout ── */
+  .wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+  h2 { font-size: 17px; font-weight: 700; color: var(--t1); margin: 40px 0 12px; padding-bottom: 8px;
+       border-bottom: 2px solid var(--acc); display: inline-block; }
+  h3 { font-size: 14px; font-weight: 700; color: var(--t1); margin: 18px 0 6px; }
+  p  { font-size: 14px; color: var(--t2); margin-bottom: 10px; }
+  ul { font-size: 14px; color: var(--t2); padding-left: 20px; margin-bottom: 10px; }
+  li { margin-bottom: 5px; }
+  code { font-family: monospace; background: var(--bg2); padding: 1px 6px; border-radius: 4px;
+         font-size: 12px; color: var(--acc); }
+
+  /* ── Cards ── */
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 24px 28px; margin-bottom: 16px; }
+
+  /* ── Badges ── */
+  .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
+           text-transform: uppercase; letter-spacing: .5px; vertical-align: middle; margin-left: 6px; }
+  .badge-pro  { background: var(--acc2); color: #fff; }
+  .badge-free { background: var(--acc);  color: #fff; }
+
+  /* ── Field wells table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 16px; }
+  th { background: var(--bg2); color: var(--t1); font-weight: 700; padding: 10px 14px; text-align: left;
+       border-bottom: 2px solid var(--line); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--bd); color: var(--t2); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+
+  /* ── FAQ ── */
+  details { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; background: #fff; }
+  summary { padding: 14px 18px; font-size: 14px; font-weight: 600; cursor: pointer; list-style: none;
+            display: flex; align-items: center; justify-content: space-between; color: var(--t1); }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: '+'; font-size: 18px; font-weight: 300; color: var(--acc); transition: transform .2s; }
+  details[open] summary::after { content: '−'; }
+  details[open] summary { border-bottom: 1px solid var(--line); }
+  .faq-body { padding: 14px 18px; font-size: 14px; color: var(--t2); }
+  .faq-body p { margin-bottom: 6px; }
+  .faq-body ul { margin-top: 6px; }
+
+  /* ── Contact box ── */
+  .contact-box { background: var(--acc); color: #fff; border-radius: 10px; padding: 24px 28px;
+                  display: flex; align-items: center; gap: 20px; }
+  .contact-box .icon { font-size: 36px; flex-shrink: 0; }
+  .contact-box h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; color: #fff; }
+  .contact-box p  { font-size: 13px; color: rgba(255,255,255,.85); margin: 0; }
+  .contact-box a  { color: #fff; font-weight: 700; text-decoration: underline; }
+
+  /* ── Video embed ── */
+  .video-wrap { position: relative; padding-bottom: 56.25%; height: 0; border-radius: 10px; overflow: hidden;
+                border: 1px solid var(--line); margin-bottom: 20px; }
+  .video-wrap iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+
+  /* ── CTA strip ── */
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+  .btn { display: inline-block; padding: 10px 22px; border-radius: 6px; font-size: 13px; font-weight: 700;
+          text-decoration: none; transition: background .2s; }
+  .btn-primary { background: var(--acc); color: #fff; }
+  .btn-primary:hover { background: var(--accd); }
+  .btn-outline { background: transparent; color: var(--acc); border: 2px solid var(--acc); }
+  .btn-outline:hover { background: var(--acc); color: #fff; }
+
+  /* ── Search ── */
+  .searchbar { background: var(--bg2); border-bottom: 1px solid var(--line); padding: 14px 48px 16px; }
+  .searchbox { position: relative; max-width: 900px; margin: 0 auto; display: flex; align-items: center;
+               gap: 10px; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; }
+  .searchbox:focus-within { border-color: var(--acc); box-shadow: 0 0 0 3px rgba(43,108,176,.16); }
+  .searchbox svg { color: var(--t3); flex-shrink: 0; }
+  .searchbox input { flex: 1; border: none; outline: none; background: transparent; font: inherit;
+                     font-size: 14px; color: var(--t1); padding: 11px 0; }
+  .searchbox input::placeholder { color: var(--t3); }
+  .searchbox button { border: none; background: transparent; color: var(--t3); font-size: 20px;
+                      line-height: 1; cursor: pointer; padding: 0 2px; }
+  .searchbox button:hover { color: var(--acc); }
+  .search-status { max-width: 900px; margin: 8px auto 0; font-size: 12px; color: var(--t3); min-height: 16px; }
+  mark { background: #FCE8A8; color: var(--t1); border-radius: 2px; padding: 0 2px; }
+  .is-hidden { display: none !important; }
+
+  /* ── Version pill ── */
+  .verpill { display: block; width: fit-content; font-size: 11px; font-weight: 700; letter-spacing: .4px;
+             background: var(--bg2); color: var(--t2); border: 1px solid var(--line);
+             padding: 3px 10px; border-radius: 20px; margin-bottom: 14px; }
+  .verpill a { color: var(--acc); text-decoration: none; }
+  .lead { font-size: 14px; line-height: 1.6; color: var(--t2); margin: 0 0 22px; }
+  .lead a { color: var(--acc); }
+
+  /* ── Footer ── */
+  footer { background: var(--t1); color: var(--t3); text-align: center; padding: 24px 48px; font-size: 12px; }
+  footer a { color: #b5b3aa; text-decoration: none; margin: 0 8px; }
+  footer a:hover { color: #fff; }
+.prose h2{display:block}
+</style>
+</head>
+<body>
+<header>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 828 362" width="90" height="40">
+    <defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#1F4E80"/>
+      <stop offset=".55" stop-color="#2B6CB0"/>
+      <stop offset="1" stop-color="#3E9C5B"/>
+    </linearGradient></defs>
+    <g transform="translate(40,46)">
+      <rect x="22" y="20" width="150" height="150" rx="30" fill="none" stroke="url(#g)" stroke-width="11"/>
+      <g fill="url(#g)">
+        <rect x="42" y="110" width="20" height="58" rx="5"/>
+        <rect x="70" y="86" width="20" height="82" rx="5"/>
+        <rect x="98" y="62" width="20" height="106" rx="5"/>
+        <rect x="126" y="38" width="20" height="130" rx="5"/>
+      </g>
+    </g>
+    <text x="258" y="246" font-family="Poppins,sans-serif" font-weight="700" font-size="196" letter-spacing="-4">
+      <tspan fill="url(#g)">tc</tspan><tspan fill="#fff">viz</tspan>
+    </text>
+    <text x="264" y="306" font-family="Poppins,sans-serif" font-weight="500" font-size="31" letter-spacing="6.5" fill="#83827D">VISUALS TO POWER BI</text>
+  </svg>
+  <div>
+    <div class="title">Donut &amp; Pie Chart by TCViz</div>
+    <div class="sub">Documentation</div>
+  </div>
+</header>
+<nav>
+  <a href="#quickstart" class="active">Quick Start</a>
+  <a href="#read">How to read it</a>
+  <a href="#fields">Field Wells</a>
+  <a href="#freepro">Free and Pro</a>
+  <a href="#format">Format Pane</a>
+  <a href="#interaction">Selection</a>
+  <a href="#accessibility">Accessibility</a>
+  <a href="#faq">FAQ</a>
+  <a href="#trouble">Troubleshooting</a>
+  <a href="changelog.html">Changelog</a>
+  <a href="#contact">Contact</a>
+</nav>
+<div class="searchbar">
+  <div class="searchbox">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="docsearch" type="search" placeholder="Search the documentation — try &quot;Other&quot;, &quot;target&quot;, &quot;labels&quot;…"
+           autocomplete="off" aria-label="Search the documentation">
+    <button id="searchclear" type="button" aria-label="Clear search" hidden>&times;</button>
+  </div>
+  <div id="searchstatus" class="search-status" role="status" aria-live="polite"></div>
+</div>
+<div class="wrap">
+
+<div class="verpill">Visual v1.0.0.0 &nbsp;·&nbsp; docs updated 25 November 2026 &nbsp;·&nbsp; <a href="changelog.html">what's new</a></div>
+
+<p class="lead">A donut and pie chart that reads at any size: labels inside every slice with the same content and text size and never
+cut, percentages that add up to 100, an honest Other you can open, a legend and a data table you can place where you want, and the
+total in the center. <strong>Pro</strong> adds the change in share and value against another period, targets with ✓ ≈ ✕, an outer
+Segment ring, annotations, small multiples and six style templates.</p>
+
+<h2 id="quickstart">Quick Start</h2>
+<div class="card">
+<ol style="padding-left:20px;font-size:14px;color:var(--t2)">
+<li>Add <strong>Donut &amp; Pie Chart by TCViz</strong> to the page. With no fields it shows a start screen with these steps.</li>
+<li>Drag the field that names the slices to <strong>Category</strong> — brand, region, channel.</li>
+<li>Drag the measure the slices share to <strong>Values</strong> — sales, litres, units.</li>
+<li>While you edit, the setup guide in the corner lists the optional fields and lets you try the styles.</li>
+<li>Pro: add last year to <strong>Compare with</strong> and the plan to <strong>Target</strong>; add a second field to <strong>Segment</strong> or <strong>Small multiples</strong>.</li>
+</ol>
+<p style="font-size:13px;color:var(--t3);margin-top:8px">Sample data used in the screenshots:
+<a href="https://github.com/tinocallarisa-web/donut-chart/blob/main/DonutChart_Dataset.xlsx" target="_blank">DonutChart_Dataset.xlsx</a> (Begudes Nord, a fictitious drinks company):
+sheet <em>Ventas</em> with brand, family, zone, channel, litres, last year's litres and the plan.</p>
+<p style="font-size:13px;color:var(--t3)">Three to eight categories read best as a donut. With more, or with a hierarchy, a treemap reads better.</p>
+</div>
+
+<h2 id="read">How to read it</h2>
+<div class="card">
+<figure style="margin:0 0 14px">
+<svg viewBox="0 0 640 230" role="img" aria-label="Annotated donut: center total, labels, Other and the data table with the change and the target" style="width:100%;max-width:640px;display:block;margin:0 auto"><g font-family="Segoe UI, sans-serif" font-size="12" fill="#535146"><path d="M115.0,23.0 A95,95 0 0,1 209.8,112.0 L169.9,114.5 A55,55 0 0,0 115.0,63.0 Z" fill="#118DFF" stroke="#FFFFFF" stroke-width="2"/><text x="166" y="67" text-anchor="middle" fill="#FFFFFF" font-weight="600">24%</text><path d="M209.8,112.0 A95,95 0 0,1 170.8,194.9 L147.3,162.5 A55,55 0 0,0 169.9,114.5 Z" fill="#12239E" stroke="#FFFFFF" stroke-width="2"/><text x="183" y="154" text-anchor="middle" fill="#FFFFFF" font-weight="600">16%</text><path d="M170.8,194.9 A95,95 0 0,1 81.1,206.8 L95.4,169.4 A55,55 0 0,0 147.3,162.5 Z" fill="#E66C37" stroke="#FFFFFF" stroke-width="2"/><text x="125" y="196" text-anchor="middle" fill="#FFFFFF" font-weight="600">16%</text><path d="M81.1,206.8 A95,95 0 0,1 35.8,170.4 L69.1,148.3 A55,55 0 0,0 95.4,169.4 Z" fill="#6B007B" stroke="#FFFFFF" stroke-width="2"/><text x="68" y="181" text-anchor="middle" fill="#FFFFFF" font-weight="600">10%</text><path d="M35.8,170.4 A95,95 0 0,1 115.0,23.0 L115.0,63.0 A55,55 0 0,0 69.1,148.3 Z" fill="#A19F9D" stroke="#FFFFFF" stroke-width="2"/><text x="49" y="86" text-anchor="middle" fill="#252423" font-weight="600">34%</text><text x="115" y="112" text-anchor="middle" font-size="10">Litros</text><text x="115" y="132" text-anchor="middle" font-size="18" font-weight="700" fill="#252423">13.9M</text><text x="250" y="20" fill="#605E5C">Total +4.1% vs Litros AA</text><text x="250" y="42" font-weight="700" fill="#252423">Brand</text><text x="345" y="42" font-weight="700" fill="#252423">Litres</text><text x="395" y="42" font-weight="700" fill="#252423">%</text><text x="440" y="42" font-weight="700" fill="#252423">Δ pp</text><text x="510" y="42" font-weight="700" fill="#252423">% of target</text><text x="250" y="62">Aigua Serena</text><text x="345" y="62">3.3M</text><text x="395" y="62">24%</text><text x="440" y="62">+0.8</text><text x="510" y="62">≈ 99%</text><text x="250" y="80">Nord Cola</text><text x="345" y="80">2.2M</text><text x="395" y="80">16%</text><text x="440" y="80">+0.0</text><text x="510" y="80">✓ 104%</text><text x="250" y="98">Nord</text><text x="345" y="98">2.2M</text><text x="395" y="98">16%</text><text x="440" y="98">−1.5</text><text x="510" y="98">≈ 95%</text><text x="250" y="116">Fruitia</text><text x="345" y="116">1.4M</text><text x="395" y="116">10%</text><text x="440" y="116">⚠ −0.1</text><text x="510" y="116">≈ 99%</text><text x="250" y="134" fill="#605E5C">Other (6) ▸</text><text x="250" y="170" font-weight="700" fill="#252423">Center</text><text x="300" y="170">the total, or what you point at or select</text><text x="250" y="190" font-weight="700" fill="#252423">Δ pp (Pro)</text><text x="322" y="190">change in share; ⚠ share and value move apart</text><text x="250" y="210" font-weight="700" fill="#252423">✓ ≈ ✕ (Pro)</text><text x="330" y="210">% of target, a shape and a colour</text></g></svg>
+<figcaption style="font-size:12px;color:var(--t3);text-align:center">Drawing based on the sample data (litres 2026 vs 2025 and plan), not a screenshot; the data table is shortened.</figcaption>
+</figure>
+<p>The angle of each slice is its share of the total. The labels and the table use the same percentages, rounded so they add up to
+100. Other is always last and grey. What is not drawn — negative, zero or blank values, rows Power BI did not send — is said in a
+footnote.</p>
+</div>
+
+<h2 id="fields">Field Wells</h2>
+<table><thead><tr><th>Field</th><th>Kind</th><th>Required</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Category</strong></td><td>Grouping</td><td>Yes — one field</td><td>The field that names the slices: brand, region, channel. A hierarchy gives drilldown.</td></tr><tr><td><strong>Values</strong></td><td>Measure</td><td>Yes — one measure</td><td>The measure the slices share. Its total goes in the center. Negative, zero and blank values are not drawn, because a slice cannot be negative or empty; they are counted in a footnote, negatives with their sum.</td></tr><tr><td><strong>Segment</strong></td><td>Grouping</td><td>No — Pro, one field</td><td>An outer ring that splits every slice by a second field, at the same angle as its slice: family by brand, channel by subchannel.</td></tr><tr><td><strong>Compare with</strong></td><td>Measure</td><td>No — Pro, one measure</td><td>The same measure for another period, usually last year: the change in share (Δ pp) and in value (Δ %) for every category.</td></tr><tr><td><strong>Target</strong></td><td>Measure</td><td>No — Pro, one measure</td><td>The plan or budget of each category: % of target with ✓ ≈ ✕, and status icons on the slices.</td></tr><tr><td><strong>Annotation</strong></td><td>Measure</td><td>No — Pro, one text field</td><td>A comment per category, shown under its row in the data table and in the tooltip. Use a text column set to First.</td></tr><tr><td><strong>Small multiples</strong></td><td>Grouping</td><td>No — Pro, one field</td><td>One donut per value — channel, zone, year — all with the same Other, order and colours.</td></tr><tr><td><strong>Tooltips</strong></td><td>Measure</td><td>No, up to 5</td><td>Extra values in the tooltip of a slice that is one row of data.</td></tr></tbody></table>
+<p>Each well takes one field (Tooltips up to five). Rows: up to 30,000 combinations at a time; the visual asks Power BI for up to 10 more
+blocks and says it in a footnote if rows are still missing. The limits are the same in Free and Pro.</p>
+
+<h2 id="freepro">Free and Pro</h2>
+<table><thead><tr><th>Capability</th><th>Free</th><th>Pro</th></tr></thead><tbody><tr><td>Donut or pie; inner radius, start angle, Space between slices, Border, order by value or by the data</td><td>✓</td><td>✓</td></tr><tr><td>Data labels inside the slices, all with the same content and the same text size; a label that does not fit is left out, never cut with &quot;…&quot;; outside with leader lines when there is no legend or table</td><td>✓</td><td>✓</td></tr><tr><td>Total in the center; point at, select or focus a slice to see its name, value and percent — with several selected, their sum</td><td>✓</td><td>✓</td></tr><tr><td>An honest Other: Show at most and Group below %; it opens in the data table, and selecting it selects every item in it</td><td>✓</td><td>✓</td></tr><tr><td>Percentages that add up to 100 (largest remainder rounding)</td><td>✓</td><td>✓</td></tr><tr><td>Legend and Data table, independent, each with its own position; the table with value and share columns, header, total row, gridlines and banding; sort by clicking a header</td><td>✓</td><td>✓</td></tr><tr><td>Summary sentence above the chart; Footnotes for excluded values and incomplete rows</td><td>✓</td><td>✓</td></tr><tr><td>Scale ring with marks at 25, 50 and 75% or every 10%</td><td>✓</td><td>✓</td></tr><tr><td>A selectable font in the labels, the center, the legend, the data table, the summary and the footnotes</td><td>✓</td><td>✓</td></tr><tr><td>Conditional formatting (fx) on the slice colours, the border and the table header background</td><td>✓</td><td>✓</td></tr><tr><td>Lasso selection, Drilldown, cross-filtering, highlight, bookmarks, multi-visual selection, context menu, keyboard navigation</td><td>✓</td><td>✓</td></tr><tr><td>Report page tooltips; a tooltip with value and share, and for Other up to ten of its members</td><td>✓</td><td>✓</td></tr><tr><td>Accessibility card: high contrast, patterns, focus colour and width, minimum text size, reduce motion</td><td>✓</td><td>✓</td></tr><tr><td>Number format of the measure, Dynamic format strings included; On-object formatting; 12 languages</td><td>✓</td><td>✓</td></tr><tr><td>Report theme and Classic styles; setup guide inside the visual; start screen in three sizes</td><td>✓</td><td>✓</td></tr><tr><td>Compare with: Δ pp with a mini bar, Δ %, new and gone, ⚠ where share and value move apart, the change in the labels</td><td>—</td><td>✓</td></tr><tr><td>Target: % of target with ✓ ≈ ✕, Status on slices, a summary of how many categories miss it</td><td>—</td><td>✓</td></tr><tr><td>Segment: an outer ring with its own labels, and segment rows in the data table</td><td>—</td><td>✓</td></tr><tr><td>Annotations: a comment per category in the data table and the tooltip</td><td>—</td><td>✓</td></tr><tr><td>Small multiples: one donut per value with a shared table of the total, the same size or sized by total</td><td>—</td><td>✓</td></tr><tr><td>Six collection style templates: Boardroom, Ledger, Editorial, Signal, Aurora, Terrace</td><td>—</td><td>✓</td></tr></tbody></table>
+<p>Turn on a Pro capability without a licence while editing and it is drawn working under a "Pro preview" watermark that names it.
+Reading view shows the free chart. Pro is sold per user on Microsoft AppSource: 0.99 USD per month or 9.99 USD per year, no trial.</p>
+
+<h2 id="format">Format Pane</h2>
+<table><thead><tr><th>Card</th><th>Settings</th></tr></thead><tbody><tr><td><strong>Style template</strong></td><td>Report theme (free), Classic (free) or one of the six collection styles (Pro). Setup guide: turn it back on to see the guide again.</td></tr><tr><td><strong>Slices</strong></td><td>Shape donut or pie; inner radius (20–85%); start angle; Space between slices (0–8 px); Border on/off, width and colour (with fx); order by value or as in the data; Show at most (2–20, default 6) and Group below % (0–20, default 3) for Other, and its colour; Lasso selection on/off. Colors: All slices (fx) and one colour per category.</td></tr><tr><td><strong>Data labels</strong></td><td>Show; content Automatic, Percent, Value, Name, Name and percent, Value and percent, or All; position Automatic, Inside or Outside; Segment labels (Pro); font, size, bold, italic, underline; colour of the labels outside; display units and decimals of value and percent.</td></tr><tr><td><strong>Center</strong></td><td>Show the total; title (blank = the measure name), its font, size and colour; value font, size, bold, colour, display units and decimals.</td></tr><tr><td><strong>Scale ring</strong></td><td>Marks Off, Quarters (25/50/75%) or Every 10%; colour (kept at a contrast of at least 3:1 with the background).</td></tr><tr><td><strong>Legend</strong></td><td>Position Automatic, Top, Bottom, Left, Right or Off; font, size, bold, italic, underline, colour.</td></tr><tr><td><strong>Data table</strong></td><td>Position Automatic, Right, Left, Bottom or Off; header, its text colour and background (with fx); total row Automatic (on in the pie), On or Off; columns Value, Share %, Change, % of target, Notes and Segment rows; gridlines None, Horizontal or All, their colour and width; row banding; font; display units and decimals.</td></tr><tr><td><strong>Footnotes</strong></td><td>Automatic or Off; font, size and colour.</td></tr><tr><td><strong>Summary</strong></td><td>Automatic (on when Compare with has a field), On or Off; font, size, bold, italic, underline and colour.</td></tr><tr><td><strong>Compare with (Pro)</strong></td><td>Change shown: Δ pp, Δ % or both; Sort by change.</td></tr><tr><td><strong>Target (Pro)</strong></td><td>Met at (default 100%) and Close at (default 90%); Status on slices: misses only, all or off.</td></tr><tr><td><strong>Annotations (Pro)</strong></td><td>Show annotations.</td></tr><tr><td><strong>Small multiples (Pro)</strong></td><td>Columns (0 = automatic); space between panels; title font, size, colour, bold, italic, underline and alignment; panel background and border; Size by total.</td></tr><tr><td><strong>Accessibility</strong></td><td>High contrast Automatic or On; patterns; focus colour and width; minimum text size (8–16 px); reduce motion.</td></tr></tbody></table>
+<p>The Pro cards appear when their field well has a field. <strong>On-object formatting</strong>: in format mode, click the slices, the
+labels, the center, the legend, the data table, the scale ring or a small multiples title to format it where it is.</p>
+
+<h2 id="interaction">Selection and interaction</h2>
+<div class="card">
+<ul>
+<li>Click a slice, a legend item or a table row to filter the rest of the page. Ctrl/Cmd + click adds; click the background to clear.</li>
+<li><strong>Lasso selection</strong>: drag on the chart to draw a rectangle and select every slice it touches, in every panel; Ctrl or Shift + drag adds. Turn it off in Format → Slices.</li>
+<li>Clicking Other filters by every item inside it. In the data table, Other ▸ opens its members, and each one can be selected.</li>
+<li>With Segment, the outer ring selects the category and segment pair.</li>
+<li>The center shows what you point at or select; with several slices selected, their sum.</li>
+<li>Highlight: when another visual filters this one, the highlighted part of each slice is drawn and the rest is dimmed, Other included.</li>
+<li>Bookmarks restore the selection. Right-click opens the Power BI context menu. A hierarchy in Category gives <strong>Drilldown</strong>.</li>
+<li>Click a header of the data table to sort by it; click again to reverse. The order is not saved with the report.</li>
+<li><strong>Report page tooltips</strong> are supported. When the report author turns interactions off, clicks do not filter.</li>
+</ul>
+</div>
+
+<h2 id="accessibility">Accessibility</h2>
+<div class="card">
+<ul>
+<li>Keyboard: Tab into the visual (one stop); arrows move from slice to slice, with the focus on the slice and on its table row; Home/End jump to the first/last; Enter or Space selects, Ctrl+Enter adds; Esc clears; → on Other opens it and ← closes it; Shift+F10 or the context-menu key opens the menu.</li>
+<li>A live region reads the name, value, share and, with Pro, the change and the target of the focused slice; the summary sentence is part of the description.</li>
+<li>High contrast: the visual uses the colours of the Windows contrast theme, with every slice outlined and patterns on.</li>
+<li>Patterns tell slices apart without relying on colour; targets use ✓ ≈ ✕ and the mix warning uses ⚠, shapes as well as colours.</li>
+<li>A minimum text size (8–16 px) applies to every text; focus colour and width can be set.</li>
+<li>Reduce motion turns off the fades on hover and selection; they are also off when the system asks for reduced motion.</li>
+<li>Text scales with the size of the visual, and the layout adapts: legend and table move, labels shorten, rows fold into "+N more" in very small visuals.</li>
+</ul>
+</div>
+
+<h2 id="faq">FAQ</h2>
+<details><summary>Why does a slice have no label?</summary><div class="faq-body"><p>Every label has the same content and the same text size, so they read as one set. When the legend or the data table is visible, labels always go inside the slices: the text gets smaller down to the minimum, then the content gets shorter (the change, then the value, then the name; the percent goes last). A slice too thin for even the shortest label is left without one — never with a cut text — and its figure stays in the table and the tooltip. With the legend and the table off, a label that does not fit inside goes outside with a leader line.</p></div></details><details><summary>Why do the percentages add up to exactly 100?</summary><div class="faq-body"><p>Rounded independently, percentages often add up to 99 or 101. The visual rounds by the largest remainder method, so the labels, the table and the total row always add up to 100 at the decimals you choose. The tooltip uses the same rounding.</p></div></details><details><summary>What is Other, and how do I open it?</summary><div class="faq-body"><p>Categories beyond <strong>Show at most</strong> (6 by default) or below <strong>Group below %</strong> (3% by default) go into Other, always the last slice, with its count: "Other (5)". In the data table, click <strong>Other (5) ▸</strong> to list its members with their own values and percentages (→ on the keyboard). Clicking the Other slice filters the page by every item inside it, not by a label. Set Show at most to 20 and Group below to 0 to draw every category.</p></div></details><details><summary>Why is a value not drawn?</summary><div class="faq-body"><p>A slice is an angle of a whole, and it cannot be negative or empty. Negative, zero and blank values are left out and counted in a footnote — "Excluded: 1 negative (−0.3M), 1 blank" — so nothing disappears in silence. Percentages use the positive total.</p></div></details><details><summary>What does the center show?</summary><div class="faq-body"><p>The total of Values, with the measure name as its title (or your own title). Point at a slice, select it or move to it with the keyboard and the center shows its name, value and percent; with several slices selected, it shows how many and their sum. The pie has no center. With small multiples each donut shows its own total.</p></div></details><details><summary>Legend or Data table?</summary><div class="faq-body"><p>They are independent and can show together. The <strong>Legend</strong> is the classic one: swatch and name. The <strong>Data table</strong> adds the value and the share of every slice, the Pro columns and the footnotes. In Automatic the table appears when Compare with, Target or Annotation has a field; set its position to Right, Left or Bottom to show it without them. Click a header to sort the table and the slices; the order is not saved with the report.</p></div></details><details><summary>How do I show the change against last year?</summary><div class="faq-body"><p>Add the same measure for the prior period to <strong>Compare with</strong> (Pro) — for example with SAMEPERIODLASTYEAR, with one year in the filter context. The data table adds <strong>Δ pp</strong> (the change in share, in percentage points, with a mini bar) and <strong>Δ %</strong> (the change in value); its title gives the change of the total. Labels add the Δ pp when it fits. A category with no prior value says <em>new</em>; one with no current value is listed as <em>gone</em>, never with an invented change. A ⚠ marks the rows where share and value move in opposite directions — value up but share down because the total grew faster — with a footnote that names them.</p></div></details><details><summary>Every category says &quot;new&quot;, or the change does not show. Why?</summary><div class="faq-body"><p>The Compare with measure returns blank, usually because the time-intelligence function has no single year in context. Filter the page or the visual to one year, or use a prior-year column in the model.</p></div></details><details><summary>How do targets work?</summary><div class="faq-body"><p>Add the plan or budget to <strong>Target</strong> (Pro). The table shows the % of target of each category with ✓ (at or above Met at, 100% by default), ≈ (at or above Close at, 90%) or ✕ (below) — a shape and a colour, so it does not rely on colour. <strong>Status on slices</strong> puts the icon on the outer edge of the slices that miss the target, of all of them, or of none. The summary says how many categories miss it.</p></div></details><details><summary>What does Segment do?</summary><div class="faq-body"><p>Segment (Pro) adds an outer ring: each slice is split by a second field at the same angle — family by brand, channel by subchannel. The ring has its own labels (Format → Data labels → Segment labels) and the table can list segment rows under each category. When every category belongs to a single segment (for example Brand in Category and Family in Segment), the ring would say nothing: it is not drawn and, while you edit, a note suggests swapping the two fields.</p></div></details><details><summary>How do small multiples work?</summary><div class="faq-body"><p>Add a field to <strong>Small multiples</strong> (Pro). Every donut uses the same Other, order and colours, so you compare like with like; each one shows its own total in the center and its title above. The data table is shared and shows the total of all panels (its title says Total); the tooltip of a table row gives the value in each panel. <strong>Size by total</strong> makes the area of each donut proportional to its total. When the panels would be too small to read, the visual shows the ones that fit and says how many: "Showing N of M panels".</p></div></details><details><summary>What does the Summary sentence say?</summary><div class="faq-body"><p>The leader and its share, and what the top three add up to; with Pro, the biggest shift against Compare with and how many categories miss the target. It uses the same rounded figures as the labels and is read by screen readers. Automatic shows it when Compare with has a field; turn it On or Off in <strong>Format → Summary</strong>.</p></div></details><details><summary>Can I use conditional formatting (fx)?</summary><div class="faq-body"><p>Yes, in the free version: <strong>Format → Slices → Colors → All slices (fx)</strong> colours every slice by a rule or a field; a colour set for one category takes precedence. The border colour and the table header background accept fx too.</p></div></details><details><summary>Why does a tooltip measure not show?</summary><div class="faq-body"><p>Measures in <strong>Tooltips</strong> show when a slice is one row of data. With Segment or Small multiples a slice is made of several rows, and adding up a measure such as a margin % or an average across them would give a false figure, so it is left out. Use a report page tooltip instead: it is computed by Power BI for the slice.</p></div></details><details><summary>How many rows can it use?</summary><div class="faq-body"><p>Power BI sends up to 30,000 combinations of category, segment and panel at a time. When there are more, the visual asks for further blocks, up to 10 more, and adds them up (checked in Power BI Desktop with 54,662 rows). While it loads, a footnote says "Loading more rows"; if rows are still missing, it says "Showing 30,000 rows; Other is incomplete".</p></div></details><details><summary>Can I change the font?</summary><div class="faq-body"><p>Yes: the labels, the center (title and value), the legend, the data table, the summary, the footnotes and the small multiples titles each have a font, size and style. Blank uses the font of the style.</p></div></details><details><summary>What is the &quot;Pro preview&quot; watermark?</summary><div class="faq-body"><p>While you edit a report without a licence, Pro features you turn on are drawn working, on your own data, under a watermark that names them, and Power BI shows its licence notice; small multiples show their first 4 panels. Reading view shows the free chart. Where Power BI provides no licence information (for example when you are not signed in to Power BI Desktop), the free chart is shown.</p></div></details><details><summary>How do I get Pro?</summary><div class="faq-body"><p>On the visual's Microsoft AppSource page, choose <strong>Buy now</strong> (not Install free): 0.99 USD per user per month or 9.99 USD per user per year, with no trial. Licences are per user and managed by Microsoft; restart Power BI Desktop after the licence is assigned. See <a href="https://tcviz.com/licensing.html">tcviz.com/licensing</a>.</p></div></details><details><summary>How are numbers formatted?</summary><div class="faq-body"><p>With the number format of the measure from the model, <strong>dynamic format strings</strong> included, in the report's language. A measure with no format gets thousands separators and no stray decimals. The labels, the center and the table each have their own display units and decimals.</p></div></details><details><summary>Is my data sent anywhere?</summary><div class="faq-body"><p>No. The visual makes no network requests, declares no privileges and stores nothing outside your report.</p></div></details>
+
+<h2 id="trouble">Troubleshooting</h2>
+<table><thead><tr><th>What you see</th><th>What to do</th></tr></thead><tbody><tr><td>The visual shows the start screen</td><td>Add a field to Category and a measure to Values.</td></tr><tr><td>A slice has no label</td><td>It is too thin for the shortest label. Make the visual larger, lower the text size, or read the figure in the data table or the tooltip.</td></tr><tr><td>The data table does not show</td><td>In Automatic it appears with a field in Compare with, Target or Annotation. Set Format → Data table → Position to Right, Left or Bottom.</td></tr><tr><td>The outer ring does not show</td><td>Segment is Pro. If every category belongs to one segment, the ring is not drawn: put the broader field in Category and the finer one in Segment.</td></tr><tr><td>The change does not show</td><td>Compare with is Pro and needs a measure for the prior period; check Format → Data table → Change column.</td></tr><tr><td>Annotations do not show</td><td>Annotation expects text: in the field well, set the column to First.</td></tr><tr><td>Small multiples show fewer panels than values</td><td>The panels would be too small to read: the visual says &quot;Showing N of M panels&quot;. Make it larger or set fewer columns.</td></tr><tr><td>&quot;Other is incomplete&quot;</td><td>Power BI did not send every row. Filter the page or use a field with fewer values.</td></tr><tr><td>Clicks do not filter</td><td>The report author has turned interactions off, or the visual is in format mode.</td></tr></tbody></table>
+
+<h2 id="contact">Contact</h2>
+<div class="contact-box"><div class="icon">✉</div><div>
+<h3>Questions, bugs, ideas</h3>
+<p>Write to <a href="mailto:support@tcviz.com">support@tcviz.com</a> — a person reads and replies — or open a thread in
+<a href="https://github.com/tinocallarisa-web/donut-chart/discussions" target="_blank">GitHub Discussions</a>. Bugs: <a href="https://github.com/tinocallarisa-web/donut-chart/issues" target="_blank">GitHub Issues</a>.</p>
+</div></div>
+
+</div>
+<footer>
+  <div style="margin-bottom:10px;">
+    <a href="https://tinocallarisa-web.github.io/donut-chart/support.html">Documentation</a>
+    <a href="https://tinocallarisa-web.github.io/donut-chart/privacy.html">Privacy Policy</a>
+    <a href="https://tinocallarisa-web.github.io/donut-chart/terms.html">Terms of Use</a>
+    <a href="https://tinocallarisa-web.github.io/donut-chart/changelog.html">Changelog</a>
+    <a href="https://github.com/tinocallarisa-web/donut-chart/discussions" target="_blank">Discussions</a>
+    <a href="https://github.com/tinocallarisa-web/donut-chart" target="_blank">GitHub</a>
+    <a href="https://tcviz.com" target="_blank">tcviz.com</a>
+  </div>
+  <p>© 2026 TCViz · Donut &amp; Pie Chart by TCViz · <a href="mailto:support@tcviz.com">support@tcviz.com</a></p>
+</footer>
+<script>
+(function () {
+  'use strict';
+
+  // ── Nav highlight (in-page anchors only) ────────────────────────────────────
+  document.querySelectorAll('nav a[href^="#"]').forEach(function (a) {
+    a.addEventListener('click', function () {
+      document.querySelectorAll('nav a').forEach(function (x) { x.classList.remove('active'); });
+      a.classList.add('active');
+    });
+  });
+
+  // ── Documentation search ────────────────────────────────────────────────────
+  var input  = document.getElementById('docsearch');
+  var clear  = document.getElementById('searchclear');
+  var status = document.getElementById('searchstatus');
+  var wrap   = document.querySelector('.wrap');
+  if (!input || !wrap) { return; }
+
+  var HIDE = 'is-hidden';
+
+  // Atomic searchable units: one FAQ entry, one table row, one card.
+  var units = [];
+  function add(el) {
+    if (units.some(function (u) { return u.el === el; })) { return; }
+    units.push({ el: el, html: el.innerHTML, text: (el.textContent || '').toLowerCase() });
+  }
+  wrap.querySelectorAll('details').forEach(add);
+  wrap.querySelectorAll('table tr').forEach(function (tr) {
+    if (tr.querySelector('th')) { return; }   // header rows follow their table
+    add(tr);
+  });
+  wrap.querySelectorAll('.card, .contact-box').forEach(add);
+
+  // Sections: an <h2> plus every sibling up to the next <h2>.
+  var sections = [];
+  var current = null;
+  Array.prototype.forEach.call(wrap.children, function (el) {
+    if (el.tagName === 'H2') {
+      current = { head: el, body: [] };
+      sections.push(current);
+    } else if (current) {
+      current.body.push(el);
+    }
+  });
+  // Each body element remembers which units live inside it.
+  sections.forEach(function (sec) {
+    sec.body.forEach(function (b) {
+      b._units = units.filter(function (u) { return b === u.el || b.contains(u.el); });
+      if (!b._units.length) { b._html = b.innerHTML; }
+    });
+  });
+
+  function escapeRe(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function escapeHtml(t) {
+    return t.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; });
+  }
+
+  function highlight(el, terms) {
+    var re = new RegExp('(' + terms.map(escapeRe).join('|') + ')', 'gi');
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    var nodes = [], n;
+    while ((n = walker.nextNode())) { nodes.push(n); }
+    nodes.forEach(function (node) {
+      var txt = node.nodeValue;
+      re.lastIndex = 0;
+      if (!re.test(txt)) { return; }
+      re.lastIndex = 0;
+      var span = document.createElement('span');
+      span.innerHTML = escapeHtml(txt).replace(re, '<mark>$1</mark>');
+      node.parentNode.replaceChild(span, node);
+    });
+  }
+
+  function showAll() {
+    units.forEach(function (u) { u.el.classList.remove(HIDE); u.el.innerHTML = u.html; });
+    sections.forEach(function (sec) {
+      sec.head.classList.remove(HIDE);
+      sec.body.forEach(function (b) {
+        b.classList.remove(HIDE);
+        if (b._html !== undefined) { b.innerHTML = b._html; }
+      });
+    });
+    status.textContent = '';
+    clear.hidden = true;
+  }
+
+  function run(q) {
+    q = (q || '').trim();
+    if (q.length < 2) { showAll(); return; }
+    clear.hidden = false;
+
+    var terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    var hits = 0;
+
+    units.forEach(function (u) {
+      u.el.innerHTML = u.html;
+      var match = terms.every(function (t) { return u.text.indexOf(t) !== -1; });
+      u.el.classList.toggle(HIDE, !match);
+      if (match) {
+        hits++;
+        highlight(u.el, terms);
+        if (u.el.tagName === 'DETAILS') { u.el.open = true; }
+      }
+    });
+
+    sections.forEach(function (sec) {
+      var anyVisible = false;
+      sec.body.forEach(function (b) {
+        var visible;
+        if (b._units.length) {
+          visible = b._units.some(function (u) { return !u.el.classList.contains(HIDE); });
+        } else {
+          b.innerHTML = b._html;
+          var txt = (b.textContent || '').toLowerCase();
+          visible = terms.every(function (t) { return txt.indexOf(t) !== -1; });
+          if (visible) { highlight(b, terms); }
+        }
+        b.classList.toggle(HIDE, !visible);
+        if (visible) { anyVisible = true; }
+      });
+      sec.head.classList.toggle(HIDE, !anyVisible);
+    });
+
+    status.textContent = hits
+      ? hits + ' result' + (hits === 1 ? '' : 's') + ' for “' + q + '”'
+      : 'No results for “' + q + '”. Try a Format pane setting name, or email support@tcviz.com.';
+  }
+
+  var timer;
+  input.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () { run(input.value); }, 120);
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { input.value = ''; showAll(); }
+  });
+  clear.addEventListener('click', function () { input.value = ''; showAll(); input.focus(); });
+
+  // Deep link: support.html?q=license
+  var qp = new URLSearchParams(location.search).get('q');
+  if (qp) { input.value = qp; run(qp); }
+})();
+</script>
+</body>
+</html>
