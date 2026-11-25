@@ -202,5 +202,8 @@ P.update({
 "Show footnotes": ["Mostrar notas de rodapé", "Afficher les notes", "Fußnoten anzeigen", "Mostra note", "Voetnoten weergeven", "Pokaż przypisy", "脚注を表示", "显示脚注", "각주 표시", "Mostrar notas al pie"],
 "⚠ {0}: value up, share down": ["⚠ {0}: valor sobe, quota desce", "⚠ {0} : valeur en hausse, part en baisse", "⚠ {0}: Wert steigt, Anteil sinkt", "⚠ {0}: valore in aumento, quota in calo", "⚠ {0}: waarde omhoog, aandeel omlaag", "⚠ {0}: wartość rośnie, udział spada", "⚠ {0}: 値は増加、シェアは減少", "⚠ {0}：值上升，份额下降", "⚠ {0}: 값은 증가, 점유율은 감소", "⚠ {0}: el valor sube, la cuota baja"],
 "⚠ {0}: value down, share up": ["⚠ {0}: valor desce, quota sobe", "⚠ {0} : valeur en baisse, part en hausse", "⚠ {0}: Wert sinkt, Anteil steigt", "⚠ {0}: valore in calo, quota in aumento", "⚠ {0}: waarde omlaag, aandeel omhoog", "⚠ {0}: wartość spada, udział rośnie", "⚠ {0}: 値は減少、シェアは増加", "⚠ {0}：值下降，份额上升", "⚠ {0}: 값은 감소, 점유율은 증가", "⚠ {0}: el valor baja, la cuota sube"],
+"Border color": ["Cor da borda", "Couleur de la bordure", "Rahmenfarbe", "Colore del bordo", "Randkleur", "Kolor obramowania", "枠線の色", "边框颜色", "테두리 색", "Color del borde"],
+"Border width": ["Largura da borda", "Largeur de la bordure", "Rahmenbreite", "Spessore del bordo", "Randbreedte", "Szerokość obramowania", "枠線の幅", "边框宽度", "테두리 두께", "Ancho del borde"],
+"Lasso selection": ["Seleção com laço", "Sélection au lasso", "Lassoauswahl", "Selezione con lazo", "Lassoselectie", "Zaznaczanie lassem", "なげなわ選択", "套索选择", "올가미 선택", "Selección con lazo"],
 })
 

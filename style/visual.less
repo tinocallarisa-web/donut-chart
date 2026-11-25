@@ -4,6 +4,8 @@
 .dn-root {
     position: absolute; inset: 0; overflow: hidden;
     font-family: "Segoe UI", wf_segoe-ui_normal, helvetica, arial, sans-serif;
+    // El lazo arrastra sobre el gráfico: sin selección de texto del navegador.
+    user-select: none; -webkit-user-select: none;
     .dn-svg { position: absolute; left: 0; top: 0; display: block; overflow: hidden; }
     .dn-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .dn-wmzone { position: absolute; display: none; pointer-events: none; z-index: 5; overflow: hidden; }

@@ -262,10 +262,21 @@
           }
         },
         "gap": {
-          "displayName": "Space between slices",
+          "displayName": "Border width",
           "displayNameKey": "Prop_slices_gap",
           "type": {
             "numeric": true
+          }
+        },
+        "borderColor": {
+          "displayName": "Border color",
+          "displayNameKey": "Prop_slices_borderColor",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
           }
         },
         "sort": {
@@ -309,6 +320,13 @@
                 "color": true
               }
             }
+          }
+        },
+        "lasso": {
+          "displayName": "Lasso selection",
+          "displayNameKey": "Prop_slices_lasso",
+          "type": {
+            "bool": true
           }
         }
       }

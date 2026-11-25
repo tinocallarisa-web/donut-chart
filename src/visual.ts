@@ -204,6 +204,10 @@ export class Visual implements IVisual {
      * foco al contenedor pero no pinta contorno ni mueve el elemento enfocado (si no, el mayor parecía seleccionado).
      */
     private kbMode = false;
+    /** Lazo en curso (FC.PROP07): arrastre de más de 6 px sobre el gráfico. */
+    private drag: { x0: number; y0: number; x1: number; y1: number; on: boolean; add: boolean; id: number } | null = null;
+    private lassoEl: SVGRectElement | null = null;
+    private suppressClick = false;
     private pointerDown = false;
     /** Selección propia: claves de categoría (o OTHER_KEY). Se calcula aquí y se pasa entera a Power BI. */
     private selKeys = new Set<string>();
@@ -270,6 +274,10 @@ export class Visual implements IVisual {
             this.announce();
         });
         this.root.addEventListener("blur", () => { this.hasFocus = false; this.kbMode = false; this.pointerDown = false; this.hideTip(); this.paintState(); });
+        this.root.addEventListener("pointerdown", (e: PointerEvent) => this.lassoStart(e));
+        this.root.addEventListener("pointermove", (e: PointerEvent) => this.lassoMove(e));
+        this.root.addEventListener("pointerup", (e: PointerEvent) => this.lassoEnd(e));
+        this.root.addEventListener("pointercancel", () => this.lassoCancel());
         this.root.addEventListener("click", (e: MouseEvent) => this.onClick(e));
         this.root.addEventListener("contextmenu", (e: MouseEvent) => this.onContext(e));
         this.root.addEventListener("mousemove", (e: MouseEvent) => this.onMove(e));
@@ -1322,6 +1330,18 @@ export class Visual implements IVisual {
         return 0;
     }
 
+    /** Color de borde de los sectores: fijo o regla fx (la primera con valor); vacío = sin borde (hueco al fondo). */
+    private get borderColor(): string | null {
+        if (this.hc) return null;
+        const fixed = String(this.settings.slices?.borderColor || "");
+        if (fixed) return fixed;
+        for (const cc of this.dataView?.categorical?.categories ?? []) for (const o of (cc.objects ?? []) as any[]) {
+            const v = o?.slices?.borderColor?.solid?.color;
+            if (v) return String(v);
+        }
+        return null;
+    }
+
     private get mutedInk(): string {
         if (this.hc) return this.hcFg;
         if (this.look) return this.look.axis;
@@ -2177,9 +2197,17 @@ export class Visual implements IVisual {
         const { cx, cy, R, Rin, ri } = g0;
         const pg = this.svg.append("g").attr("class", "dn-panel").attr("data-panel", String(p.index)) as unknown as Sel<SVGGElement>;
         p.g = pg;
+        // Border (FC.PROP04): sin color, el ancho es hueco transparente (se ve el fondo); con color, borde de ese ancho y
+        // sin hueco. Igual en los dos anillos. El alto contraste manda sobre ambos.
+        const bColor = this.borderColor;
         const gap = Number(s.slices.gap) || 0;
-        const pad = (r: number) => (p.arcs.length > 1 ? gap / Math.max(r, 1) : 0);
+        const bw = bColor ? Math.max(0.5, gap) : 0;
+        const pad = (r: number) => (p.arcs.length > 1 && !bColor ? gap / Math.max(r, 1) : 0);
         const arcGen = d3.arc<any>().innerRadius(ri).outerRadius(Rin).padRadius(Rin).padAngle(pad(Rin)).cornerRadius(0);
+        const border = (grp: Sel<SVGGElement>, d: string) => {
+            if (bColor) grp.append("path").attr("class", "dn-border").attr("d", d).attr("fill", "none").attr("stroke", bColor).attr("stroke-width", bw)
+                .attr("stroke-linejoin", "round").style("pointer-events", "none");
+        };
         const g = pg.append("g").attr("class", "dn-slices");
         const hasHl = !!this.model.hasHighlights;
         const pidx = String(p.index);
@@ -2194,6 +2222,7 @@ export class Visual implements IVisual {
                 sg.append("path").attr("class", "dn-pat dn-pat-other").attr("d", d).attr("fill", "url(#" + this.otherPatternId(e) + ")").style("pointer-events", "none");
             }
             if (this.patternsOn && gi > 0) sg.append("path").attr("class", "dn-pat").attr("d", d).attr("fill", "url(#" + this.patternId(gi, e) + ")").style("pointer-events", "none");
+            if (!this.hc) border(sg as unknown as Sel<SVGGElement>, d);
             if (hasHl) {
                 // Resaltado parcial: la parte resaltada con área proporcional (radio en √), el resto atenuado.
                 const ratio = e.value > 0 ? Math.max(0, Math.min(1, (e.hl || 0) / e.value)) : 0;
@@ -2210,7 +2239,7 @@ export class Visual implements IVisual {
         p.segArcs = [];
         if (this.segOn) {
             const r0 = Rin + Math.max(1.5, Math.min(3, R * 0.02)), r1 = R;
-            const sgen = d3.arc<any>().innerRadius(r0).outerRadius(r1).padRadius(r1).padAngle(gap > 0 ? Math.min(gap, 1.5) / Math.max(r1, 1) : 0);
+            const sgen = d3.arc<any>().innerRadius(r0).outerRadius(r1).padRadius(r1).padAngle(gap > 0 && !bColor ? Math.min(gap, 1.5) / Math.max(r1, 1) : 0);
             const gs = pg.append("g").attr("class", "dn-segs").attr("transform", "translate(" + cx + "," + cy + ")");
             for (const a of p.arcs) {
                 const split = this.segSplit(a.e, p.fkey, a.e.pct);
@@ -2227,8 +2256,9 @@ export class Visual implements IVisual {
                     const d = sgen({ startAngle: sgA.a0, endAngle: sgA.a1 });
                     const path = sgg.append("path").attr("class", "dn-seg").attr("data-key", sgA.key).attr("data-panel", pidx).attr("d", d).attr("fill", sgA.color);
                     if (this.hc) path.attr("stroke", this.hcFg).attr("stroke-width", 1);
-                    else path.attr("stroke", this.bgColor).attr("stroke-width", 0.5);
+                    else if (!bColor) path.attr("stroke", this.bgColor).attr("stroke-width", 0.5);
                     if (this.patternsOn && si > 0) sgg.append("path").attr("class", "dn-pat").attr("d", d).attr("fill", "url(#" + this.segPatternId(si) + ")").style("pointer-events", "none");
+                    if (!this.hc) border(sgg as unknown as Sel<SVGGElement>, d);
                     if (hasHl) {
                         const ratio = x.v > 0 ? Math.max(0, Math.min(1, x.h / x.v)) : 0;
                         path.attr("fill-opacity", 0.35);
@@ -2640,6 +2670,7 @@ export class Visual implements IVisual {
     }
 
     private onClick(e: MouseEvent): void {
+        if (this.suppressClick) { this.suppressClick = false; return; }
         if (this.guideEl && this.guideEl.contains(e.target as Node)) return;
         if (!this.model || !this.entries.length) return;
         const { key, toggle, sort } = this.keyAt(e);
@@ -2656,6 +2687,106 @@ export class Visual implements IVisual {
             this.focusIdx = -1;
             this.paintState();
         }
+    }
+
+    // ── Lazo (FC.PROP07) ────────────────────────────────────────────────────
+    // Arrastrar más de 6 px sobre el gráfico dibuja un rectángulo; entran los sectores que toca (en el anillo interior,
+    // categorías; en el exterior, pares categoría · segmento), en todos los paneles. Ctrl (o Mayús) suma a la selección.
+    // Un clic sin arrastre sigue siendo el clic normal. Sin update(), sin persistProperties; respeta allowInteractions.
+
+    private rootPoint(e: { clientX: number; clientY: number }): [number, number] {
+        const r = this.root.getBoundingClientRect();
+        return [e.clientX - r.left, e.clientY - r.top];
+    }
+
+    private lassoStart(e: PointerEvent): void {
+        if (e.button !== 0 || this.formatMode || !this.canInteract || this.settings.slices?.lasso === false || !this.entries.length) return;
+        const t = e.target as Element | null;
+        // Solo sobre el gráfico (no en la tabla, la leyenda, el asistente ni los botones).
+        if (!t || !t.closest || !t.closest("svg.dn-svg") || t.closest(".dn-table, .dn-legend, .dn-guide, button")) return;
+        const [x, y] = this.rootPoint(e);
+        this.drag = { x0: x, y0: y, x1: x, y1: y, on: false, add: e.ctrlKey || e.metaKey || e.shiftKey, id: e.pointerId };
+    }
+
+    private lassoMove(e: PointerEvent): void {
+        const d = this.drag;
+        if (!d || e.pointerId !== d.id) return;
+        const [x, y] = this.rootPoint(e);
+        d.x1 = x; d.y1 = y;
+        if (!d.on && Math.hypot(x - d.x0, y - d.y0) > 6) {
+            d.on = true;
+            try { this.root.setPointerCapture(e.pointerId); } catch { /* sin captura */ }
+            const NS = "http://www.w3.org/2000/svg";
+            this.lassoEl = document.createElementNS(NS, "rect") as SVGRectElement;
+            this.lassoEl.setAttribute("class", "dn-lasso");
+            this.lassoEl.setAttribute("pointer-events", "none");
+            this.lassoEl.setAttribute("stroke-dasharray", "4 3");
+            this.lassoEl.setAttribute("stroke-width", "1.5");
+            this.svg.node().appendChild(this.lassoEl);
+            this.hideTip();
+        }
+        if (d.on) e.preventDefault();
+        if (d.on && this.lassoEl) {
+            this.lassoEl.setAttribute("x", String(Math.min(d.x0, x))); this.lassoEl.setAttribute("y", String(Math.min(d.y0, y)));
+            this.lassoEl.setAttribute("width", String(Math.abs(x - d.x0))); this.lassoEl.setAttribute("height", String(Math.abs(y - d.y0)));
+            this.lassoEl.setAttribute("stroke", this.focusColor);
+            this.lassoEl.setAttribute("fill", this.hc ? "none" : "rgba(43,108,176,0.10)");
+        }
+    }
+
+    private lassoEnd(e: PointerEvent): void {
+        const d = this.drag;
+        this.drag = null;
+        if (!d || !d.on) return;
+        try { this.root.releasePointerCapture(e.pointerId); } catch { /* nada */ }
+        this.lassoEl?.remove(); this.lassoEl = null;
+        // El clic que sigue al arrastre no es un clic.
+        this.suppressClick = true;
+        window.setTimeout(() => { this.suppressClick = false; }, 0);
+        const keys = this.lassoHits(Math.min(d.x0, d.x1), Math.min(d.y0, d.y1), Math.max(d.x0, d.x1), Math.max(d.y0, d.y1));
+        if (!keys.length) return;
+        if (!d.add) this.selKeys.clear();
+        for (const k of keys) this.selKeys.add(k);
+        const ids: ISelectionId[] = [];
+        for (const k of this.selKeys) ids.push(...this.idsOf(k));
+        if (ids.length) this.selectionManager.select(ids, false); else this.selectionManager.clear();
+        this.paintState();
+    }
+
+    private lassoCancel(): void {
+        this.drag = null;
+        this.lassoEl?.remove(); this.lassoEl = null;
+    }
+
+    /** Claves que toca el rectángulo: muestreo de cada sector (ángulo × radio) y el centro del rectángulo dentro del sector. */
+    private lassoHits(x0: number, y0: number, x1: number, y1: number): string[] {
+        const out = new Set<string>();
+        const inRect = (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+        const touches = (cx: number, cy: number, a0: number, a1: number, r0: number, r1: number) => {
+            if (a1 <= a0 || r1 <= r0) return false;
+            const na = Math.max(3, Math.ceil((a1 - a0) * r1 / 5)), nr = Math.max(2, Math.ceil((r1 - r0) / 5));
+            for (let i = 0; i <= na; i++) {
+                const a = a0 + (a1 - a0) * i / na;
+                for (let j = 0; j <= nr; j++) {
+                    const r = r0 + (r1 - r0) * j / nr;
+                    if (inRect(cx + Math.sin(a) * r, cy - Math.cos(a) * r)) return true;
+                }
+            }
+            // Rectángulo pequeño dentro del sector.
+            const mx = (x0 + x1) / 2 - cx, my = (y0 + y1) / 2 - cy;
+            const rr = Math.hypot(mx, my);
+            let am = Math.atan2(mx, -my);
+            while (am < a0) am += 2 * Math.PI;
+            while (am >= a0 + 2 * Math.PI) am -= 2 * Math.PI;
+            return rr >= r0 && rr <= r1 && am <= a1;
+        };
+        for (const p of this.panels) {
+            const g = p.geo;
+            if (!g) continue;
+            for (const a of p.arcs) if (touches(g.cx, g.cy, a.a0, a.a1, g.ri, g.Rin)) out.add(a.e.key);
+            for (const sa of p.segArcs) if (touches(g.cx, g.cy, sa.a0, sa.a1, g.Rin + 2, g.R)) out.add(sa.key);
+        }
+        return Array.from(out);
     }
 
     /** Orden por cabecera de la tabla: solo en memoria (no se guarda en el informe ni llama a persistProperties). */
@@ -3331,7 +3462,7 @@ export class Visual implements IVisual {
         if (p.type === "bool") return { ...base, control: { type: "ToggleSwitch" as any, properties: { descriptor, value: !!value } } } as any;
         if (p.type === "num") return { ...base, control: { type: "NumUpDown" as any, properties: { descriptor, value: value === null || value === "" ? undefined : Number(value),
             options: { minValue: p.min !== undefined ? { type: 0, value: p.min } : undefined, maxValue: p.max !== undefined ? { type: 1, value: p.max } : undefined } } } } as any;
-        if (p.type === "fill" && obj === "dataTable" && p.name === "headerBackground") {
+        if (p.type === "fill" && ((obj === "dataTable" && p.name === "headerBackground") || (obj === "slices" && p.name === "borderColor"))) {
             // Fondo de cabecera con fx (como "All slices"): comodín + ConstantOrRule; el color fijo se guarda a nivel general.
             const wild = dataViewWildcard.createDataViewWildcardSelector(dataViewWildcard.DataViewWildcardMatchingOption.InstancesAndTotals);
             return { ...base, control: { type: "ColorPicker" as any, properties: {

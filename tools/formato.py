@@ -49,11 +49,16 @@ OBJECTS = [
         ("shape", "Shape", "enum", "donut", {"items": [("donut", "Donut"), ("pie", "Pie")]}),
         ("innerRadius", "Inner radius (%)", "num", 58, {"min": 20, "max": 85}),
         ("startAngle", "Start angle (°)", "num", 0, {"min": 0, "max": 359}),
-        ("gap", "Space between slices", "num", 1, {"min": 0, "max": 8}),
+        # Border (FC.PROP04): el ancho es el antiguo «Space between slices» (mismo nombre interno, mismo valor por defecto).
+        # Border color vacío = hueco al fondo del visual o del estilo, como hasta ahora; con color (fx), borde de ese ancho.
+        ("gap", "Border width", "num", 1, {"min": 0, "max": 8}),
+        ("borderColor", "Border color", "fill", "", {}),
         ("sort", "Order", "enum", "valueDesc", {"items": [("valueDesc", "By value"), ("data", "Data order")]}),
         ("maxSlices", "Show at most", "num", 6, {"min": 2, "max": 20}),
         ("groupBelow", "Group below (%)", "num", 3, {"min": 0, "max": 20}),
         ("otherColor", "Other color", "fill", "#A19F9D", {}),
+        # Lasso selection (FC.PROP07): arrastrar sobre el gráfico selecciona los sectores que toca; Ctrl suma.
+        ("lasso", "Lasso selection", "bool", True, {}),
     ]),
     # Color por categoría (gratis): se guarda con el selector de la categoría; "All slices (fx)" con selector comodín.
     # El panel lo construye el visual dentro de la tarjeta Slices. Sin tarjeta propia en PANE.

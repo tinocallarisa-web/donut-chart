@@ -120,9 +120,16 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "type": "num",
                 "def": 1,
                 "key": "Prop_slices_gap",
-                "label": "Space between slices",
+                "label": "Border width",
                 "min": 0,
                 "max": 8
+            },
+            {
+                "name": "borderColor",
+                "type": "fill",
+                "def": "",
+                "key": "Prop_slices_borderColor",
+                "label": "Border color"
             },
             {
                 "name": "sort",
@@ -167,6 +174,13 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "def": "#A19F9D",
                 "key": "Prop_slices_otherColor",
                 "label": "Other color"
+            },
+            {
+                "name": "lasso",
+                "type": "bool",
+                "def": true,
+                "key": "Prop_slices_lasso",
+                "label": "Lasso selection"
             }
         ]
     },

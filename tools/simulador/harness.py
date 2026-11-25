@@ -1486,6 +1486,127 @@ async def tanda_notas(b):
     await pg.close()
 
 
+# ── Bordes y lazo (FC.PROP04, FC.PROP07; 25-11) ───────────────────────────────
+
+CENTROS = r"""(sel) => { const hr = document.getElementById('host').getBoundingClientRect();
+  return Array.from(document.querySelectorAll(sel)).map(t => { const r = t.getBoundingClientRect();
+    return { key: t.getAttribute('data-key'), x: (r.left + r.right) / 2 - hr.left, y: (r.top + r.bottom) / 2 - hr.top }; }); }"""
+SEL = "() => (window.__sel || []).map(s => s.key)"
+
+
+async def lazo(pg, x0, y0, x1, y1, ctrl=False, soltar=True):
+    # El host está en (0,0) de la página: coordenadas del visual = de la página.
+    if ctrl:
+        await pg.keyboard.down("Control")
+    await pg.mouse.move(x0, y0)
+    await pg.mouse.down()
+    await pg.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, steps=4)
+    await pg.mouse.move(x1, y1, steps=4)
+    if soltar:
+        await pg.mouse.up()
+    if ctrl:
+        await pg.keyboard.up("Control")
+    await pg.wait_for_timeout(30)
+
+
+async def tanda_lazo_bordes(b):
+    print("25-11 (7) · Lasso selection (FC.PROP07)")
+    pg = await page(b, dv_caso_a({"labels": {"content": "percent"}}, legacy=False), 960, 540)
+    C = await pg.evaluate(CENTROS, "text.dn-label")
+    tres = C[:3]
+    x0, x1 = min(c["x"] for c in tres) - 2, max(c["x"] for c in tres) + 2
+    y0, y1 = min(c["y"] for c in tres) - 2, max(c["y"] for c in tres) + 2
+    await lazo(pg, x0, y0, x1, y1, soltar=False)
+    check("lazo: se dibuja el rectángulo mientras se arrastra", await pg.evaluate("() => !!document.querySelector('rect.dn-lasso')"), "")
+    await shot(pg, "lazo_en_curso_960x540")
+    await pg.mouse.up()
+    await pg.wait_for_timeout(30)
+    sel = await pg.evaluate(SEL)
+    quiere = sorted("Marca=" + m for m in MARCAS[:3])
+    check("lazo sobre 3 sectores: 3 identidades seleccionadas", sorted(sel) == quiere, f"{sel} vs {quiere}")
+    check("lazo: el rectángulo desaparece al soltar", not await pg.evaluate("() => !!document.querySelector('rect.dn-lasso')"), "")
+    op = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-sg')).map(g => g.getAttribute('opacity'))")
+    check("lazo: los no seleccionados se atenúan", op.count("1") == 3, str(op))
+    c4 = C[3]
+    await lazo(pg, c4["x"] - 3, c4["y"] - 3, c4["x"] + 6, c4["y"] + 6, ctrl=True)
+    sel = await pg.evaluate(SEL)
+    check("Ctrl + lazo: suma a la selección (4 identidades)", len(sel) == 4 and "Marca=" + MARCAS[3] in sel, str(sel))
+    await lazo(pg, c4["x"] - 3, c4["y"] - 3, c4["x"] + 6, c4["y"] + 6)
+    sel = await pg.evaluate(SEL)
+    check("lazo sin Ctrl: sustituye la selección", sel == ["Marca=" + MARCAS[3]], str(sel))
+    await pg.mouse.click(C[0]["x"], C[0]["y"])
+    await pg.wait_for_timeout(30)
+    sel = await pg.evaluate(SEL)
+    check("un clic sin arrastre sigue siendo el clic normal", sel == ["Marca=" + MARCAS[0]], str(sel))
+    check("lazo: nunca persistProperties", await pg.evaluate("() => __persist.length") == 0, "")
+    n = await eventos(pg, "lazo")
+    check("lazo: sin updates nuevos (un renderingStarted/Finished)", n == 1, str(n))
+    await pg.focus(".dn-root")
+    await pg.keyboard.press("ArrowRight")
+    await pg.keyboard.press("Escape")
+    await pg.keyboard.press("Enter")
+    await pg.keyboard.press("ArrowRight")
+    await pg.keyboard.down("Control")
+    await pg.keyboard.press(" ")
+    await pg.keyboard.up("Control")
+    sel = await pg.evaluate(SEL)
+    check("teclado: Ctrl+Espacio añade a la selección (multiselección sin ratón)", len(sel) == 2, str(sel))
+    await pg.close()
+
+    pg = await page(b, dv_ventas({"labels": {"segment": "name"}}, cat="Familia", segment="Marca", legacy=False), 960, 540, name="lazo_anillo_exterior")
+    S = await pg.evaluate(CENTROS, "text.dn-seglabel")
+    s0 = S[0]
+    await lazo(pg, s0["x"] - 3, s0["y"] - 3, s0["x"] + 5, s0["y"] + 5)
+    sel = await pg.evaluate(SEL)
+    check("lazo en el anillo exterior: selecciona pares categoría · segmento", sel and all("|Marca=" in k for k in sel), str(sel))
+    I = await pg.evaluate(CENTROS, "text.dn-label")
+    await lazo(pg, I[0]["x"] - 3, I[0]["y"] - 3, I[0]["x"] + 5, I[0]["y"] + 5)
+    sel = await pg.evaluate(SEL)
+    check("lazo en el anillo interior: selecciona categorías", sel and all("|" not in k for k in sel), str(sel))
+    await pg.close()
+
+    ZONAS = sorted({r["Zona"] for r in VENTAS})
+    pg = await page(b, dv_ventas({}, facet="Zona", zonas=ZONAS[:4], legacy=False), 960, 540, name="lazo_sm")
+    P = await pg.evaluate("() => { const hr = document.getElementById('host').getBoundingClientRect(); return Array.from(document.querySelectorAll('.dn-panel')).map(g => { const r = g.querySelector('.dn-slices').getBoundingClientRect(); return { x0: r.left - hr.left, y0: r.top - hr.top, x1: r.right - hr.left, y1: r.bottom - hr.top }; }); }")
+    q = P[1]
+    await lazo(pg, (q["x0"] + q["x1"]) / 2 + 2, q["y0"] + 4, q["x1"] - 4, (q["y0"] + q["y1"]) / 2 - 2)
+    sel = await pg.evaluate(SEL)
+    check("lazo en small multiples: selecciona en el panel donde se arrastra", len(sel) >= 1, str(sel))
+    await eventos(pg, "lazo small multiples")
+    await pg.close()
+
+    pg = await page(b, dv_caso_a({}, legacy=False), 960, 540, allow=False)
+    C = await pg.evaluate(CENTROS, "text.dn-label")
+    await lazo(pg, C[0]["x"] - 40, C[0]["y"] - 40, C[1]["x"] + 40, C[1]["y"] + 40)
+    check("allowInteractions apagado: el lazo no selecciona nada", not await pg.evaluate(SEL) and not await pg.evaluate("() => !!document.querySelector('rect.dn-lasso')"), "")
+    await pg.close()
+
+    pg = await page(b, dv_caso_a({"slices": {"lasso": False}}, legacy=False), 960, 540)
+    C = await pg.evaluate(CENTROS, "text.dn-label")
+    await lazo(pg, C[0]["x"] - 40, C[0]["y"] - 40, C[1]["x"] + 40, C[1]["y"] + 40)
+    check("Lasso selection apagado: arrastrar no selecciona", not await pg.evaluate(SEL), "")
+    await pg.close()
+
+    print("25-11 (7) · Border (FC.PROP04)")
+    for W, H in [(960, 540), (380, 260)]:
+        pg = await page(b, dv_ventas({"slices": {"gap": 5, "borderColor": {"solid": {"color": "#C8102E"}}}}, cat="Familia", segment="Marca", legacy=False), W, H, name=f"bordes_color_{W}x{H}")
+        B = await pg.evaluate("() => Array.from(document.querySelectorAll('path.dn-border')).map(p => [p.getAttribute('stroke'), p.getAttribute('stroke-width')])")
+        n_sl = await pg.evaluate("() => document.querySelectorAll('path.dn-slice').length + document.querySelectorAll('path.dn-seg').length")
+        check(f"bordes {W}x{H}: un borde por sector, en los dos anillos, con color y ancho", len(B) == n_sl and all(x == ["#C8102E", "5"] for x in B), f"{len(B)} vs {n_sl} {B[:2]}")
+        i = await info(pg)
+        comprobar_dibujo(i, W, H, f"bordes {W}x{H}", mira_suma=False)
+        await eventos(pg, f"bordes {W}x{H}")
+        await pg.close()
+    pg = await page(b, dv_caso_a({"slices": {"gap": 2}}, legacy=False), 700, 400)
+    check("sin Border color: sin trazo de borde (hueco al fondo, como antes)", await pg.evaluate("() => document.querySelectorAll('path.dn-border').length") == 0, "")
+    await pg.close()
+    pg = await page(b, dv_ventas({"slices": {"gap": 5, "borderColor": {"solid": {"color": "#C8102E"}}}}, cat="Familia", segment="Marca", legacy=False), 960, 540, hc=True, name="bordes_hc")
+    B = await pg.evaluate("() => document.querySelectorAll('path.dn-border').length")
+    st = await pg.evaluate("() => Array.from(document.querySelectorAll('path.dn-slice')).map(p => p.getAttribute('stroke'))")
+    check("alto contraste: manda sobre Border color (trazo del tema, sin borde propio)", B == 0 and all(x == "#FFFF00" for x in st), f"{B} {set(st)}")
+    await pg.close()
+
+
 def ventas_por_par(a, b_):
     d = defaultdict(float)
     for r in VENTAS:
@@ -1496,6 +1617,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--lazo" in sys.argv:
+            await tanda_lazo_bordes(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--notas" in sys.argv:
             await tanda_notas(b)
             await b.close()
@@ -1826,6 +1953,7 @@ async def main():
         await tanda_fuentes(b)
         await tanda_sm_titulos(b)
         await tanda_notas(b)
+        await tanda_lazo_bordes(b)
         await b.close()
     print()
     print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
