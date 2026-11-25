@@ -88,7 +88,7 @@ h2 = pagina("donut-chart-infographic-pro", cabecera("Free reads the shares. Pro 
 <div class="card p"><h2>Pro — change and target in the table</h2><div class="sub">The same slices against last year and the plan.</div>
 <img src="{cap('ficha_pro')}"><ul>{li(P["freemium"]["pro"][:6])}</ul></div>
 </div>
-<div class="fin"><span>tcviz.com · Power BI custom visual · {e(P["name"])}</span><span>Without a licence, Pro features are drawn working under a "Pro preview" watermark while you edit.</span></div>""", DOS)
+<div class="fin"><span>tcviz.com · Power BI custom visual · {e(P["name"])}</span><span>Without a licence, editing shows a limited Pro preview (3 largest categories) under a watermark.</span></div>""", DOS)
 render(h2, os.path.join(I.OUT, "donut-chart-infographic-pro.png"), os.path.join(ASSETS, "infographic-pro.png"))
 
 # 3. Capturas de la ficha: una idea por imagen

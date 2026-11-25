@@ -92,7 +92,7 @@ FREE_PRO = [
     ("Target: % of target with ✓ ≈ ✕, Status on slices, a summary of how many categories miss it", "—", "✓"),
     ("Segment: an outer ring with its own labels — up to six named segments per category; with more than seven, the rest in its own Other — and segment rows in the data table", "—", "✓"),
     ("Annotations: a comment per category in the data table and the tooltip", "—", "✓"),
-    ("Small multiples: one donut per value with a shared table of the total, the same size or sized by total (Pro preview without a licence: the first 4 panels, with a note)", "—", "✓"),
+    ("Small multiples: one donut per value with a shared table of the total, the same size or sized by total (Pro preview without a licence: the first 4 panels)", "—", "✓"),
     ("Six collection style templates: Boardroom, Ledger, Editorial, Signal, Aurora, Terrace", "—", "✓"),
 ]
 
@@ -198,8 +198,7 @@ FAQ = [
      "<p>Yes: the labels, the center (title and value), the legend, the data table, the summary, the footnotes and the small multiples "
      "titles each have a font, size and style. Blank uses the font of the style.</p>"),
     ("What is the \"Pro preview\" watermark?",
-     "<p>While you edit a report without a licence, Pro features you turn on are drawn working, on your own data, under a watermark that "
-     "names them, and Power BI shows its licence notice; small multiples show their first 4 panels. Reading view shows the free chart. "
+     "<p>While you edit a report without a licence, the Pro data of Compare with, Target, Segment and Annotations is shown for the three largest categories only (Other never counts): the rest show \"—\" and no outer ring, the title \"Total … vs …\" is hidden and the summary uses those three. Small multiples show the first 4 panels and collection styles are drawn whole. A \"Pro preview\" watermark names the features, a note says \"Pro preview: first 3 categories\", and Power BI shows its licence notice. Reading view shows the free chart; with a licence everything is complete. Nothing is limited unless a Pro feature is used. "
      "Where Power BI provides no licence information (for example when you are not signed in to Power BI Desktop), the free chart is "
      "shown.</p>"),
     ("How do I get Pro?",
@@ -333,7 +332,8 @@ blocks and says it in a footnote if rows are still missing. The limits are the s
 
 <h2 id="freepro">Free and Pro</h2>
 {table(["Capability", "Free", "Pro"], esc_rows(FREE_PRO))}
-<p>Turn on a Pro capability without a licence while editing and it is drawn working under a "Pro preview" watermark that names it.
+<p>Turn on a Pro capability without a licence while editing and you see a limited preview on your own data: the Pro columns, rings and
+notes for the three largest categories, the first 4 small multiples panels, collection styles whole, under a "Pro preview" watermark.
 Reading view shows the free chart. Pro is sold per user on Microsoft AppSource: 0.99 USD per month or 9.99 USD per year, no trial.</p>
 
 <h2 id="format">Format Pane</h2>
@@ -428,7 +428,7 @@ def terms():
 and any applicable Microsoft AppSource subscription terms.</p>
 <p><strong>Free tier:</strong> available to all users at no cost. Includes: {html.escape(free)}.</p>
 <p><strong>Pro tier:</strong> available through a Microsoft AppSource subscription, licensed per user. Adds: {html.escape(pro)}.
-Without an active licence, Pro features are shown in edit mode only, as a preview marked with a watermark; reading view shows the free chart.
+Without an active licence, Pro features are shown in edit mode only, as a limited preview marked with a watermark (Pro data for the three largest categories, the first 4 small multiples panels); reading view shows the free chart.
 Data limits (one field per well, Tooltips up to five; 30,000 rows per block of data) are the same in both tiers.</p>
 <h2>3. Restrictions</h2>
 <ul>

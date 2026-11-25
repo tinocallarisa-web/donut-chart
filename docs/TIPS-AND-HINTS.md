@@ -48,7 +48,7 @@ Rows: up to 30,000 at a time; the visual asks Power BI for up to 10 more blocks.
 - **new / gone.** No value in Compare with / no value now. Never an invented change.
 - **Segment.** Each category shows its six largest segments and its own Other (n). If a note says to swap the fields, every
   category belongs to one segment: put the broader field in Category.
-- **Small multiples.** Without a licence, the Pro preview shows the first 4 panels, with a note. Same Other, order and
+- **Small multiples.** Without a licence, the Pro preview shows the first 4 panels. Same Other, order and
   colours in every panel; the table is the total. A slice selects that
   category in its panel only; the legend and the table select it in every panel; Ctrl combines panels. Size by total makes each donut
   proportional to its total. Too many panels: "Showing N of M panels".
@@ -65,8 +65,9 @@ Rows: up to 30,000 at a time; the visual asks Power BI for up to 10 more blocks.
 ## Free and Pro
 
 Free is a complete chart. Pro adds Compare with, Target, Segment, Annotations, Small multiples and the six collection styles:
-0.99 USD per user per month or 9.99 per year, no trial. Without a licence, Pro features are drawn under a "Pro preview"
-watermark while you edit; reading view shows the free chart.
+0.99 USD per user per month or 9.99 per year, no trial. While you edit without a licence, the preview is limited: Compare
+with, Target, Segment and Annotations only for the three largest categories ("—" for the rest), the first 4 small multiples panels,
+collection styles whole, under a "Pro preview" watermark. Reading view shows the free chart; with a licence everything is complete.
 
 ## Help
 

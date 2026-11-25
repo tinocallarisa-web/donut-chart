@@ -13,7 +13,7 @@
 - Pro: Target — % of target with ✓ ≈ ✕, Met at and Close at, Status on slices.
 - Pro: Segment — an outer ring with its own labels and segment rows in the table; the six largest segments of each category and its own Other (n); a note when the two fields are nested the wrong way round.
 - Pro: Annotations in the table and the tooltip; Small multiples with a shared table of the total and Size by total; six collection style templates.
-- Pro preview: while editing without a licence, Pro features are drawn working under a watermark that names them (small multiples: the first 4 panels, with a note); reading view shows the free chart.
+- Pro preview: while editing without a licence, a limited preview under a watermark — Pro data for the three largest categories only, the first 4 small multiples panels, collection styles whole; reading view shows the free chart.
 - Lasso selection, Drilldown, cross-filtering, highlight (Other included), bookmarks, multi-visual selection, Report page tooltips, context menu, keyboard navigation.
 - Accessibility card: high contrast, patterns, focus colour and width, minimum text size, reduce motion.
 - Number format of the measure, Dynamic format strings included; Conditional formatting (fx) on slice colours, border and table header; On-object formatting; 12 languages.

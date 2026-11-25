@@ -5,9 +5,9 @@ https://github.com/tinocallarisa-web/donut-chart, branch "certification". Public
 
 TESTING THE PRO FEATURES - NO KEY NEEDED
 Pro comes from the AppSource plan (IVisualLicenseManager); no activation key.
-Open a report in EDIT mode without a licence: each Pro feature is drawn WORKING under a
-"Pro preview" watermark that names it (small multiples: first 4 panels, with a note), and
-Power BI shows its licence notice. Reading view shows the free chart. No licence info (Desktop not signed in): Pro off.
+EDIT mode without a licence: limited preview under a "Pro preview" watermark. Compare,
+Target, Segment, Annotations only for the 3 largest categories ("—" elsewhere), small multiples
+4 panels, styles whole. Reading view: free chart. Licence: all.
 
 WHAT TO CHECK (sample .pbix, table Ventas)
 1. Empty visual: start screen, no links.

@@ -73,7 +73,7 @@ PRO
 • Annotations per category in the table and the tooltip; six collection style templates
 
 FREE AND PRO
-The free version is a complete donut and pie chart: labels, Other, legend, data table, center, summary, footnotes, fonts and every interaction. Pro adds the reading of what moved. Turn on a Pro feature while editing without a licence and it is drawn working, on your own data, under a "Pro preview" watermark that names it (small multiples: the first 4 panels); reading view shows the free chart.
+The free version is a complete donut and pie chart: labels, Other, legend, data table, center, summary, footnotes, fonts and every interaction. Pro adds the reading of what moved. While editing without a licence you see a limited preview on your own data: Pro figures for the three largest categories, the first 4 small multiples panels, collection styles whole, under a "Pro preview" watermark; reading view shows the free chart.
 
 WORKS LIKE A NATIVE VISUAL
 • Cross-filtering, highlight (Other included), bookmarks, multi-visual selection, Lasso selection, Drilldown, Report page tooltips, context menu
