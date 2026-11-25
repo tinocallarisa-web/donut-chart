@@ -1109,6 +1109,22 @@ def comprobar_summary(S, W, H, lbl):
     check(f"{lbl}: el aria-label lleva la frase completa", sm["text"] in S["aria"] or S["aria"].find(sm["text"].split(".")[0]) >= 0, "")
 
 
+def resumen_objetivo(tg):
+    """Lo que debe decir Summary del objetivo a partir de los iconos de la tabla: fallo = ✕; ≈ no es fallo."""
+    n = len(tg)
+    miss = sum(1 for r in tg if r["tgt"].startswith("✕"))
+    met = sum(1 for r in tg if r["tgt"].startswith("✓"))
+    if miss == 1:
+        return "1 of %d categories misses the target." % n
+    if miss > 1:
+        return "%d of %d categories miss the target." % (miss, n)
+    if met == n:
+        return "All %d categories meet the target." % n
+    if met == 0:
+        return "All %d categories are near the target." % n
+    return "On target: %d of %d; near it: %d." % (met, n, n - met)
+
+
 async def tanda_25b(b):
     TAM = [(960, 540), (620, 520), (380, 260)]
     print("25-11 (2) · Familia × Marca: etiquetas del anillo exterior y leyenda con segmentos")
@@ -1179,13 +1195,40 @@ async def tanda_25b(b):
                 mx = max(rows, key=lambda r: abs(float(r["dpp"].split()[0].replace("−", "-").replace("+", ""))))
                 check(f"{lbl}: mayor movimiento en pp = el de la tabla", f"Biggest shift vs Litros AA: {mx['name']}, {mx['dpp'].split()[0]} pp." in t, t + " / " + mx["name"] + " " + mx["dpp"])
             tg = [r for r in filas_datos(i) if r["tgt"] and r["tgt"] != "—"]
-            miss = sum(1 for r in tg if not r["tgt"].startswith("✓"))
-            esperado = ("All %d categories meet the target." % len(tg)) if miss == 0 else ("1 of %d categories misses the target." % len(tg)) if miss == 1 else ("%d of %d categories miss the target." % (miss, len(tg)))
+            esperado = resumen_objetivo(tg)
             check(f"{lbl}: categorías que fallan el objetivo = las de la tabla", esperado in t, t + " / " + esperado)
         elif S["summary"]:
             check(f"{lbl}: si no cabe, solo la primera oración", S["summary"][0]["text"].count(".") == 1, S["summary"][0]["text"])
         await eventos(pg, lbl)
         await pg.close()
+    print("25-11 (3) · Summary y objetivo: ≈ no es fallo")
+    for lbl, dv, quiere in [
+        ("Familia (dataset real, todas ≈)", dv_ventas({"legend": {"content": "table"}}, cat="Familia", compare=True, target=True, legacy=False), "All 6 categories are near the target."),
+        ("Marca (con ✕)", dv_ventas({"legend": {"content": "table"}, "slices": {"maxSlices": 12, "groupBelow": 0}}, compare=True, target=True, legacy=False), None),
+        ("Marca Close at 50 % (✓ y ≈, sin ✕)", dv_ventas({"legend": {"content": "table"}, "target": {"closeAt": 50}}, compare=True, target=True, legacy=False), None),
+    ]:
+        tag = "t3_summary_" + ("familia" if "Familia" in lbl else "marca_x" if "(con ✕)" in lbl else "marca_mix")
+        pg = await page(b, dv, 1200, 640, name=tag)
+        S = await sb(pg)
+        i = await info(pg)
+        t = S["summary"][0]["text"] if S["summary"] else ""
+        tg = [r for r in filas_datos(i) if r["tgt"] and r["tgt"] != "—"]
+        esperado = resumen_objetivo(tg)
+        check(f"Summary {lbl}: frase del objetivo según los iconos ({esperado})", esperado in t and (quiere is None or quiere == esperado), t)
+        iconos = "".join(r["tgt"][0] for r in tg)
+        if "(con ✕)" in lbl:
+            check(f"Summary {lbl}: el caso tiene ✕ y lo cuenta como fallo", "✕" in iconos and "miss" in t, iconos)
+        if "≈" in lbl and "✓" in lbl:
+            check(f"Summary {lbl}: el caso tiene ✓ y ≈ y ningún ✕", "✓" in iconos and "≈" in iconos and "✕" not in iconos, iconos)
+        if "todas ≈" in lbl:
+            check(f"Summary {lbl}: todas ≈ en la tabla y ninguna contada como fallo", set(iconos) == {"≈"} and "miss" not in t, iconos)
+        await eventos(pg, f"summary {lbl}")
+        await pg.close()
+    pg = await page(b, dv_ventas({"legend": {"content": "table"}}, cat="Familia", compare=True, target=True, legacy=False), 960, 540, locale="es-ES")
+    S = await sb(pg)
+    t = S["summary"][0]["text"] if S["summary"] else ""
+    check("Summary Familia en español: «Las 6 categorías están cerca del objetivo.»", "Las 6 categorías están cerca del objetivo." in t, t)
+    await pg.close()
     pg = await page(b, dv_ventas({"legend": {"content": "table"}}, compare=True, target=True, legacy=False), 960, 540, plan=None, edit=False, name="t2_summary_free_lectura")
     S = await sb(pg)
     t = S["summary"][0]["text"] if S["summary"] else ""

@@ -1172,10 +1172,14 @@ export class Visual implements IVisual {
         if (this.tgtOn) {
             const st = this.entries.map(e => this.tgtStatus(e.value, e.tgt)).filter(x => !!x);
             if (st.length) {
-                const miss = st.filter(x => x.glyph !== "✓").length;
-                out.push(miss === 0 ? this.tf("UI_SumTgtAll", "All {0} categories meet the target.", String(st.length))
-                    : miss === 1 ? this.tf("UI_SumTgtOne", "1 of {0} categories misses the target.", String(st.length))
-                        : this.tf("UI_SumTgtMany", "{0} of {1} categories miss the target.", String(miss), String(st.length)));
+                // Fallo = ✕ (el criterio de Status on slices = Misses only); ≈ es «en el objetivo dentro de la tolerancia».
+                const n = String(st.length);
+                const miss = st.filter(x => x.glyph === "✕").length, met = st.filter(x => x.glyph === "✓").length;
+                out.push(miss === 1 ? this.tf("UI_SumTgtOne", "1 of {0} categories misses the target.", n)
+                    : miss > 1 ? this.tf("UI_SumTgtMany", "{0} of {1} categories miss the target.", String(miss), n)
+                        : met === st.length ? this.tf("UI_SumTgtAll", "All {0} categories meet the target.", n)
+                            : met === 0 ? this.tf("UI_SumTgtNear", "All {0} categories are near the target.", n)
+                                : this.tf("UI_SumTgtMix", "On target: {0} of {1}; near it: {2}.", String(met), n, String(st.length - met)));
             }
         }
         return out;
