@@ -253,8 +253,8 @@ def illus():
         tx, ty = P((a0 + a1) / 2, (R + r) / 2)
         out.append(f'<text x="{tx:.0f}" y="{ty + 4:.0f}" text-anchor="middle" fill="{"#252423" if col == "#A19F9D" else "#FFFFFF"}" font-weight="600">{txt}</text>')
         a0 = a1
-    filas = [("Aigua Serena", "3.3M", "24%", "+0.8", "≈ 99%"), ("Nord Cola", "2.2M", "16%", "+0.0", "✓ 104%"),
-             ("Nord", "2.2M", "16%", "−1.5", "≈ 95%"), ("Fruitia", "1.4M", "10%", "⚠ −0.1", "≈ 98%")]
+    filas = [("Aigua Serena", "3.3M", "24%", "+0.8", "✓ 103%"), ("Nord Cola", "2.2M", "16%", "+0.0", "✓ 104%"),
+             ("Nord", "2.2M", "16%", "−1.5", "≈ 95%"), ("Fruitia", "1.4M", "10%", "⚠ −0.1", "✕ 85%")]
     cols = [250, 345, 395, 440, 510]
     t = ['<text x="250" y="20" fill="#605E5C">Total +4.1% vs Litros AA</text>']
     for x, h in zip(cols, ["Brand", "Litres", "%", "Δ pp", "% of target"]):
