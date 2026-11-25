@@ -11,11 +11,12 @@
 - Scale ring at 25/50/75% or every 10%; a selectable font in every text of the visual.
 - Pro: Compare with — Δ pp with a mini bar, Δ %, new and gone, a ⚠ where share and value move in opposite directions, the change in the labels, Sort by change.
 - Pro: Target — % of target with ✓ ≈ ✕, Met at and Close at, Status on slices.
-- Pro: Segment — an outer ring with its own labels and segment rows in the table, with a note when the two fields are nested the wrong way round.
+- Pro: Segment — an outer ring with its own labels and segment rows in the table; the six largest segments of each category and its own Other (n); a note when the two fields are nested the wrong way round.
 - Pro: Annotations in the table and the tooltip; Small multiples with a shared table of the total and Size by total; six collection style templates.
 - Pro preview: while editing without a licence, Pro features are drawn working under a watermark that names them; reading view shows the free chart.
 - Lasso selection, Drilldown, cross-filtering, highlight (Other included), bookmarks, multi-visual selection, Report page tooltips, context menu, keyboard navigation.
 - Accessibility card: high contrast, patterns, focus colour and width, minimum text size, reduce motion.
 - Number format of the measure, Dynamic format strings included; Conditional formatting (fx) on slice colours, border and table header; On-object formatting; 12 languages.
 - Up to 30,000 rows per block, with up to 10 more blocks requested from Power BI; a footnote when rows are missing.
+- The five largest categories always keep their own slice; selections above 1,000 rows are shown inside the visual only, with a note.
 - Report theme and Classic styles, setup guide, start screen in three sizes. No network requests and no privileges.

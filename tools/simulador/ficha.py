@@ -27,7 +27,10 @@ if "--paquete" in sys.argv:
     res = json.loads(z.read(json.loads(z.read("package.json"))["resources"][0]["file"]))
     DROP = os.path.join(H.ROOT, ".tmp", "drop_capturas")
     os.makedirs(DROP, exist_ok=True)
-    io.open(os.path.join(DROP, "visual.js"), "w", encoding="utf-8").write(res["content"]["js"])
+    # Un _test normal lleva el sello de compilación «[test AAAA-MM-DD HH:MM v…]»: se vacía, como hace --capturas.
+    import re
+    io.open(os.path.join(DROP, "visual.js"), "w", encoding="utf-8").write(
+        re.sub(r'"test(free)? \d{4}-\d\d-\d\d \d\d:\d\d v[\d.]+"', '""', res["content"]["js"]))
     io.open(os.path.join(DROP, "visual.css"), "w", encoding="utf-8").write(res["content"]["css"])
     json.dump({"visual": res["visual"]}, io.open(os.path.join(DROP, "pbiviz.json"), "w", encoding="utf-8"))
 CAMPOS = {"Marca": "Brand", "Familia": "Family", "Canal": "Channel", "Zona": "Zone",

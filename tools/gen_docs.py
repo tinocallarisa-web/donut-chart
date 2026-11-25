@@ -64,7 +64,7 @@ def page(title, sub, body, nav="", search=False):
 FIELDS = [
     ("Category", "Grouping", "Yes — one field", "The field that names the slices: brand, region, channel. A hierarchy gives drilldown."),
     ("Values", "Measure", "Yes — one measure", "The measure the slices share. Its total goes in the center. Negative, zero and blank values are not drawn, because a slice cannot be negative or empty; they are counted in a footnote, negatives with their sum."),
-    ("Segment", "Grouping", "No — Pro, one field", "An outer ring that splits every slice by a second field, at the same angle as its slice: family by brand, channel by subchannel."),
+    ("Segment", "Grouping", "No — Pro, one field", "An outer ring that splits every slice by a second field, at the same angle as its slice: family by brand, channel by subchannel. Six segments per category, the rest in its own Other."),
     ("Compare with", "Measure", "No — Pro, one measure", "The same measure for another period, usually last year: the change in share (Δ pp) and in value (Δ %) for every category."),
     ("Target", "Measure", "No — Pro, one measure", "The plan or budget of each category: % of target with ✓ ≈ ✕, and status icons on the slices."),
     ("Annotation", "Measure", "No — Pro, one text field", "A comment per category, shown under its row in the data table and in the tooltip. Use a text column set to First."),
@@ -90,7 +90,7 @@ FREE_PRO = [
     ("Report theme and Classic styles; setup guide inside the visual; start screen in three sizes", "✓", "✓"),
     ("Compare with: Δ pp with a mini bar, Δ %, new and gone, ⚠ where share and value move apart, the change in the labels", "—", "✓"),
     ("Target: % of target with ✓ ≈ ✕, Status on slices, a summary of how many categories miss it", "—", "✓"),
-    ("Segment: an outer ring with its own labels, and segment rows in the data table", "—", "✓"),
+    ("Segment: an outer ring with its own labels — the six largest segments of each category and its own Other — and segment rows in the data table", "—", "✓"),
     ("Annotations: a comment per category in the data table and the tooltip", "—", "✓"),
     ("Small multiples: one donut per value with a shared table of the total, the same size or sized by total", "—", "✓"),
     ("Six collection style templates: Boardroom, Ledger, Editorial, Signal, Aurora, Terrace", "—", "✓"),
@@ -157,7 +157,8 @@ FAQ = [
      "The summary says how many categories miss it.</p>"),
     ("What does Segment do?",
      "<p>Segment (Pro) adds an outer ring: each slice is split by a second field at the same angle — family by brand, channel by "
-     "subchannel. The ring has its own labels (Format → Data labels → Segment labels) and the table can list segment rows under each "
+     "subchannel. Each category shows its six largest segments and groups the rest into its own \"Other (n)\", in the ring, the legend, "
+     "the table, the keyboard order and the selection. The ring has its own labels (Format → Data labels → Segment labels) and the table can list segment rows under each "
      "category. When every category belongs to a single segment (for example Brand in Category and Family in Segment), the ring would "
      "say nothing: it is not drawn and, while you edit, a note suggests swapping the two fields.</p>"),
     ("How do small multiples work?",
@@ -178,9 +179,10 @@ FAQ = [
      "several rows, and adding up a measure such as a margin % or an average across them would give a false figure, so it is left out. "
      "Use a report page tooltip instead: it is computed by Power BI for the slice.</p>"),
     ("Why does a selection say \"shown here only\"?",
-     "<p>With Segment or Small multiples, a selection is passed to Power BI as rows. Above 5,000 rows — for example Other over tens of "
-     "thousands of points of sale — filtering the rest of the page would slow Power BI down, so the selection is drawn in the visual "
-     "only and a note says so. Select fewer slices, or filter the page with a slicer.</p>"),
+     "<p>With Segment or Small multiples, a selection is passed to Power BI as rows. Above 1,000 rows — for example Other over thousands "
+     "of points of sale — Power BI cannot filter the rest of the page reliably, so the selection is drawn inside the visual only, with "
+     "the note \"Too many rows to filter other visuals (N) — select fewer items or remove Segment/Small multiples\". Nothing is filtered "
+     "outside and bookmarks do not keep that selection. Select fewer slices, or filter the page with a slicer.</p>"),
     ("How many rows can it use?",
      "<p>Power BI sends up to 30,000 combinations of category, segment and panel at a time. When there are more, the visual asks for "
      "further blocks, up to 10 more, and adds them up (checked in Power BI Desktop with 54,662 rows). While it loads, a footnote says "
@@ -245,7 +247,7 @@ def illus():
         out.append(f'<text x="{tx:.0f}" y="{ty + 4:.0f}" text-anchor="middle" fill="{"#252423" if col == "#A19F9D" else "#FFFFFF"}" font-weight="600">{txt}</text>')
         a0 = a1
     filas = [("Aigua Serena", "3.3M", "24%", "+0.8", "≈ 99%"), ("Nord Cola", "2.2M", "16%", "+0.0", "✓ 104%"),
-             ("Nord", "2.2M", "16%", "−1.5", "≈ 95%"), ("Fruitia", "1.4M", "10%", "⚠ −0.1", "≈ 99%")]
+             ("Nord", "2.2M", "16%", "−1.5", "≈ 95%"), ("Fruitia", "1.4M", "10%", "⚠ −0.1", "≈ 98%")]
     cols = [250, 345, 395, 440, 510]
     t = ['<text x="250" y="20" fill="#605E5C">Total +4.1% vs Litros AA</text>']
     for x, h in zip(cols, ["Brand", "Litres", "%", "Δ pp", "% of target"]):
@@ -338,7 +340,7 @@ labels, the center, the legend, the data table, the scale ring or a small multip
 <li>Click a slice, a legend item or a table row to filter the rest of the page. Ctrl/Cmd + click adds; click the background to clear.</li>
 <li><strong>Lasso selection</strong>: drag on the chart to draw a rectangle and select every slice it touches, in every panel; Ctrl or Shift + drag adds. Turn it off in Format → Slices.</li>
 <li>Clicking Other filters by every item inside it. In the data table, Other ▸ opens its members, and each one can be selected.</li>
-<li>With Segment, the outer ring selects the category and segment pair.</li>
+<li>With Segment, the outer ring selects the category and segment pair. With Segment or Small multiples, a selection above 1,000 rows is shown inside the visual only, with a note.</li>
 <li>The center shows what you point at or select; with several slices selected, their sum.</li>
 <li>Highlight: when another visual filters this one, the highlighted part of each slice is drawn and the rest is dimmed, Other included.</li>
 <li>Bookmarks restore the selection. Right-click opens the Power BI context menu. A hierarchy in Category gives <strong>Drilldown</strong>.</li>

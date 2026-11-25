@@ -19,7 +19,7 @@ categories and little weight in the named slices, a note says so while you edit.
 |---|---|---|
 | Category | 1 field | One slice per value. A hierarchy gives drilldown. |
 | Values | 1 measure | The share of each slice; its total goes in the center. Negative, zero and blank values are counted in a footnote, not drawn. |
-| Segment (Pro) | 1 field | An outer ring that splits every slice by a second field. |
+| Segment (Pro) | 1 field | An outer ring that splits every slice by a second field; six segments per category, the rest in Other. |
 | Compare with (Pro) | 1 measure | Last year: Δ pp and Δ % for every category. |
 | Target (Pro) | 1 measure | The plan: % of target with ✓ ≈ ✕. |
 | Annotation (Pro) | 1 text field | A comment per category. Set the column to First. |
@@ -45,13 +45,14 @@ Rows: up to 30,000 at a time; the visual asks Power BI for up to 10 more blocks.
 - **⚠ in the change column.** Value and share moved in opposite directions: value up but share down because the total grew
   faster. The footnote names the categories.
 - **new / gone.** No value in Compare with / no value now. Never an invented change.
-- **Segment says to swap the fields.** Every category belongs to one segment: put the broader field in Category.
+- **Segment.** Each category shows its six largest segments and its own Other (n). If a note says to swap the fields, every
+  category belongs to one segment: put the broader field in Category.
 - **Small multiples.** Same Other, order and colours in every panel; the table is the total. Size by total makes each donut
   proportional to its total. Too many panels: "Showing N of M panels".
 - **A tooltip measure does not show.** With Segment or Small multiples a slice is several rows and the measure is not
   summed (a margin % summed would be false). Use a report page tooltip.
-- **Large selections.** With Segment or Small multiples, a selection above 5,000 rows is drawn only inside the visual, with a
-  note, so Power BI does not slow down.
+- **Large selections.** With Segment or Small multiples, a selection above 1,000 rows is drawn only inside the visual, with the
+  note "Too many rows to filter other visuals"; nothing is filtered outside and bookmarks do not keep it.
 - **Fonts.** Labels, center, legend, data table, summary, footnotes and small multiples titles each have a font.
 - **Conditional formatting (fx).** Format → Slices → Colors → All slices (fx); also the border and the table header.
 - **Styles.** Report theme and Classic are free; Boardroom, Ledger, Editorial, Signal, Aurora and Terrace are Pro.
