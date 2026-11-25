@@ -271,6 +271,35 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 ]
             },
             {
+                "name": "segment",
+                "type": "enum",
+                "def": "auto",
+                "key": "Prop_labels_segment",
+                "label": "Segment labels",
+                "items": [
+                    [
+                        "auto",
+                        "Enum_segment_auto",
+                        "Automatic"
+                    ],
+                    [
+                        "name",
+                        "Enum_segment_name",
+                        "Name"
+                    ],
+                    [
+                        "namePercent",
+                        "Enum_segment_namePercent",
+                        "Name and percent"
+                    ],
+                    [
+                        "off",
+                        "Enum_segment_off",
+                        "Off"
+                    ]
+                ]
+            },
+            {
                 "name": "fontSize",
                 "type": "num",
                 "def": 10,
@@ -745,6 +774,53 @@ export const OBJECTS: Record<string, ObjSpec> = {
             }
         ]
     },
+    "summary": {
+        "name": "summary",
+        "key": "Obj_summary",
+        "label": "Summary",
+        "props": [
+            {
+                "name": "show",
+                "type": "enum",
+                "def": "auto",
+                "key": "Prop_summary_show",
+                "label": "Show summary",
+                "items": [
+                    [
+                        "auto",
+                        "Enum_show_auto",
+                        "Automatic (with Compare)"
+                    ],
+                    [
+                        "on",
+                        "Enum_show_on",
+                        "On"
+                    ],
+                    [
+                        "off",
+                        "Enum_show_off",
+                        "Off"
+                    ]
+                ]
+            },
+            {
+                "name": "fontSize",
+                "type": "num",
+                "def": 10,
+                "key": "Prop_summary_fontSize",
+                "label": "Text size",
+                "min": 8,
+                "max": 24
+            },
+            {
+                "name": "color",
+                "type": "fill",
+                "def": "",
+                "key": "Prop_summary_color",
+                "label": "Text color"
+            }
+        ]
+    },
     "compare": {
         "name": "compare",
         "key": "Obj_compare",
@@ -1070,6 +1146,17 @@ export const PANE: CardSpec[] = [
         "groups": [
             {
                 "obj": "legend",
+                "toggle": null
+            }
+        ]
+    },
+    {
+        "uid": "summary",
+        "key": "Obj_summary",
+        "label": "Summary",
+        "groups": [
+            {
+                "obj": "summary",
                 "toggle": null
             }
         ]

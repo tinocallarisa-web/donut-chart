@@ -59,3 +59,8 @@ fetchMoreData y si hubo algún error o el visual se quedó en blanco. Con eso ba
 **Día 1 cerrado (24-11):** el mapeo categórico `[category, facet, segment]` + medidas aguanta los 8 casos. Para el motor:
 leer medidas de `categorical.values[i]` (nunca grouped()); agregar por clave sin fiarse del orden; formato por defecto propio
 cuando `format` no llega; compare = 0 con valor > 0 → "new"; centro = total de Values.
+
+## Verificado en Desktop (Tino, 25-11, build .30)
+
+- **Filtro por pares de segmento OK:** con Familia en Category, Marca en Segment, compare, target y nota, clic en un
+  trozo del anillo exterior filtra correctamente la tarjeta de suma (identidad categoría + segmento).

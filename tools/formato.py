@@ -67,6 +67,8 @@ OBJECTS = [
          {"items": [("auto", "Automatic"), ("percent", "Percent"), ("value", "Value"), ("name", "Name"),
                     ("namePercent", "Name and percent"), ("valuePercent", "Value and percent"), ("all", "All")]}),
         ("position", "Position", "enum", "auto", {"items": [("auto", "Inside, then outside"), ("inside", "Inside only"), ("outside", "Outside")]}),
+        # Anillo exterior (Segment): Automatic = nombre + % del total si cabe en todos los que llevan nombre; si no, nombre.
+        ("segment", "Segment labels", "enum", "auto", {"items": [("auto", "Automatic"), ("name", "Name"), ("namePercent", "Name and percent"), ("off", "Off")]}),
         ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
         ("color", "Text color (outside)", "fill", "#252423", {}),
     ] + NUM_FORMAT + PCT_FORMAT),
@@ -106,6 +108,13 @@ OBJECTS = [
         ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
         ("color", "Text color", "fill", "#252423", {}),
     ] + NUM_FORMAT + PCT_FORMAT),
+    # Frase de resumen arriba del gráfico. Automatic = encendida con Compare en los pozos. Cuotas: gratis; cambio y
+    # objetivo: Pro (como sus columnas).
+    ("summary", "Summary", [
+        ("show", "Show summary", "enum", "auto", {"items": [("auto", "Automatic (with Compare)"), ("on", "On"), ("off", "Off")]}),
+        ("fontSize", "Text size", "num", 10, {"min": 8, "max": 24}),
+        ("color", "Text color", "fill", "", {}),
+    ]),
     # Pro (bloque 2): existen en el panel con su campo puesto; en el bloque 1 aún no dibujan nada.
     ("compare", "Compare with (Pro)", [
         ("changeShown", "Change shown", "enum", "both", {"items": [("pp", "Share points"), ("value", "Value"), ("both", "Both")]}),
@@ -152,6 +161,7 @@ PANE = [
     ("center", "Center", [("center", None, "show")]),
     ("scaleRing", "Scale ring", [("scaleRing", None, None)]),
     ("legend", "Legend", [("legend", None, None)]),
+    ("summary", "Summary", [("summary", None, None)]),
     ("compare", "Compare with (Pro)", [("compare", None, None)]),
     ("target", "Target (Pro)", [("target", None, None)]),
     ("annotations", "Annotations (Pro)", [("annotations", None, "show")]),

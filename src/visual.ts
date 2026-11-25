@@ -690,7 +690,7 @@ export class Visual implements IVisual {
 
     private clearDrawing(): void {
         this.svg.selectAll("*").remove();
-        d3.select(this.root).selectAll(".dn-landing, .dn-msg, .dn-table, .dn-notes").remove();
+        d3.select(this.root).selectAll(".dn-landing, .dn-msg, .dn-table, .dn-notes, .dn-summary").remove();
         this.tableEl = null;
         this.tableFs = 0;
         this.geo = null;
@@ -753,7 +753,9 @@ export class Visual implements IVisual {
         }
         this.layoutAndDraw(W, H);
         if (TEST_STAMP && W >= 200) {
-            this.svg.append("text").attr("x", 4).attr("y", 10).style("font-size", "9px")
+            // Sello de las builds de prueba: abajo si arriba está Summary.
+            const sy = this.root.querySelector(".dn-summary") ? H - 3 : 10;
+            this.svg.append("text").attr("x", 4).attr("y", sy).style("font-size", "9px")
                 .attr("fill", this.hc ? this.hcFg : "#A19F9D").text("[" + TEST_STAMP + "]");
         }
         if (this.focusIdx >= this.focusItems().length) this.focusIdx = this.focusItems().length - 1;
@@ -1090,14 +1092,17 @@ export class Visual implements IVisual {
         const auto = pos === "auto";
         if (auto) pos = W / Math.max(1, H) >= 1.3 ? "right" : "bottom";
         this.legendMode = pos !== "off" && this.legendContent() === "legend";
-        let ax = pad, ay = pad;
-        let aw = W - 2 * pad, ah = H - 2 * pad;
+        // Frase de resumen arriba: lo que ocupa se descuenta del alto para la leyenda y el donut.
+        const top0 = this.drawSummary(W, H, pad);
+        const Hs = H - top0;
+        let ax = pad, ay = top0 + pad;
+        let aw = W - 2 * pad, ah = Hs - 2 * pad;
         if (pos !== "off") {
-            let t = this.legendMode ? this.fitLegend(pos, W, H, pad) : this.fitTable(pos, W, H, pad);
+            let t = this.legendMode ? this.fitLegend(pos, W, Hs, pad) : this.fitTable(pos, W, Hs, pad);
             // Con columnas Pro, en Automático se prueba también la otra posición y gana la que menos recorta.
             if (!this.legendMode && auto && this.proColumns && (!t || t.score > 0)) {
                 const otra = pos === "right" ? "bottom" : "right";
-                const alt = this.fitTable(otra, W, H, pad);
+                const alt = this.fitTable(otra, W, Hs, pad);
                 if (alt && (!t || alt.score < t.score)) { if (t) t.el.remove(); t = alt; pos = otra; }
                 else if (alt) alt.el.remove();
             }
@@ -1107,14 +1112,14 @@ export class Visual implements IVisual {
                 t.el.setAttribute("data-pos", pos);
                 if (pos === "right" || pos === "left") {
                     t.el.style.left = (pos === "right" ? W - pad - t.w : pad) + "px";
-                    t.el.style.top = Math.max(pad, Math.round((H - t.h) / 2)) + "px";
+                    t.el.style.top = (top0 + Math.max(pad, Math.round((Hs - t.h) / 2))) + "px";
                     aw = W - 3 * pad - t.w;
                     if (pos === "left") ax = 2 * pad + t.w;
                 } else {
-                    t.el.style.top = (pos === "bottom" ? H - pad - t.h : pad) + "px";
+                    t.el.style.top = (pos === "bottom" ? H - pad - t.h : top0 + pad) + "px";
                     t.el.style.left = Math.max(pad, Math.round((W - t.w) / 2)) + "px";
-                    ah = H - 3 * pad - t.h;
-                    if (pos === "top") ay = 2 * pad + t.h;
+                    ah = Hs - 3 * pad - t.h;
+                    if (pos === "top") ay = top0 + 2 * pad + t.h;
                 }
             }
         } else {
@@ -1136,6 +1141,75 @@ export class Visual implements IVisual {
         else this.drawDonut(this.panels[0], Math.max(0, ax), Math.max(0, ay), Math.max(0, aw), Math.max(0, ah));
         this.geo = this.panels[0]?.geo ?? null;
         this.arcs = this.panels[0]?.arcs ?? [];
+    }
+
+    /** Summary: Automatic = encendida si hay Compare en los pozos. */
+    private get summaryOn(): boolean {
+        const m = String(this.settings.summary?.show ?? "auto");
+        return m === "on" || (m === "auto" && !!this.model?.hasRole("compare"));
+    }
+
+    /**
+     * Frase de resumen con los números que enseña el visual (cuotas por resto mayor, las de las etiquetas): la mayor
+     * cuota, el peso de las tres primeras y, con Pro (o su vista previa, como las columnas), el mayor movimiento en pp
+     * frente a Compare y cuántas categorías no llegan al objetivo. Plantillas completas por idioma (sin concatenar
+     * palabras sueltas). Con small multiples, una sola frase para el total. Devuelve las oraciones.
+     */
+    private summarySentences(): string[] {
+        const reales = this.entries.filter(e => !e.isOther).slice().sort((a, b) => b.value - a.value);
+        if (!reales.length) return [];
+        const out: string[] = [];
+        const top = reales[0];
+        out.push(this.tf("UI_SumLead", "{0} leads with {1} of the total.", top.name, this.fmtPct(top.pct)));
+        if (this.entries.length >= 4 && reales.length >= 3) {
+            out.push(this.tf("UI_SumTop3", "The top three add up to {0}.", this.fmtPct(reales.slice(0, 3).reduce((a, e) => a + e.pct, 0))));
+        }
+        if (this.cmpOn) {
+            const mov = this.entries.filter(e => e.ch && !e.ch.isNew && !e.ch.isGone && e.ch.dpp10 !== 0)
+                .sort((a, b) => Math.abs(b.ch.dpp10) - Math.abs(a.ch.dpp10))[0];
+            if (mov) out.push(this.tf("UI_SumMove", "Biggest shift vs {0}: {1}, {2} pp.", this.cmpName, mov.name, this.fmtPP(mov.ch.dpp10)));
+        }
+        if (this.tgtOn) {
+            const st = this.entries.map(e => this.tgtStatus(e.value, e.tgt)).filter(x => !!x);
+            if (st.length) {
+                const miss = st.filter(x => x.glyph !== "✓").length;
+                out.push(miss === 0 ? this.tf("UI_SumTgtAll", "All {0} categories meet the target.", String(st.length))
+                    : miss === 1 ? this.tf("UI_SumTgtOne", "1 of {0} categories misses the target.", String(st.length))
+                        : this.tf("UI_SumTgtMany", "{0} of {1} categories miss the target.", String(miss), String(st.length)));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Dibuja Summary arriba (hasta dos líneas). Letra con la norma de la tabla: k común y nunca bajo 10 px. Si no cabe,
+     * solo la primera oración; si tampoco, nada. La frase completa va también al aria-label (misma lectura en voz alta).
+     * Devuelve el alto ocupado (con su margen).
+     */
+    private drawSummary(W: number, H: number, pad: number): number {
+        if (!this.summaryOn) return 0;
+        const ss = this.summarySentences();
+        if (!ss.length) return 0;
+        const s = this.settings;
+        const fs = Math.max(10, this.minFs, this.fz(Number(s.summary.fontSize)));
+        const maxH = Math.min(Math.ceil(fs * 1.3 * 2) + 1, Math.floor(H * 0.22));
+        const el = document.createElement("div");
+        el.className = "dn-summary";
+        Object.assign(el.style, { left: pad + "px", top: pad + "px", width: (W - 2 * pad) + "px", fontSize: fs + "px",
+            color: this.hc ? this.hcFg : String(s.summary.color || this.ink) });
+        el.setAttribute("aria-hidden", "true");
+        this.root.appendChild(el);
+        for (const text of [ss.join(" "), ss[0]]) {
+            el.textContent = text;
+            if (el.offsetHeight <= maxH && el.scrollWidth <= W - 2 * pad + 1) {
+                el.setAttribute("data-full", String(text === ss.join(" ") || ss.length === 1));
+                const lab = this.root.getAttribute("aria-label") || "";
+                this.root.setAttribute("aria-label", lab + ". " + ss.join(" "));
+                return el.offsetHeight + pad;
+            }
+        }
+        el.remove();
+        return 0;
     }
 
     private get mutedInk(): string {
@@ -1255,22 +1329,38 @@ export class Visual implements IVisual {
         const n = this.entries.length;
         const f = Math.min(fold, n);
         const itemMax = side ? maxW : Math.min(maxW, Math.max(Math.round(fs * 9), Math.floor(maxW * 0.45)));
-        this.entries.slice(0, n - f).forEach((e, idx) => {
+        // Con Segment, cada categoría lleva detrás sus segmentos (solo los que tienen valor), en sus tonos: el tono
+        // depende de la categoría, así que un bloque "Segment" aparte no podría dar un color único por segmento.
+        let ri = 0;
+        const item = (key: string, name: string, sw: SVGSVGElement, cls: string): HTMLDivElement => {
             const it = document.createElement("div");
-            it.className = "dn-li";
+            it.className = "dn-li" + cls;
             it.setAttribute("role", "listitem");
-            it.setAttribute("data-key", e.key);
-            it.setAttribute("data-row", e.key);
+            it.setAttribute("data-key", key);
+            it.setAttribute("data-row", key);
             it.setAttribute("data-col", "name");
-            it.setAttribute("data-ri", String(idx));
-            it.setAttribute("aria-label", e.name);
+            it.setAttribute("data-ri", String(ri++));
+            it.setAttribute("aria-label", name);
             it.style.maxWidth = itemMax + "px";
-            it.appendChild(this.swatch(e, this.arcIndexOf(e, idx), fs));
+            it.appendChild(sw);
             const nm = document.createElement("span");
             nm.className = "dn-lname";
-            nm.textContent = e.name;
+            nm.textContent = name;
             it.appendChild(nm);
-            list.appendChild(it);
+            return it;
+        };
+        this.entries.slice(0, n - f).forEach((e, idx) => {
+            const ci = item(e.key, e.name, this.swatch(e, this.arcIndexOf(e, idx), fs), "");
+            if (!this.segOn) { list.appendChild(ci); return; }
+            const grp = document.createElement("div");
+            grp.className = "dn-lgroup";
+            grp.appendChild(ci);
+            const split = this.segSplit(e, null, e.pct);
+            split.forEach((x, si) => {
+                if (x.v <= 0) return;
+                grp.appendChild(item(Visual.pairKey(e.key, x.sd.key), x.sd.name, this.segSwatch(this.segColor(e.color, si, split.length), si, fs), " dn-lseg"));
+            });
+            list.appendChild(grp);
         });
         if (f > 0) {
             const rest = this.entries.slice(n - f);
@@ -2008,6 +2098,10 @@ export class Visual implements IVisual {
                 });
             }
         }
+        if (this.segOn && s.labels.show && s.labels.segment !== "off" && p.segArcs.length) {
+            const fsSeg = labels.length ? labels[0].fs : Math.max(this.minFs, this.tableFs > 0 ? Math.min(this.fz(Number(s.labels.fontSize)), this.tableFs) : this.fz(Number(s.labels.fontSize)));
+            this.drawSegLabels(pg, p, Rin + Math.max(1.5, Math.min(3, R * 0.02)), R, cx, cy, fsSeg);
+        }
         if (ringOn) this.drawScaleRing(pg, cx, cy, g0.ringR, sa);
         if (this.tgtOn && g0.iconSpace > 0) this.drawTargetIcons(pg, p);
         pg.append("g").attr("class", "dn-focus").attr("transform", "translate(" + cx + "," + cy + ")");
@@ -2188,6 +2282,54 @@ export class Visual implements IVisual {
             });
         }
         return { placed, retired, needW };
+    }
+
+    /**
+     * Etiquetas del anillo exterior, con las normas de las interiores: todas dentro del anillo, la misma letra que las
+     * interiores (que nunca supera la de la leyenda o la tabla) y el mismo contenido para todas. Automatic = nombre +
+     * % del total si así no se pierde ninguna de las que caben con solo el nombre; si no, nombre. El trozo donde no cabe
+     * ni el nombre va sin etiqueta (el dato sigue en el tooltip). El % es del total, coherente con el anillo interior.
+     */
+    private drawSegLabels(pg: Sel<SVGGElement>, p: PanelDraw, r0: number, r1: number, cx: number, cy: number, fs: number): void {
+        // Siguiendo el anillo (tangentes, giradas para leerse siempre de pie): en un anillo fino es la única orientación en
+        // la que cabe un nombre. La misma para todas.
+        const mode = String(this.settings.labels.segment);
+        const h = fs * 1.5;   // caja de los glifos (ascendentes y descendentes), no solo el cuerpo
+        const rm = (r0 + r1) / 2;
+        type SL = { sa: SegArc; text: string; x: number; y: number; rot: number };
+        const plan = (withPct: boolean) => {
+            const out: SL[] = [];
+            for (const sa of p.segArcs) {
+                if (sa.a1 - sa.a0 <= 0) continue;
+                const text = withPct ? sa.sd.name + " " + this.fmtPct(sa.pct) : sa.sd.name;
+                const w = this.measure(text, fs);
+                const span = w / rm + 6 / rm;
+                const sag = rm * (1 - Math.cos(Math.min(Math.PI / 2, w / (2 * rm))));
+                if (span > sa.a1 - sa.a0 || h + sag > r1 - r0 - 2) continue;
+                const am = (sa.a0 + sa.a1) / 2;
+                let rot = am * 180 / Math.PI;
+                if (am % (2 * Math.PI) > Math.PI / 2 && am % (2 * Math.PI) < 3 * Math.PI / 2) rot += 180;
+                out.push({ sa, text, x: Math.sin(am) * rm, y: -Math.cos(am) * rm, rot });
+            }
+            return out;
+        };
+        let placed: SL[];
+        if (mode === "name") placed = plan(false);
+        else if (mode === "namePercent") placed = plan(true);
+        else {
+            const conPct = plan(true), solo = plan(false);
+            placed = conPct.length >= solo.length ? conPct : solo;
+        }
+        if (!placed.length) return;
+        const g = pg.append("g").attr("class", "dn-seglabels").style("pointer-events", "none");
+        for (const l of placed) {
+            const fill = this.hc ? this.hcFg : contrast("#FFFFFF", l.sa.color) >= contrast("#252423", l.sa.color) ? "#FFFFFF" : "#252423";
+            const t = g.append("text").attr("class", "dn-seglabel").attr("data-key", l.sa.key).attr("x", cx + l.x).attr("y", cy + l.y).attr("dy", "0.35em")
+                .attr("transform", "rotate(" + l.rot.toFixed(2) + " " + (cx + l.x).toFixed(2) + " " + (cy + l.y).toFixed(2) + ")")
+                .attr("text-anchor", "middle").attr("font-size", fs).attr("fill", fill).style("font-family", this.font).text(l.text);
+            if (this.hc) t.attr("paint-order", "stroke").attr("stroke", this.hcBg).attr("stroke-width", 3);
+            else if (this.patternsOn) t.attr("paint-order", "stroke").attr("stroke", fill === "#FFFFFF" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)").attr("stroke-width", 2.5);
+        }
     }
 
     private drawLabels(pg: Sel<SVGGElement>, labels: PlacedLabel[]): void {
@@ -2624,6 +2766,11 @@ export class Visual implements IVisual {
             if (hover && hover !== k && hover !== parent) op = Math.min(op, 0.6);
             el.setAttribute("opacity", String(op));
         });
+        this.svg.selectAll<SVGTextElement, unknown>(".dn-seglabel").each((_d, i, nodes) => {
+            const k = nodes[i].getAttribute("data-key");
+            const pr = this.pairOf(k);
+            nodes[i].setAttribute("opacity", any && !(this.selKeys.has(k) || (pr && this.selKeys.has(pr.e.key))) ? "0.45" : "1");
+        });
         this.svg.selectAll<SVGTextElement, unknown>(".dn-label").each((_d, i, nodes) => {
             const e = this.entryOf(nodes[i].getAttribute("data-key"));
             nodes[i].setAttribute("opacity", any && e && !this.isSelected(e) ? "0.45" : "1");
@@ -3057,6 +3204,8 @@ export class Visual implements IVisual {
                 const spec = OBJECTS[g.obj];
                 const pie = this.settings.slices?.shape === "pie";
                 const slices = spec.props.filter(p => p.name !== g.toggle && !(g.obj === "slices" && p.name === "innerRadius" && pie)
+                    && !(g.obj === "labels" && p.name === "segment" && !has("segment"))
+                    && !(g.obj === "summary" && p.name !== "show" && !this.summaryOn)
                     && !(g.obj === "legend" && !this.legendPropVisible(p.name)))
                     .map(p => this.slice(g.obj, p));
                 spec.props.forEach(p => revert.push({ objectName: g.obj, propertyName: p.name }));

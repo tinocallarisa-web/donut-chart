@@ -418,6 +418,34 @@
             ]
           }
         },
+        "segment": {
+          "displayName": "Segment labels",
+          "displayNameKey": "Prop_labels_segment",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Automatic",
+                "displayNameKey": "Enum_segment_auto"
+              },
+              {
+                "value": "name",
+                "displayName": "Name",
+                "displayNameKey": "Enum_segment_name"
+              },
+              {
+                "value": "namePercent",
+                "displayName": "Name and percent",
+                "displayNameKey": "Enum_segment_namePercent"
+              },
+              {
+                "value": "off",
+                "displayName": "Off",
+                "displayNameKey": "Enum_segment_off"
+              }
+            ]
+          }
+        },
         "fontSize": {
           "displayName": "Text size",
           "displayNameKey": "Prop_labels_fontSize",
@@ -888,6 +916,53 @@
           "displayNameKey": "Prop_legend_percentDecimals",
           "type": {
             "numeric": true
+          }
+        }
+      }
+    },
+    "summary": {
+      "displayName": "Summary",
+      "displayNameKey": "Obj_summary",
+      "properties": {
+        "show": {
+          "displayName": "Show summary",
+          "displayNameKey": "Prop_summary_show",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Automatic (with Compare)",
+                "displayNameKey": "Enum_show_auto"
+              },
+              {
+                "value": "on",
+                "displayName": "On",
+                "displayNameKey": "Enum_show_on"
+              },
+              {
+                "value": "off",
+                "displayName": "Off",
+                "displayNameKey": "Enum_show_off"
+              }
+            ]
+          }
+        },
+        "fontSize": {
+          "displayName": "Text size",
+          "displayNameKey": "Prop_summary_fontSize",
+          "type": {
+            "numeric": true
+          }
+        },
+        "color": {
+          "displayName": "Text color",
+          "displayNameKey": "Prop_summary_color",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
           }
         }
       }

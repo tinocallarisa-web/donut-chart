@@ -1053,6 +1053,164 @@ async def leyenda_25(b):
     await pg.close()
 
 
+# ── Anillo exterior identificable y Summary (25-11, 2.ª tanda) ────────────────
+
+SB = r"""() => {
+  const h = document.getElementById('host'), hr = h.getBoundingClientRect();
+  const root = h.querySelector('.dn-root');
+  const R = e => { const r = e.getBoundingClientRect(); return { x0: r.left - hr.left, y0: r.top - hr.top, x1: r.right - hr.left, y1: r.bottom - hr.top, w: r.width, h: r.height }; };
+  const sm = Array.from(root.querySelectorAll('.dn-summary'));
+  const segl = Array.from(root.querySelectorAll('text.dn-seglabel')).map(t => ({ key: t.getAttribute('data-key'), text: t.textContent, fs: +t.getAttribute('font-size'), ...R(t) }));
+  const lab = Array.from(root.querySelectorAll('text.dn-label')).map(t => ({ text: t.textContent, fs: +t.getAttribute('font-size'), ...R(t) }));
+  const segs = Array.from(root.querySelectorAll('path.dn-seg')).map(p => p.getAttribute('data-key'));
+  const ring = root.querySelector('.dn-slices'), outer = root.querySelector('.dn-segs');
+  const t = root.querySelector('.dn-table');
+  return { summary: sm.map(e => ({ text: e.textContent, fs: parseFloat(getComputedStyle(e).fontSize), full: e.getAttribute('data-full'), ...R(e) })),
+    segl, lab, segs, ring: ring ? R(ring) : null, outer: outer ? R(outer) : null, table: t ? R(t) : null,
+    tfs: t ? parseFloat(getComputedStyle(t).fontSize) : 0, legend: !!(t && t.classList.contains('dn-legend')),
+    lseg: t ? Array.from(t.querySelectorAll('.dn-lseg')).map(e => e.textContent) : [], aria: root.getAttribute('aria-label') || '' };
+}"""
+
+
+async def sb(pg):
+    return await pg.evaluate(SB)
+
+
+def comprobar_anillo(S, W, H, lbl, quiere=True):
+    if quiere:
+        check(f"{lbl}: hay etiquetas en el anillo exterior", len(S["segl"]) > 0, str(len(S["segl"])))
+    if not S["segl"]:
+        return
+    sizes = {x["fs"] for x in S["segl"]}
+    check(f"{lbl}: etiquetas exteriores uniformes (una sola letra)", len(sizes) == 1, str(sizes))
+    if S["lab"]:
+        check(f"{lbl}: misma letra que las interiores", sizes == {S["lab"][0]["fs"]}, f"{sizes} vs {S['lab'][0]['fs']}")
+    if S["tfs"]:
+        check(f"{lbl}: nunca mayores que la letra de la leyenda/tabla", max(sizes) <= S["tfs"] + 0.01, f"{sizes} vs {S['tfs']}")
+    conpct = {("%" in x["text"]) for x in S["segl"]}
+    check(f"{lbl}: mismo contenido en todas (todas con % o ninguna)", len(conpct) == 1, str([x["text"] for x in S["segl"]][:6]))
+    o = S["outer"]
+    dentro = all(x["x0"] >= o["x0"] - 0.5 and x["x1"] <= o["x1"] + 0.5 and x["y0"] >= o["y0"] - 0.5 and x["y1"] <= o["y1"] + 0.5 for x in S["segl"])
+    check(f"{lbl}: todas dentro del anillo exterior (ninguna fuera)", dentro, "")
+    todas = S["segl"] + S["lab"]
+    pis = [(a["text"], b["text"]) for k, a in enumerate(todas) for b in todas[k + 1:] if overlap(a, b)]
+    check(f"{lbl}: etiquetas sin solaparse", not pis, str(pis[:3]))
+    check(f"{lbl}: ninguna dice 100 %", not any(x["text"].endswith(" 100%") for x in S["segl"]), "")
+
+
+def comprobar_summary(S, W, H, lbl):
+    if not S["summary"]:
+        return
+    sm = S["summary"][0]
+    check(f"{lbl}: Summary con letra ≥ 10 px", sm["fs"] >= 10, str(sm["fs"]))
+    check(f"{lbl}: Summary dentro del visual y por encima del donut", sm["x1"] <= W + 0.5 and (not S["ring"] or sm["y1"] <= S["ring"]["y0"] + 0.5), f"{sm} ring={S['ring']}")
+    if S["table"]:
+        check(f"{lbl}: Summary sin pisar la leyenda/tabla", sm["y1"] <= S["table"]["y0"] + 0.5 or S["table"]["x1"] <= sm["x0"] or S["table"]["x0"] >= sm["x1"], f"{sm['y1']} vs {S['table']}")
+    check(f"{lbl}: el aria-label lleva la frase completa", sm["text"] in S["aria"] or S["aria"].find(sm["text"].split(".")[0]) >= 0, "")
+
+
+async def tanda_25b(b):
+    TAM = [(960, 540), (620, 520), (380, 260)]
+    print("25-11 (2) · Familia × Marca: etiquetas del anillo exterior y leyenda con segmentos")
+    for W, H in TAM:
+        lbl = f"Familia×Marca {W}x{H}"
+        pg = await page(b, dv_ventas({}, segment="Marca", cat="Familia", legacy=False), W, H, name=f"t2_fam_marca_legend_{W}x{H}")
+        S = await sb(pg)
+        comprobar_anillo(S, W, H, lbl, quiere=W >= 620)
+        check(f"{lbl}: leyenda compacta con los segmentos de cada familia", S["legend"] and len(S["lseg"]) >= (10 if W == 960 else 1), str(S["lseg"]))
+        check(f"{lbl}: sin Compare, Summary apagado (Automatic)", not S["summary"], str(S["summary"]))
+        await eventos(pg, lbl)
+        await pg.close()
+        lbl = f"Familia×Marca todo {W}x{H}"
+        pg = await page(b, dv_ventas({}, segment="Marca", cat="Familia", compare=True, target=True, nota=True, legacy=False), W, H, name=f"t2_fam_marca_todo_{W}x{H}")
+        S = await sb(pg)
+        comprobar_anillo(S, W, H, lbl, quiere=W == 960)  # a 620×520 con tabla y Summary el anillo es fino: sin etiqueta es lo correcto
+        check(f"{lbl}: con Compare, Summary encendido (Automatic)", len(S["summary"]) == 1, str(S["summary"]))
+        comprobar_summary(S, W, H, lbl)
+        await eventos(pg, lbl)
+        await pg.close()
+    for modo, conpct in [("name", False), ("namePercent", True), ("off", None)]:
+        pg = await page(b, dv_ventas({"labels": {"segment": modo}}, segment="Marca", cat="Familia", legacy=False), 960, 540, name=f"t2_seglabels_{modo}")
+        S = await sb(pg)
+        if conpct is None:
+            check("Segment labels off: sin etiquetas exteriores", not S["segl"], str(len(S["segl"])))
+        else:
+            check(f"Segment labels {modo}: {'con' if conpct else 'sin'} %", S["segl"] and all(("%" in x["text"]) == conpct for x in S["segl"]), str([x["text"] for x in S["segl"]][:4]))
+        await pg.close()
+    pg = await page(b, dv_ventas({"labels": {"segment": "namePercent"}}, segment="Marca", cat="Familia", legacy=False), 960, 540)
+    S = await sb(pg)
+    nm = next((x for x in S["segl"] if x["text"].startswith("Nord Cola")), None)
+    check("Segment labels: el % es del total (Nord Cola 16 %, no 40 % de Refrescos)", nm is not None and nm["text"].endswith(" 16%"), nm["text"] if nm else str([x["text"] for x in S["segl"]]))
+    sel = await pg.evaluate("() => { const p = Array.from(document.querySelectorAll('path.dn-seg')).find(p => p.getAttribute('data-key').endsWith('Nord Cola')); p.dispatchEvent(new MouseEvent('click', { bubbles: true })); return Array.from(document.querySelectorAll('text.dn-seglabel')).map(t => t.getAttribute('opacity')); }")
+    check("Segment labels: al seleccionar un trozo se atenúan las demás", sel.count("1") == 1 and sel.count("0.45") == len(sel) - 1, str(sel))
+    await pg.close()
+
+    print("25-11 (2) · Summary: Marca sola, con y sin Compare / Target")
+    import re as _re
+    for W, H in TAM:
+        pg = await page(b, dv_caso_a({"legend": {"content": "auto"}}), W, H)
+        S = await sb(pg)
+        check(f"Marca sola {W}x{H}: Summary apagado por defecto", not S["summary"], str(S["summary"]))
+        await pg.close()
+        pg = await page(b, dv_caso_a({"legend": {"content": "table"}, "summary": {"show": "on"}, "labels": {"content": "percent"}}), W, H, name=f"t2_marca_summary_on_{W}x{H}")
+        S = await sb(pg)
+        i = await info(pg)
+        check(f"Marca sola on {W}x{H}: Summary encendido", len(S["summary"]) == 1, str(S["summary"]))
+        comprobar_summary(S, W, H, f"Marca sola on {W}x{H}")
+        if S["summary"]:
+            t = S["summary"][0]["text"]
+            pcts = {r["name"]: r["pct"] for r in filas_datos(i)}
+            check(f"Marca sola on {W}x{H}: la mayor cuota con el % que enseña el visual", t.startswith("Aigua Serena leads with " + pcts.get("Aigua Serena", "?")), t[:60] + " / " + str(pcts.get("Aigua Serena")))
+            if S["summary"][0]["full"] == "true":
+                top3 = sum(pct_num(pcts[n]) for n in MARCAS[:3])
+                check(f"Marca sola on {W}x{H}: peso de las tres primeras = suma de sus % redondeados", f"The top three add up to {top3:g}%." in t, t)
+        await eventos(pg, f"Marca sola on {W}x{H}")
+        await pg.close()
+        lbl = f"Marca cmp+tgt {W}x{H}"
+        pg = await page(b, dv_ventas({"legend": {"content": "table"}}, compare=True, target=True, legacy=False), W, H, name=f"t2_marca_cmp_tgt_{W}x{H}")
+        S = await sb(pg)
+        i = await info(pg)
+        check(f"{lbl}: Summary encendido (Automatic con Compare)", len(S["summary"]) == 1, str(S["summary"]))
+        comprobar_summary(S, W, H, lbl)
+        if S["summary"] and S["summary"][0]["full"] == "true":
+            t = S["summary"][0]["text"]
+            rows = [r for r in filas_datos(i) if r["dpp"]]
+            if rows:
+                mx = max(rows, key=lambda r: abs(float(r["dpp"].split()[0].replace("−", "-").replace("+", ""))))
+                check(f"{lbl}: mayor movimiento en pp = el de la tabla", f"Biggest shift vs Litros AA: {mx['name']}, {mx['dpp'].split()[0]} pp." in t, t + " / " + mx["name"] + " " + mx["dpp"])
+            tg = [r for r in filas_datos(i) if r["tgt"] and r["tgt"] != "—"]
+            miss = sum(1 for r in tg if not r["tgt"].startswith("✓"))
+            esperado = ("All %d categories meet the target." % len(tg)) if miss == 0 else ("1 of %d categories misses the target." % len(tg)) if miss == 1 else ("%d of %d categories miss the target." % (miss, len(tg)))
+            check(f"{lbl}: categorías que fallan el objetivo = las de la tabla", esperado in t, t + " / " + esperado)
+        elif S["summary"]:
+            check(f"{lbl}: si no cabe, solo la primera oración", S["summary"][0]["text"].count(".") == 1, S["summary"][0]["text"])
+        await eventos(pg, lbl)
+        await pg.close()
+    pg = await page(b, dv_ventas({"legend": {"content": "table"}}, compare=True, target=True, legacy=False), 960, 540, plan=None, edit=False, name="t2_summary_free_lectura")
+    S = await sb(pg)
+    t = S["summary"][0]["text"] if S["summary"] else ""
+    check("Summary sin licencia (lectura): solo cuotas, sin cambio ni objetivo", t.startswith("Aigua Serena leads") and "shift" not in t and "target" not in t, t)
+    await pg.close()
+    pg = await page(b, dv_ventas({"legend": {"content": "table"}}, compare=True, target=True, legacy=False), 960, 540, locale="es-ES", name="t2_summary_es")
+    S = await sb(pg)
+    t = S["summary"][0]["text"] if S["summary"] else ""
+    check("Summary en español: plantillas completas", "lidera con el" in t and "Mayor cambio frente a Litros AA" in t, t)
+    await pg.close()
+    pg = await page(b, dv_ventas({}, facet="Zona", compare=True, legacy=False), 960, 540, name="t2_summary_sm")
+    S = await sb(pg)
+    check("Summary con small multiples: una sola frase para el total", len(S["summary"]) == 1, str(len(S["summary"])))
+    await eventos(pg, "summary sm")
+    await pg.close()
+    for W, H in [(260, 180), (160, 120)]:
+        pg = await page(b, dv_ventas({}, compare=True, target=True, legacy=False), W, H, name=f"t2_summary_{W}x{H}")
+        S = await sb(pg)
+        if S["summary"]:
+            check(f"Summary {W}x{H}: recortado a la primera oración o completo, nunca a medias", S["summary"][0]["text"].endswith("."), S["summary"][0]["text"])
+        comprobar_summary(S, W, H, f"Summary {W}x{H}")
+        await eventos(pg, f"summary {W}x{H}")
+        await pg.close()
+
+
 def ventas_por_par(a, b_):
     d = defaultdict(float)
     for r in VENTAS:
@@ -1063,6 +1221,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--tanda2" in sys.argv:
+            await tanda_25b(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--leyenda" in sys.argv:
             await leyenda_25(b)
             await b.close()
@@ -1365,6 +1529,7 @@ async def main():
 
         await bloque2(b)
         await leyenda_25(b)
+        await tanda_25b(b)
         await b.close()
     print()
     print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
