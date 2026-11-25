@@ -1303,6 +1303,8 @@ export class Visual implements IVisual {
         el.className = "dn-table";
         el.setAttribute("role", "table");
         el.setAttribute("aria-label", this.t("UI_LegendTable", "Legend table"));
+        // Cifras compactas = poco sitio: padding de celda más apretado (igual en todas las celdas).
+        if (o.compact) el.classList.add("dn-tight");
         const color = this.hc ? this.hcFg : String(s.legend.color || this.ink);
         Object.assign(el.style, { fontSize: o.fs + "px", color });
         const L = s.legend;
@@ -1412,11 +1414,20 @@ export class Visual implements IVisual {
             if (ch.isNew) c.setAttribute("data-new", "1");
             if (ch.isGone) c.setAttribute("data-gone", "1");
         };
+        const hColor = this.hc ? this.hcFg : String(L.headerColor || color);
         if (o.header) {
             if (cmp) {
                 const tc = this.cmpTotal();
                 const cap = tc > 0 ? this.tf("UI_TotalVs", "Total {0} vs {1}", this.fmtSignedPct(m.total / tc - 1), this.cmpName) : "";
-                if (cap) { const c = spanRow("dn-cap", cap, null, 1, "cap"); c.style.color = muted; }
+                // Título de la tabla, fuera de la rejilla y con aire: con el total del donut apagado por defecto, integrarlo
+                // en la fila Total lo haría desaparecer; como título no se mezcla con las columnas.
+                if (cap) {
+                    const c = document.createElement("div");
+                    c.className = "dn-cap dn-title";
+                    c.textContent = cap;
+                    c.style.color = muted;
+                    el.insertBefore(c, grid);
+                }
             }
             const hb = (col: string, text: string): Node => {
                 const b = document.createElement("button");
@@ -1426,7 +1437,7 @@ export class Visual implements IVisual {
                 const active = this.sortCol === col;
                 b.textContent = text + (active ? (this.sortDir > 0 ? " ▲" : " ▼") : "");
                 b.setAttribute("aria-label", this.tf("UI_SortCol", "Sort by {0}", text));
-                b.style.color = muted;
+                b.style.color = hColor;
                 return b;
             };
             const r = row("dn-h", undefined, null, {
@@ -1436,12 +1447,21 @@ export class Visual implements IVisual {
                 c.setAttribute("role", "columnheader");
                 if (this.sortCol === col) c.setAttribute("aria-sort", this.sortDir > 0 ? "ascending" : "descending");
             });
-            r.forEach(c => { c.style.color = muted; c.style.borderBottomColor = this.hc ? this.hcFg : this.gridLine; });
+            // La minibarra no lleva cabecera propia: "Δ pp" cubre la barra y su cifra (sin hueco ni subrayado suelto).
+            const barH = r.find(c => c.getAttribute("data-col") === "bar");
+            const dppH = r.find(c => c.getAttribute("data-col") === "dpp");
+            if (barH && dppH) { barH.remove(); dppH.style.gridColumn = "span 2"; }
+            const hBg = this.headerBg();
+            r.forEach(c => {
+                c.style.color = hColor;
+                c.style.borderBottomColor = this.hc ? this.hcFg : alpha(color, 0.35);
+                if (hBg) c.style.backgroundColor = hBg;
+            });
         }
         const noteRows = (notes: string[], rowKey: string, prefix?: string) => {
             if (!o.ann || !this.annOn) return;
             for (const n of notes) {
-                const c = spanRow("dn-ann", (prefix ? prefix + ": " : "") + n, rowKey, 2, "ann");
+                const c = spanRow("dn-ann", (prefix ? prefix + ": " : "") + n, rowKey, 1, "ann");
                 c.style.color = muted;
             }
         };
@@ -1478,6 +1498,8 @@ export class Visual implements IVisual {
             if (o.segRows && this.segOn) {
                 const split = this.segSplit(e, null, segUnitsT(e));
                 split.forEach((x, si) => {
+                    // Solo los segmentos con valor en esta categoría (con Segment poco poblado, nada de filas a 0 %).
+                    if (x.v <= 0) return;
                     const key = Visual.pairKey(e.key, x.sd.key);
                     const ssw = this.segSwatch(this.segColor(e.color, si, split.length), si, o.fs);
                     const rr = row("dn-seg", key, key, { sw: ssw, name: x.sd.name, val: val(x.v, e.members[0].fmt), pct: this.fmtPct(x.pct, dT) });
@@ -1507,13 +1529,16 @@ export class Visual implements IVisual {
             if (showDV && tc > 0) totCh.dval = this.fmtSignedPct(m.total / tc - 1);
             const r = row("dn-t", undefined, null, { sw: "", name: this.t("UI_Total", "Total"), val: val(m.total, m.format), pct: this.fmtPct(100 * Math.pow(10, dT), dT),
                 ...totCh, tgt: tgt ? tgtCell(m.total, tt.tgt > 0 ? tt.tgt : null) : undefined });
-            r.forEach(c => { c.style.borderTopColor = this.hc ? this.hcFg : this.gridLine; });
+            r.forEach(c => { c.style.borderTopColor = this.hc ? this.hcFg : alpha(color, 0.35); });
         }
+        this.styleGrid(grid, cols.length, color);
+        // Avisos del pie: separados de la tabla por una línea fina y un punto menos de letra.
         const notes = this.notesList(o.rounded);
         if (notes.length) {
             const nd = document.createElement("div");
-            nd.className = "dn-note";
-            nd.style.fontSize = Math.max(this.minFs, o.fs * 0.85) + "px";
+            nd.className = "dn-note dn-foot";
+            nd.style.fontSize = Math.max(this.minFs, o.fs - 1) + "px";
+            nd.style.borderTopColor = this.hc ? this.hcFg : alpha(color, 0.18);
             nd.style.color = muted;
             for (const t of notes) { const d = document.createElement("div"); d.textContent = t; nd.appendChild(d); }
             el.appendChild(nd);
@@ -1522,6 +1547,59 @@ export class Visual implements IVisual {
         el.setAttribute("data-expanded", String(o.expanded));
         el.setAttribute("data-segrows", String(o.segRows && this.segOn));
         return el;
+    }
+
+    /**
+     * Rejilla y bandas de la tabla, sobre las filas ya construidas (data-ri). Horizontal: una línea fina entre filas (las
+     * notas van con su fila, sin línea); All: además, líneas verticales entre las columnas de cifras (la muestra y el
+     * nombre no se separan). Color vacío = texto al 18 %. Bandas: filas alternas por categoría (sus notas y subfilas
+     * con ella), texto al 5 %; nunca en alto contraste.
+     */
+    private styleGrid(grid: HTMLDivElement, nCols: number, color: string): void {
+        const L = this.settings.legend;
+        const mode = String(L.gridlines ?? "horizontal");
+        const lineC = this.hc ? this.hcFg : String(L.gridColor || alpha(color, 0.18));
+        const lw = Math.max(1, Number(L.gridWidth) || 1) + "px";
+        const bandC = !this.hc && L.banding ? alpha(color, 0.05) : "";
+        const rows = new Map<string, HTMLDivElement[]>();
+        grid.querySelectorAll<HTMLDivElement>(":scope > .dn-c").forEach(c => {
+            const ri = c.getAttribute("data-ri") ?? "";
+            if (!rows.has(ri)) rows.set(ri, []);
+            rows.get(ri).push(c);
+        });
+        let first = true, band = false;
+        for (const cells of rows.values()) {
+            const c0 = cells[0];
+            const isHead = c0.classList.contains("dn-h"), isTot = c0.classList.contains("dn-t"), isAnn = c0.classList.contains("dn-ann");
+            if (isHead) continue;
+            if (!isAnn && !c0.classList.contains("dn-seg") && !c0.classList.contains("dn-child") && !isTot) band = !band;
+            if (!isAnn && !isTot && !first && mode !== "none") cells.forEach(c => { c.style.borderTop = lw + " solid " + lineC; });
+            // La minibarra y su Δ pp son una sola columna lógica: sin línea entre ellas.
+            const vline = (c: HTMLDivElement) => { const col = c.getAttribute("data-col"); return col !== "sw" && col !== "name" && !(col === "dpp" && grid.querySelector("[data-col=bar]")); };
+            if (mode === "all" && !isAnn && cells.length === nCols) cells.forEach(c => { if (vline(c)) c.style.borderLeft = lw + " solid " + lineC; });
+            if (bandC && band && !isTot) cells.forEach(c => { c.style.backgroundColor = bandC; c.setAttribute("data-bg", bandC); });
+            first = false;
+        }
+        if (mode === "all") {
+            const head = rows.values().next().value as HTMLDivElement[] | undefined;
+            if (head && head[0].classList.contains("dn-h")) head.forEach(c => {
+                const col = c.getAttribute("data-col");
+                if (col !== "sw" && col !== "name") c.style.borderLeft = lw + " solid " + lineC;
+            });
+        }
+    }
+
+    /** Fondo de la cabecera: color fijo o regla fx (evaluada por fila; se toma la primera con valor). Nunca en alto contraste. */
+    private headerBg(): string {
+        if (this.hc) return "";
+        const fixed = String(this.settings.legend?.headerBackground || "");
+        if (fixed) return fixed;
+        const cats = this.dataView?.categorical?.categories ?? [];
+        for (const cc of cats) for (const o of (cc.objects ?? []) as any[]) {
+            const v = o?.legend?.headerBackground?.solid?.color;
+            if (v) return String(v);
+        }
+        return "";
     }
 
     /** Minibarra divergente lineal del Δ pp: cero en el centro, longitud proporcional (escala común), sentido = signo. */
@@ -2562,7 +2640,7 @@ export class Visual implements IVisual {
                 const isFocus = focusKey === key && c.getAttribute("data-col") !== "ann";
                 c.classList.toggle("dn-focusrow", isFocus);
                 c.style.outlineColor = this.focusColor;
-                c.style.backgroundColor = hover === key ? (this.hc ? "transparent" : "rgba(127,127,127,0.12)") : "";
+                c.style.backgroundColor = hover === key ? (this.hc ? "transparent" : "rgba(127,127,127,0.12)") : (c.getAttribute("data-bg") || "");
             });
             this.tableEl.style.setProperty("--dn-focus-w", Number(this.settings.accessibility.focusWidth) + "px");
         }
@@ -2602,7 +2680,9 @@ export class Visual implements IVisual {
             if (e.isOther && this.otherExpanded && this.tableEl && this.tableEl.getAttribute("data-expanded") === "true") {
                 e.members.forEach((c, i) => out.push({ kind: "child", e, c, i }));
             }
-            if (this.segOn) this.model.segments.forEach((sd, si) => out.push({ kind: "seg", e, sd, si, key: Visual.pairKey(e.key, sd.key) }));
+            if (this.segOn) this.model.segments.forEach((sd, si) => {
+                if (e.members.some(c => (c.bySeg.get(sd.key)?.value ?? 0) > 0)) out.push({ kind: "seg", e, sd, si, key: Visual.pairKey(e.key, sd.key) });
+            });
         }
         return out;
     }
@@ -2945,6 +3025,13 @@ export class Visual implements IVisual {
         if (p.type === "bool") return { ...base, control: { type: "ToggleSwitch" as any, properties: { descriptor, value: !!value } } } as any;
         if (p.type === "num") return { ...base, control: { type: "NumUpDown" as any, properties: { descriptor, value: value === null || value === "" ? undefined : Number(value),
             options: { minValue: p.min !== undefined ? { type: 0, value: p.min } : undefined, maxValue: p.max !== undefined ? { type: 1, value: p.max } : undefined } } } } as any;
+        if (p.type === "fill" && obj === "legend" && p.name === "headerBackground") {
+            // Fondo de cabecera con fx (como "All slices"): comodín + ConstantOrRule; el color fijo se guarda a nivel general.
+            const wild = dataViewWildcard.createDataViewWildcardSelector(dataViewWildcard.DataViewWildcardMatchingOption.InstancesAndTotals);
+            return { ...base, control: { type: "ColorPicker" as any, properties: {
+                descriptor: { ...descriptor, selector: wild, instanceKind: powerbi.VisualEnumerationInstanceKinds.ConstantOrRule, altConstantValueSelector: null },
+                value: { value: String(value || "") } } } } as any;
+        }
         if (p.type === "fill") return { ...base, control: { type: "ColorPicker" as any, properties: { descriptor, value: { value: String(value) } } } } as any;
         if (p.type === "enum") {
             const items = (p.items ?? []).map(([v, k, l]) => ({ value: v, displayName: this.t(k, l) }));
@@ -3006,6 +3093,8 @@ export class Visual implements IVisual {
         if (l.position === "off") return false;
         if (name === "content" || name === "fontSize" || name === "color") return true;
         if (this.legendContent() === "legend") return false;
+        if ((name === "headerColor" || name === "headerBackground") && l.header === false) return false;
+        if ((name === "gridColor" || name === "gridWidth") && l.gridlines === "none") return false;
         const has = (r: string) => !!this.model?.hasRole(r);
         switch (name) {
             case "colChange": return has("compare");
@@ -3119,6 +3208,13 @@ function luminance(hex: string): number {
     const n = parseInt(m[1], 16);
     const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(c => { const x = c / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
     return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+
+/** Color con transparencia (rgba) a partir de #RRGGBB; otros formatos, tal cual. */
+function alpha(color: string, a: number): string {
+    if (!/^#?[0-9a-f]{6}$/i.test(String(color).trim())) return color;
+    const [r, g, b] = rgbOf(color);
+    return "rgba(" + r + "," + g + "," + b + "," + a + ")";
 }
 
 function rgbOf(hex: string): [number, number, number] {

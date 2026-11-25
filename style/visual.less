@@ -17,17 +17,21 @@
 // Leyenda-tabla: muestra · nombre · valor · %, cifras con dígitos tabulares a la derecha.
 .dn-table {
     position: absolute; box-sizing: border-box; line-height: 1.25; cursor: default;
-    .dn-grid { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; column-gap: 0.6em; align-items: baseline; }
-    .dn-c { padding: 0.16em 0; min-width: 0; outline-offset: 0; cursor: pointer; }
-    .dn-sw { display: flex; align-items: center; align-self: center; padding-left: 0.15em; svg { display: block; } }
-    .dn-name { overflow-wrap: anywhere; }
+    // Padding de celda uniforme; sin column-gap para que la rejilla sea continua (las líneas van en los bordes).
+    .dn-grid { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; column-gap: 0; align-items: stretch; }
+    .dn-c { padding: 0.24em 0.45em; min-width: 0; outline-offset: 0; cursor: pointer; box-sizing: border-box; }
+    .dn-sw { display: flex; align-items: center; padding-left: 0.3em; padding-right: 0; svg { display: block; } }
+    .dn-name { overflow-wrap: anywhere; padding-left: 0.4em; }
     .dn-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .dn-h { font-weight: 600; border-bottom: 1px solid; padding-bottom: 0.25em; cursor: default; }
-    .dn-t { font-weight: 600; border-top: 1px solid; padding-top: 0.25em; cursor: default; }
-    .dn-child.dn-name { padding-left: 0.9em; }
+    .dn-h { font-weight: 700; border-bottom: 1px solid; padding-top: 0.3em; padding-bottom: 0.3em; cursor: default; display: flex; align-items: flex-end; }
+    .dn-h.dn-num { justify-content: flex-end; }
+    .dn-t { font-weight: 700; border-top: 1px solid; cursor: default; }
+    .dn-child.dn-name { padding-left: 1.3em; }
     .dn-focusrow { outline: var(--dn-focus-w, 2px) solid; }
     .dn-toggle { font: inherit; background: transparent; border: none; padding: 0; margin: 0; cursor: pointer; text-align: left; }
     .dn-note { margin-top: 0.35em; line-height: 1.3; overflow-wrap: anywhere; }
+    .dn-foot { margin-top: 0.5em; padding-top: 0.35em; border-top: 1px solid; }
+    .dn-title { font-weight: 600; margin-bottom: 0.55em; padding-left: 0.3em; }
 }
 
 // Asistente de configuración: panel compacto en la esquina, solo editando
@@ -88,13 +92,13 @@
 
 // Bloque 2 (Pro): columnas de cambio y objetivo, subfilas, paneles de small multiples.
 .dn-table {
-    .dn-bar { display: flex; align-items: center; justify-content: center; align-self: center; svg { display: block; } }
-    .dn-sort { font: inherit; font-weight: 600; background: transparent; border: none; padding: 0; margin: 0; cursor: pointer; color: inherit; text-align: inherit; white-space: nowrap; }
+    .dn-bar { display: flex; align-items: center; justify-content: center; svg { display: block; } }
+    .dn-sort { font: inherit; font-weight: 700; background: transparent; border: none; padding: 0; margin: 0; cursor: pointer; color: inherit; text-align: inherit; white-space: nowrap; }
     .dn-sort:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
     .dn-h.dn-num .dn-sort { text-align: right; }
     .dn-cap { font-weight: 600; padding-bottom: 0.2em; cursor: default; }
-    .dn-ann { font-style: italic; padding: 0 0 0.12em 0.9em; overflow-wrap: anywhere; font-size: 0.92em; }
-    .dn-seg.dn-name { padding-left: 0.9em; }
+    .dn-ann { font-style: italic; padding: 0 0.45em 0.24em 2.1em; overflow-wrap: anywhere; font-size: 0.92em; }
+    .dn-seg.dn-name { padding-left: 1.3em; }
     .dn-tag { font-style: italic; }
     .dn-glyph { font-weight: 700; }
     .dn-gone { cursor: default; }
@@ -115,4 +119,10 @@
     .dn-li svg { display: block; flex-shrink: 0; }
     .dn-lname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dn-lmore { cursor: default; white-space: nowrap; }
+}
+.dn-table.dn-tight {
+    .dn-c { padding: 0.12em 0.22em; }
+    .dn-sw { padding-left: 0.15em; padding-right: 0; }
+    .dn-name { padding-left: 0.3em; }
+    .dn-ann { padding-left: 1.4em; }
 }

@@ -685,6 +685,28 @@
             "bool": true
           }
         },
+        "headerColor": {
+          "displayName": "Header text color",
+          "displayNameKey": "Prop_legend_headerColor",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "headerBackground": {
+          "displayName": "Header background",
+          "displayNameKey": "Prop_legend_headerBackground",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
         "totalRow": {
           "displayName": "Show total row",
           "displayNameKey": "Prop_legend_totalRow",
@@ -746,6 +768,54 @@
         "segRows": {
           "displayName": "Segment rows",
           "displayNameKey": "Prop_legend_segRows",
+          "type": {
+            "bool": true
+          }
+        },
+        "gridlines": {
+          "displayName": "Gridlines",
+          "displayNameKey": "Prop_legend_gridlines",
+          "type": {
+            "enumeration": [
+              {
+                "value": "none",
+                "displayName": "None",
+                "displayNameKey": "Enum_gridlines_none"
+              },
+              {
+                "value": "horizontal",
+                "displayName": "Horizontal",
+                "displayNameKey": "Enum_gridlines_horizontal"
+              },
+              {
+                "value": "all",
+                "displayName": "All",
+                "displayNameKey": "Enum_gridlines_all"
+              }
+            ]
+          }
+        },
+        "gridColor": {
+          "displayName": "Gridline color",
+          "displayNameKey": "Prop_legend_gridColor",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "gridWidth": {
+          "displayName": "Gridline width",
+          "displayNameKey": "Prop_legend_gridWidth",
+          "type": {
+            "numeric": true
+          }
+        },
+        "banding": {
+          "displayName": "Row banding",
+          "displayNameKey": "Prop_legend_banding",
           "type": {
             "bool": true
           }

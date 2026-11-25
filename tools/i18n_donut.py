@@ -169,4 +169,10 @@ P.update({
 "Notes": ["Notas", "Notes", "Notizen", "Note", "Notities", "Notatki", "メモ", "备注", "메모", "Notas"],
 "Segment rows": ["Linhas de segmento", "Lignes de segment", "Segmentzeilen", "Righe dei segmenti", "Segmentrijen", "Wiersze segmentów", "セグメントの行", "细分行", "세그먼트 행", "Filas de segmento"],
 "Each {0} belongs to one {1}: put {1} in Category and {0} in Segment": ["Cada {0} pertence a um só {1}: coloque {1} em Categoria e {0} em Segmento", "Chaque {0} appartient à un seul {1} : placez {1} dans Catégorie et {0} dans Segment", "Jede(s) {0} gehört zu genau einem {1}: {1} in Kategorie und {0} in Segment ziehen", "Ogni {0} appartiene a un solo {1}: metti {1} in Categoria e {0} in Segmento", "Elke {0} hoort bij één {1}: zet {1} in Categorie en {0} in Segment", "Każdy element {0} należy do jednego {1}: umieść {1} w Kategorii, a {0} w Segmencie", "各 {0} は 1 つの {1} にのみ属します: {1} をカテゴリに、{0} をセグメントに入れてください", "每个 {0} 只属于一个 {1}：将 {1} 放入类别，{0} 放入细分", "각 {0}은(는) 하나의 {1}에만 속합니다. {1}을(를) 범주에, {0}을(를) 세그먼트에 넣으세요", "Cada {0} pertenece a un solo {1}: pon {1} en Categoría y {0} en Segmento"],
+"Gridline width": ["Espessura das linhas de grade", "Épaisseur du quadrillage", "Gitternetzlinienstärke", "Spessore della griglia", "Dikte rasterlijnen", "Grubość linii siatki", "グリッド線の太さ", "网格线粗细", "눈금선 두께", "Grosor de la cuadrícula"],
+"Header background": ["Fundo do cabeçalho", "Arrière-plan de l’en-tête", "Kopfzeilenhintergrund", "Sfondo intestazione", "Achtergrond koptekst", "Tło nagłówka", "ヘッダーの背景", "标题行背景", "머리글 배경", "Fondo del encabezado"],
+"Header text color": ["Cor do texto do cabeçalho", "Couleur du texte de l’en-tête", "Textfarbe der Kopfzeile", "Colore testo intestazione", "Tekstkleur koptekst", "Kolor tekstu nagłówka", "ヘッダーの文字の色", "标题行文本颜色", "머리글 텍스트 색", "Color del texto del encabezado"],
+"Horizontal": ["Horizontal", "Horizontal", "Horizontal", "Orizzontale", "Horizontaal", "Poziome", "横", "水平", "가로", "Horizontal"],
+"Row banding": ["Linhas alternadas", "Lignes alternées", "Zeilen abwechselnd hervorheben", "Righe alternate", "Afwisselende rijen", "Naprzemienne wiersze", "行の縞模様", "镶边行", "줄무늬 행", "Filas alternas"],
 })
+

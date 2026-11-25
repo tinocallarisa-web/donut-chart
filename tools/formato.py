@@ -88,6 +88,9 @@ OBJECTS = [
                                                              ("top", "Top"), ("bottom", "Bottom"), ("off", "Off")]}),
         ("content", "Content", "enum", "auto", {"items": [("auto", "Automatic"), ("legend", "Legend"), ("table", "Table")]}),
         ("header", "Show header", "bool", True, {}),
+        # Cabecera en negrita con línea inferior al 35 % del texto; color de texto y fondo opcionales (fondo con fx).
+        ("headerColor", "Header text color", "fill", "", {}),
+        ("headerBackground", "Header background", "fill", "", {}),
         ("totalRow", "Show total row", "enum", "auto", {"items": [("auto", "Automatic (pie)"), ("on", "On"), ("off", "Off")]}),
         ("colValue", "Value column", "bool", True, {}),
         ("colShare", "Share % column", "bool", True, {}),
@@ -95,6 +98,11 @@ OBJECTS = [
         ("colTarget", "% of target column", "bool", True, {}),
         ("colNote", "Notes", "bool", True, {}),
         ("segRows", "Segment rows", "bool", False, {}),
+        # Rejilla: vacío = color del texto al 18 %.
+        ("gridlines", "Gridlines", "enum", "horizontal", {"items": [("none", "None"), ("horizontal", "Horizontal"), ("all", "All")]}),
+        ("gridColor", "Gridline color", "fill", "", {}),
+        ("gridWidth", "Gridline width", "num", 1, {"min": 1, "max": 4}),
+        ("banding", "Row banding", "bool", False, {}),
         ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
         ("color", "Text color", "fill", "#252423", {}),
     ] + NUM_FORMAT + PCT_FORMAT),

@@ -544,6 +544,20 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "label": "Show header"
             },
             {
+                "name": "headerColor",
+                "type": "fill",
+                "def": "",
+                "key": "Prop_legend_headerColor",
+                "label": "Header text color"
+            },
+            {
+                "name": "headerBackground",
+                "type": "fill",
+                "def": "",
+                "key": "Prop_legend_headerBackground",
+                "label": "Header background"
+            },
+            {
                 "name": "totalRow",
                 "type": "enum",
                 "def": "auto",
@@ -608,6 +622,53 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "def": false,
                 "key": "Prop_legend_segRows",
                 "label": "Segment rows"
+            },
+            {
+                "name": "gridlines",
+                "type": "enum",
+                "def": "horizontal",
+                "key": "Prop_legend_gridlines",
+                "label": "Gridlines",
+                "items": [
+                    [
+                        "none",
+                        "Enum_gridlines_none",
+                        "None"
+                    ],
+                    [
+                        "horizontal",
+                        "Enum_gridlines_horizontal",
+                        "Horizontal"
+                    ],
+                    [
+                        "all",
+                        "Enum_gridlines_all",
+                        "All"
+                    ]
+                ]
+            },
+            {
+                "name": "gridColor",
+                "type": "fill",
+                "def": "",
+                "key": "Prop_legend_gridColor",
+                "label": "Gridline color"
+            },
+            {
+                "name": "gridWidth",
+                "type": "num",
+                "def": 1,
+                "key": "Prop_legend_gridWidth",
+                "label": "Gridline width",
+                "min": 1,
+                "max": 4
+            },
+            {
+                "name": "banding",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_legend_banding",
+                "label": "Row banding"
             },
             {
                 "name": "fontSize",
