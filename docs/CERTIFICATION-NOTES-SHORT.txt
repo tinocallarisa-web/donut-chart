@@ -1,0 +1,42 @@
+Donut & Pie Chart by TCViz 1.0.0.0 - GUID donutChartTCViz5449856DE5A343AFB84B575BC5FDB5E8
+
+SOURCE CODE
+https://github.com/tinocallarisa-web/donut-chart, branch "certification". Public, no credentials.
+
+TESTING THE PRO FEATURES - NO KEY NEEDED
+Pro is granted by the AppSource plan through IVisualLicenseManager; no activation key exists.
+Open a report in EDIT mode without a licence: each Pro feature is drawn WORKING under a
+"Pro preview" watermark that names it, and Power BI shows its licence notice. Reading view
+shows the free chart. Without licence information (Desktop not signed in) Pro stays off.
+
+WHAT TO CHECK (sample .pbix, table Ventas)
+1. Empty visual: start screen in three sizes, no links.
+2. Category = Marca, Values = Litros: labels inside, total in the center, Other (5).
+Format > Data table > Position = Right: Other (5) opens with a click.
+3. Pro: Compare with = Litros AA (Δ pp, Δ %, ⚠, summary), Target = Plan litros (✓ ≈ ✕),
+Segment = Canal (outer ring), Small multiples = Zona, Annotation = Nota (First).
+4. Click a slice, legend item or table row: other visuals filter (Other passes every item
+in it). Ctrl+click adds; drag a lasso on the chart. Bookmarks restore the selection.
+Highlight from another visual. Hierarchy in Category: drilldown.
+5. Keyboard: Tab, arrows, Enter, Ctrl+Enter, Esc, Shift+F10. High contrast. Format mode:
+click slices, labels, center, legend, table or ring (on-object).
+
+PERSISTPROPERTIES
+Only on a user click in the setup guide (style.guide, style.template) and once when the
+author changes Style template in the Format pane. Never on selection or in the select callback.
+
+ROWS
+Categorical mapping, window of 30,000; fetchMoreData, up to 10 more segments (tested in Desktop
+with 54,662 rows). A footnote says when rows are missing. Selections above 5,000 row identities
+are drawn locally only, with a note.
+
+PRIVACY
+privileges []. No network, no telemetry, no browser storage. src uses no innerHTML. 12 languages.
+
+Rendering events: one started/finished pair per update(); hover, selection, Other expansion,
+sorting, the licence repaint and fetchMoreData redraw without calling update().
+Simulator: 2041 checks pass. eslint (powerbi-visuals plugin): 0 errors.
+
+Support: https://tinocallarisa-web.github.io/donut-chart/support.html
+Privacy: https://tinocallarisa-web.github.io/donut-chart/privacy.html
+Terms: https://tinocallarisa-web.github.io/donut-chart/terms.html

@@ -1,0 +1,63 @@
+==========================================
+TITLE (pick one)
+==========================================
+
+1. Donut and pie chart for Power BI: labels that never cut and who really gained share
+2. Your Power BI donut cuts its labels: a donut that reads at any size
+3. Who gained share vs last year? A Power BI donut with Δ pp, targets and small multiples
+
+(Recommended: 1 for the release video, 2 for a short.)
+
+
+==========================================
+YOUTUBE DESCRIPTION — FULL VIDEO
+==========================================
+
+A donut answers one question: what share does each part have. Donut & Pie Chart by TCViz writes the same label inside every slice and never cuts it, rounds the percentages so they add up to 100, groups the small categories into an honest Other you can open, and puts the total in the center. With Pro it shows who really gained share against last year, how each category does against its target, an outer Segment ring and one donut per channel.
+
+Get it on Microsoft AppSource: https://marketplace.microsoft.com/en-us/product/tino_callarisa.donut-chart-tcviz
+Documentation and FAQ: https://tinocallarisa-web.github.io/donut-chart/support.html
+
+──────────────────────────────────────────
+CHAPTERS
+──────────────────────────────────────────
+0:00 The problem: a donut whose labels are cut
+0:00 Category and Values: the first donut
+0:00 Labels inside, the same for every slice, never cut
+0:00 Other: Show at most, Group below, open it in the data table
+0:00 Legend and data table, center, summary and footnotes
+0:00 Pro: Compare with — Δ pp, Δ %, new and gone, the ⚠ mix warning
+0:00 Pro: Target — ✓ ≈ ✕ and status on slices
+0:00 Pro: Segment ring — family by brand
+0:00 Pro: small multiples by channel with a table of the total
+0:00 Lasso selection, drilldown, keyboard and accessibility
+0:00 Styles and Free and Pro
+
+(Fill in the timestamps from the final edit. Delete any chapter the video does not show.)
+
+──────────────────────────────────────────
+WHAT IT DOES
+──────────────────────────────────────────
+Free:
+• Donut or pie, inner radius, start angle, space between slices, border
+• Labels inside every slice with the same content and size; a label that does not fit is left out, never cut
+• Percentages that add up to 100
+• An honest Other you can open in the data table
+• Legend and data table with their own positions; total in the center; summary sentence; footnotes
+• Lasso selection, drilldown, cross-filtering, highlight, bookmarks, report page tooltips
+• Conditional formatting (fx), dynamic format strings, on-object formatting, a font for every text
+• Keyboard, screen reader, high contrast, patterns, minimum text size, reduce motion; 12 languages
+
+Pro (0.99 USD per user per month or 9.99 per year, no trial):
+• Compare with: change in share (Δ pp) and value (Δ %), new and gone, ⚠ where share and value move apart
+• Target: % of target with ✓ ≈ ✕, status icons on the slices
+• Segment: an outer ring with its own labels
+• Small multiples with a shared table of the total
+• Annotations per category; six collection style templates
+
+Sample data: Begudes Nord, a fictitious drinks company.
+The visual makes no network requests and declares no privileges.
+
+Questions: https://github.com/tinocallarisa-web/donut-chart/discussions · support@tcviz.com
+
+#PowerBI #DataVisualization #DonutChart
