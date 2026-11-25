@@ -107,6 +107,13 @@ for (const k of PRO_STYLES) {
  * la selección se ve solo dentro del visual, con aviso, y no se envía nada hacia fuera.
  */
 const MAX_SELECT_IDS = 1000;
+/**
+ * Vía del filtro NotIn para «Otros» por encima del tope: APAGADA (25-11). Con la build .78 (general.filter declarado y
+ * esta vía activa) un clic normal dejó de filtrar en Desktop. No se puede verificar fuera de Desktop si es porque Power
+ * BI trata como «filtrador» a un visual que declara general.filter, o porque quitar el filtro justo antes de select()
+ * borra la selección. Para volver a activarla: esta constante y general.filter en tools/formato.py, y probar en Desktop.
+ */
+const OTHER_FILTER = false;
 /** Segmentos con nombre por categoría en el anillo exterior; el resto, en un «Other (n)» de la categoría. */
 const SEG_MAX = 6;
 const SEG_OTHER = "␟segother";
@@ -832,7 +839,7 @@ export class Visual implements IVisual {
             if (ids && ids.length) this.restoreSelection(ids);
         }
         this.pruneSelection();
-        if (this.canInteract) this.restoreOtherFilter(options);
+        if (OTHER_FILTER && this.canInteract) this.restoreOtherFilter(options);
         if (this.localOnly && !this.selKeys.size) { this.localOnly = false; this.showLocalNote(0); }
         this.root.setAttribute("aria-label", this.tf("UI_Aria", "{0} chart: {1} by {2}, {3} categories, total {4}",
             s.slices.shape === "pie" ? this.t("Enum_shape_pie", "Pie") : this.t("Enum_shape_donut", "Donut"),
@@ -3189,7 +3196,7 @@ export class Visual implements IVisual {
             n = rows.size;
             // Por encima del tope: si la selección es «Otros» (con o sin otras categorías enteras), un filtro NotIn de las
             // nombradas no seleccionadas es exacto y cabe en pocos valores (Tino, 25-11). Las dos vías nunca a la vez.
-            const notIn = n > MAX_SELECT_IDS ? this.otherNotInFilter() : null;
+            const notIn = OTHER_FILTER && n > MAX_SELECT_IDS ? this.otherNotInFilter() : null;
             if (notIn) {
                 this.localOnly = false;
                 this.selectionManager.clear();

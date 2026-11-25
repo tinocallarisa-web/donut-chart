@@ -250,8 +250,10 @@ def generar():
         en[key + "_Desc"] = desc
         roles.append(r)
     caps["dataRoles"] = roles
-    # general.filter: el filtro NotIn de «Otros» cuando su selección pasaría del tope de identidades (25-11).
-    objs = {"general": {"properties": {"formatString": {"type": {"formatting": {"formatString": True}}}, "filter": {"type": {"filter": True}}}}}
+    # general.filter NO se declara (25-11): con él, en la build .78 un clic normal dejó de filtrar en Desktop. La vía del
+    # filtro NotIn de «Otros» queda apagada en visual.ts (OTHER_FILTER); para probarla, añadir aquí
+    # "filter": {"type": {"filter": True}} y encender la constante.
+    objs = {"general": {"properties": {"formatString": {"type": {"formatting": {"formatString": True}}}}}}
     ts_objs = {}
     for name, label, props in OBJECTS:
         okey = "Obj_" + name
