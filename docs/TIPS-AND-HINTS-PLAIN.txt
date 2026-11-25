@@ -50,7 +50,8 @@ TIPS
 - new / gone. No value in Compare with / no value now. Never an invented change.
 - Segment. Each category shows its six largest segments and its own Other (n). If a note says to swap the fields, every
   category belongs to one segment: put the broader field in Category.
-- Small multiples. Same Other, order and colours in every panel; the table is the total. Size by total makes each donut
+- Small multiples. Same Other, order and colours in every panel; the table is the total. A slice selects that
+  category in its panel only; the legend and the table select it in every panel; Ctrl combines panels. Size by total makes each donut
   proportional to its total. Too many panels: "Showing N of M panels".
 - A tooltip measure does not show. With Segment or Small multiples a slice is several rows and the measure is not
   summed (a margin % summed would be false). Use a report page tooltip.

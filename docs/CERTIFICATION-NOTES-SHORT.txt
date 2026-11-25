@@ -10,14 +10,14 @@ Open a report in EDIT mode without a licence: each Pro feature is drawn WORKING 
 shows the free chart. Without licence information (Desktop not signed in) Pro stays off.
 
 WHAT TO CHECK (sample .pbix, table Ventas)
-1. Empty visual: start screen in three sizes, no links.
+1. Empty visual: start screen, no links.
 2. Category = Marca, Values = Litros: labels inside, total in the center, Other (5).
 Format > Data table > Position = Right: Other (5) opens with a click.
 3. Pro: Compare with = Litros AA (Δ pp, Δ %, ⚠, summary), Target = Plan litros (✓ ≈ ✕),
 Segment = Canal (outer ring), Small multiples = Zona, Annotation = Nota (First).
 4. Click a slice, legend item or table row: other visuals filter (Other passes every item
 in it). Ctrl+click adds; drag a lasso on the chart. Bookmarks restore the selection.
-Highlight from another visual. Hierarchy in Category: drilldown.
+Small multiples: a slice selects in its panel, legend/table in all. Highlight. Drilldown.
 5. Keyboard: Tab, arrows, Enter, Ctrl+Enter, Esc, Shift+F10. High contrast. Format mode:
 click slices, labels, center, legend, table or ring (on-object).
 
@@ -31,7 +31,7 @@ with 54,662 rows). A footnote says when rows are missing. Selections above 1,000
 (items or rows) are drawn locally only, with a note; select() is not called, no filter. Segment: 6 largest segments per category + Other (n).
 
 PRIVACY
-privileges []. No network, no telemetry, no browser storage. src uses no innerHTML. 12 languages.
+privileges []. No network, telemetry or browser storage. src uses no innerHTML. 12 languages.
 
 Rendering events: one pair per update(); hover, selection, Other expansion, sorting and
 the licence repaint redraw without update().

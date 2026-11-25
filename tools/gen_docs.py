@@ -165,7 +165,7 @@ FAQ = [
     ("How do small multiples work?",
      "<p>Add a field to <strong>Small multiples</strong> (Pro). Every donut uses the same Other, order and colours, so you compare like "
      "with like; each one shows its own total in the center and its title above. The data table is shared and shows the total of all "
-     "panels (its title says Total); the tooltip of a table row gives the value in each panel. <strong>Size by total</strong> makes "
+     "panels (its title says Total); the tooltip of a table row gives the value in each panel. A click on a slice selects that category in that panel only; a click in the legend or the table selects it in every panel; Ctrl+click combines panels. <strong>Size by total</strong> makes "
      "the area of each donut proportional to its total. When the panels would be too small to read, the visual shows the ones that fit "
      "and says how many: \"Showing N of M panels\".</p>"),
     ("What does the Summary sentence say?",
@@ -253,8 +253,8 @@ def illus():
         tx, ty = P((a0 + a1) / 2, (R + r) / 2)
         out.append(f'<text x="{tx:.0f}" y="{ty + 4:.0f}" text-anchor="middle" fill="{"#252423" if col == "#A19F9D" else "#FFFFFF"}" font-weight="600">{txt}</text>')
         a0 = a1
-    filas = [("Aigua Serena", "3.3M", "24%", "+0.8", "✓ 103%"), ("Nord Cola", "2.2M", "16%", "+0.0", "✓ 104%"),
-             ("Nord", "2.2M", "16%", "−1.5", "≈ 95%"), ("Fruitia", "1.4M", "10%", "⚠ −0.1", "✕ 85%")]
+    filas = [("Aigua Serena", "3.3M", "24%", "+0.8", "✓ 104%"), ("Nord Cola", "2.2M", "16%", "+0.0", "✓ 104%"),
+             ("Nord", "2.2M", "16%", "−1.5", "≈ 95%"), ("Fruitia", "1.4M", "10%", "⚠ −0.1", "✕ 86%")]
     cols = [250, 345, 395, 440, 510]
     t = ['<text x="250" y="20" fill="#605E5C">Total +4.1% vs Litros AA</text>']
     for x, h in zip(cols, ["Brand", "Litres", "%", "Δ pp", "% of target"]):
@@ -345,7 +345,8 @@ labels, the center, the legend, the data table, the scale ring or a small multip
 <div class="card">
 <ul>
 <li>Click a slice, a legend item or a table row to filter the rest of the page. Ctrl/Cmd + click adds; click the background to clear.</li>
-<li><strong>Lasso selection</strong>: drag on the chart to draw a rectangle and select every slice it touches, in every panel; Ctrl or Shift + drag adds. Turn it off in Format → Slices.</li>
+<li><strong>Lasso selection</strong>: drag on the chart to draw a rectangle and select every slice it touches (with small multiples, each in its own panel); Ctrl or Shift + drag adds. Turn it off in Format → Slices.</li>
+<li>Small multiples, as in the native visuals: a click on a slice selects that category in that panel only; the legend and the table of the Total select it in every panel; Ctrl+click combines panels. Bookmarks keep the selection per panel.</li>
 <li>Clicking Other filters by every item inside it. In the data table, Other ▸ opens its members, and each one can be selected.</li>
 <li>With Segment, the outer ring selects the category and segment pair. A selection of more than 1,000 items (or rows, with Segment or Small multiples) is shown inside the visual only, with a note.</li>
 <li>The center shows what you point at or select; with several slices selected, their sum.</li>
