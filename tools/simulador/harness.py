@@ -250,8 +250,7 @@ async def upd(pg, dv, W=None, H=None, op=0):
 
 
 MAX_IDS = 1000
-# Vía del filtro NotIn para «Otros» (visual.ts OTHER_FILTER): apagada desde el 25-11 (regresión en Desktop con la .78).
-FILTRO_OTROS = False
+# La vía del filtro NotIn para «Otros» se retiró (25-11): general.filter rompe select() en Desktop.
 MAXSEL = [0]
 
 
@@ -1973,10 +1972,7 @@ async def tanda_muchas(b):
                 r = await clic_otros(pg)
                 TIEMPOS.append((tag, r))
                 check(f"{tag}: clic en Otros < 300 ms y nunca select() con más de {MAX_IDS} identidades", r["ms"] < 300 and r["maxSel"] <= MAX_IDS, str(r))
-                if FILTRO_OTROS:
-                    check(f"{tag}: Otros supera el tope → filtro NotIn de las nombradas, sin select() ni aviso", r["filtro"] == "NotIn" and not r["nota"] and r["enviadas"] == 0, str(r))
-                else:
-                    check(f"{tag}: Otros supera el tope → aviso visible, nada hacia fuera y ningún filtro", r["filas"] > MAX_IDS and r["nota"] and r["enviadas"] == 0 and not r["filtro"], str(r))
+                check(f"{tag}: Otros supera el tope → aviso visible, nada hacia fuera y ningún filtro", r["filas"] > MAX_IDS and r["nota"] and r["enviadas"] == 0 and not r["filtro"], str(r))
             await eventos(pg, f"{tag} {modo}")
             await pg.close()
     # Justo por debajo del tope: 1.005 PDV → Otros con 1.000 filas → sí se envía.
@@ -2004,8 +2000,7 @@ async def tanda_muchas(b):
         r = await clic_otros(pg)
         r["update_ms"] = round(ms)
         TIEMPOS.append((tag, r))
-        check(f"{tag}: clic en Otros < 300 ms, sin select() por encima del tope, {'con filtro NotIn' if FILTRO_OTROS else 'con aviso'}", r["ms"] < 300 and r["maxSel"] <= MAX_IDS and
-              ((r["filtro"] == "NotIn") if FILTRO_OTROS else (bool(r["nota"]) and not r["filtro"])), str(r))
+        check(f"{tag}: clic en Otros < 300 ms, sin select() por encima del tope, con aviso", r["ms"] < 300 and r["maxSel"] <= MAX_IDS and bool(r["nota"]) and not r["filtro"], str(r))
         await eventos(pg, tag)
         await pg.close()
     print("  Tiempos: caso · update · filas de Otros · clic en Otros (ms) · identidades enviadas")
@@ -2035,7 +2030,7 @@ async def tanda_avisos_centro(b):
         ("SKU × PDV, clic en el «Other (n)» exterior de Other (editando)", dv_detalle_pdv(cat="SKU", segment="PDV", objs={"style": {"guide": False}, "slices": {"maxSlices": 5}}),
          "path.dn-seg[data-key='␟other␞␟segother']", "Segment/Small multiples", "Other ("),
         # Sin destino de filtro (columna sin tabla, como una jerarquía no fiable) vuelve el aviso de una sola columna.
-        ("PDV sola, clic en Otros (editando)", dv_detalle_pdv() if not FILTRO_OTROS else sin_destino(dv_detalle_pdv()), "path.dn-slice[data-key*='other']", "select fewer items", "Other (1741)"),
+        ("PDV sola, clic en Otros (editando)", dv_detalle_pdv(), "path.dn-slice[data-key*='other']", "select fewer items", "Other (1741)"),
     ]
     for lbl, dvx, selector, texto, titulo in casos:
         pg = await page(b, dvx, 960, 540, edit=True, name="avisos_" + ("sku_pdv" if "SKU" in lbl else "pdv"))
@@ -2087,7 +2082,7 @@ async def tanda_regresion_clic(b):
     F = await pg.evaluate(FILTROS)
     sel = await pg.evaluate("() => (window.__sel || []).map(s => s.key)")
     check("Otros y después un PDV con nombre: el PDV filtra (select de 1 identidad, la suya)", F["sel"] == 1 and sel == ["PDV=" + k.replace("string:", "")], f"sel={sel}")
-    check("ningún applyJsonFilter con la vía del filtro apagada" if not FILTRO_OTROS else "filtro quitado antes del select", (not F["f"]) if not FILTRO_OTROS else (F["f"][-1]["a"] == 1), str(F["f"]))
+    check("ningún applyJsonFilter (el visual no filtra con general.filter)", not F["f"], str(F["f"]))
     await eventos(pg, "regresión clic")
     await pg.close()
     # Un filtro ajeno (de otro objeto o de un informe) en jsonFilters no toca la selección ni se quita.
@@ -2100,84 +2095,6 @@ async def tanda_regresion_clic(b):
     check("con un filtro ajeno en jsonFilters, el clic selecciona y no se quita ningún filtro", F["sel"] == 1 and not F["f"], f"sel={F['sel']} {F['f']}")
     await pg.close()
 
-
-async def tanda_filtro_otros(b):
-    if not FILTRO_OTROS:
-        print("25-11 (12) · Filtro NotIn de «Otros»: vía apagada (OTHER_FILTER = false), sin comprobaciones")
-        return
-    print("25-11 (12) · «Otros» por encima del tope: BasicFilter NotIn de las nombradas, sin select()")
-    POR_PDV = defaultdict(float)
-    for r in DETALLE:
-        POR_PDV[r["PDV"]] += r["Litros"] or 0
-    TOT = sum(POR_PDV.values())
-    objs = {"style": {"guide": False}, "slices": {"maxSlices": 5}}
-    dv = dv_detalle_pdv(objs=objs)
-    pg = await page(b, dv, 960, 540, name="filtro_otros_pdv")
-    click = "(q) => { const p = document.querySelector(q); p.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: false })); }"
-    ctrl = "(q) => { const p = document.querySelector(q); p.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true })); }"
-    await pg.evaluate(click, "path.dn-slice[data-key*='other']")
-    F = await pg.evaluate(FILTROS)
-    ult = F["f"][-1] if F["f"] else {}
-    nombradas = [k for k, _ in F["inner"] if "other" not in k]
-    excl = sum(POR_PDV[v] for v in (ult.get("vals") or []))
-    check("PDV sola + clic en Otros: applyJsonFilter NotIn con las 4 nombradas y ningún select()", ult.get("op") == "NotIn" and ult.get("n") == 4 and ult.get("a") == 0 and F["nSel"] == 0, str(F["f"]) + f" nSel={F['nSel']}")
-    check("PDV sola + clic en Otros: el filtro deja exactamente Otros (12,6M)", abs((TOT - excl) - 12.6e6) < 0.06e6, f"{TOT - excl:,.0f}")
-    check("PDV sola + clic en Otros: destino {table, column} de la columna", ult.get("target") == {"table": "t", "column": "PDV"}, str(ult.get("target")))
-    check("PDV sola + clic en Otros: sin aviso y el centro dice «Other (1742)»", not F["nota"] and F["center"] and F["center"][0].startswith("Other (1742)"), f"{F['nota']} {F['center']}")
-    await shot(pg, "filtro_otros_pdv_seleccion")
-    # Un update posterior (redimensionar) devuelve el filtro en jsonFilters: la selección sigue y no se reaplica.
-    n0 = len(F["f"])
-    await upd(pg, dv, 900, 520)
-    F = await pg.evaluate(FILTROS)
-    oth = next(op for k, op in F["inner"] if "other" in k)
-    check("update con el filtro en jsonFilters: Otros sigue seleccionado y no se vuelve a aplicar", oth == "1" and len(F["f"]) == n0, f"{oth} {len(F['f'])}")
-    # Otros + Ctrl en una nombrada → NotIn de las 3 restantes.
-    k1 = nombradas[0]
-    await pg.evaluate(ctrl, f"path.dn-slice[data-key='{k1}']")
-    F = await pg.evaluate(FILTROS)
-    ult = F["f"][-1]
-    check("Otros + Ctrl en una nombrada: NotIn de las 3 nombradas no seleccionadas", ult["op"] == "NotIn" and ult["n"] == 3 and F["nSel"] == 0, str(ult))
-    # Clic en otra cosa → se quita el filtro y hay select().
-    await pg.evaluate(click, f"path.dn-slice[data-key='{nombradas[1]}']")
-    F = await pg.evaluate(FILTROS)
-    check("clic en una nombrada: se quita el filtro (remove) y hay select() de 1 identidad", F["f"][-1]["a"] == 1 and F["nSel"] == 1 and F["sel"] == 1, str(F["f"][-2:]) + f" nSel={F['nSel']}")
-    check("nunca persistProperties", await pg.evaluate("() => __persist.length") == 0, "")
-    await eventos(pg, "filtro Otros")
-    await pg.close()
-    # Marcador: el estado vuelve en general.filter (jsonFilters).
-    pg = await page(b, None, 960, 540)
-    excl4 = sorted(POR_PDV, key=lambda k: -POR_PDV[k])[:4]
-    await pg.evaluate("(f) => { window.__jf = f; }", {"target": {"table": "t", "column": "PDV"}, "filterType": 1, "operator": "NotIn", "values": excl4})
-    await upd(pg, dv)
-    F = await pg.evaluate(FILTROS)
-    oth = next(op for k, op in F["inner"] if "other" in k)
-    check("marcador con el NotIn de las nombradas actuales: Otros seleccionado, sin aplicar nada", oth == "1" and not F["f"] and F["center"][0].startswith("Other (1742)"), f"{oth} {F['f']} {F['center']}")
-    await pg.close()
-    pg = await page(b, None, 960, 540)
-    await pg.evaluate("(f) => { window.__jf = f; }", {"target": {"table": "t", "column": "PDV"}, "filterType": 1, "operator": "NotIn", "values": ["PDV-99999"]})
-    await upd(pg, dv)
-    F = await pg.evaluate(FILTROS)
-    check("marcador que ya no cuadra con las nombradas: se quita el filtro", F["f"] and F["f"][-1]["a"] == 1, str(F["f"]))
-    await pg.close()
-    # Con Segment: el interior de Otros también va por filtro; los trozos exteriores de Otros, aviso.
-    dvs = dv_detalle_pdv(cat="SKU", segment="PDV", objs=objs)
-    pg = await page(b, dvs, 960, 540)
-    await pg.evaluate(click, "path.dn-slice[data-key*='other']")
-    F = await pg.evaluate(FILTROS)
-    check("SKU × PDV: clic en el interior de Otros → NotIn sobre SKU, sin select()", F["f"] and F["f"][-1]["op"] == "NotIn" and F["f"][-1]["target"] == {"table": "t", "column": "SKU"} and F["nSel"] == 0, str(F["f"][-1:]))
-    await pg.evaluate(click, "path.dn-seg[data-key='␟other␞␟segother']")
-    F = await pg.evaluate(FILTROS)
-    check("SKU × PDV: el «Other (n)» exterior de Otros → filtro quitado y aviso (no se expresa con una columna)", F["f"][-1]["a"] == 1 and "Too many rows" in F["nota"] and F["nSel"] == 0, f"{F['f'][-1:]} {F['nota'][:60]}")
-    await eventos(pg, "filtro Otros con Segment")
-    await pg.close()
-    pg = await page(b, dv, 960, 540, allow=False)
-    await pg.evaluate(click, "path.dn-slice[data-key*='other']")
-    F = await pg.evaluate(FILTROS)
-    check("allowInteractions apagado: ni filtro ni selección", not F["f"] and F["nSel"] == 0, str(F["f"]))
-    await pg.close()
-
-
-# ── % of target sin contradicciones y small multiples con la tabla (25-11, vídeo) ─
 
 async def tanda_video(b):
     print("25-11 (14) · % of target con decimales cuando hacen falta; paneles con radio mínimo junto a la tabla; zoom del host")
@@ -2327,6 +2244,59 @@ async def tanda_sm_seleccion(b):
     await pg.close()
 
 
+# ── Menú contextual, expandir jerarquía y etiquetas de la infografía (25-11) ─────
+
+async def tanda_revision(b):
+    print("25-11 (17) · Menú contextual con una sola fila; expandir al siguiente nivel; etiquetas uniformes de la infografía")
+    MENU = "() => window.__menu.slice(-1)[0]"
+    ctx = "([q]) => { const p = document.querySelector(q); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); }"
+    pg = await page(b, dv_caso_a({}, legacy=False), 960, 540)
+    await pg.evaluate(ctx, ["path.dn-slice[data-key='string:Aigua Serena']"])
+    check("menú contextual sobre una categoría sin Segment: su identidad", await pg.evaluate(MENU) == "Marca=Aigua Serena", str(await pg.evaluate(MENU)))
+    await pg.evaluate(ctx, ["path.dn-slice[data-key*='other']"])
+    check("menú contextual sobre Otros (varias filas): sin identidad de dato", await pg.evaluate(MENU) is None, str(await pg.evaluate(MENU)))
+    await pg.close()
+    pg = await page(b, dv_ventas({}, cat="Familia", segment="Marca", legacy=False), 960, 540)
+    await pg.evaluate(ctx, ["path.dn-slice[data-key='string:Refrescos']"])
+    check("menú contextual sobre una categoría con Segment (3 filas): sin identidad de dato", await pg.evaluate(MENU) is None, str(await pg.evaluate(MENU)))
+    await pg.evaluate(ctx, ["path.dn-seg[data-key$='Nord Cola']"])
+    check("menú contextual sobre un par (una fila): su identidad", await pg.evaluate(MENU) == "Familia=Refrescos|Marca=Nord Cola", str(await pg.evaluate(MENU)))
+    await pg.evaluate(ctx, ["path.dn-slice[data-key='string:Aguas']"])
+    check("menú contextual sobre Aguas con Segment (una sola marca, una fila): su identidad", await pg.evaluate(MENU) == "Familia=Aguas|Marca=Aigua Serena", str(await pg.evaluate(MENU)))
+    check("menú contextual: sin persistProperties", await pg.evaluate("() => __persist.length") == 0, "")
+    await eventos(pg, "menú contextual")
+    await pg.close()
+    # «Expandir al siguiente nivel» con la jerarquía Familia → Marca: Power BI manda dos columnas con rol category.
+    dv = dv_ventas({}, cat="Familia", legacy=False)
+    filas = defaultdict(float)
+    for r in VENTAS:
+        filas[(r["Familia"], r["Marca"])] += r["Litros"] or 0
+    ks = list(filas)
+    dv["categorical"]["categories"] = [col("Familia", "category", [k[0] for k in ks]), col("Marca", "category", [k[1] for k in ks])]
+    dv["categorical"]["values"] = [measure("Litros", "values", [filas[k] for k in ks])]
+    dv["metadata"]["columns"] = [c["source"] for c in dv["categorical"]["categories"]] + [dv["categorical"]["values"][0]["source"]]
+    pg = await page(b, dv, 960, 540, name="expandir_jerarquia")
+    ley = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-legend .dn-li')).map(e => e.textContent)")
+    check("expandir al siguiente nivel: un sector por Familia + Marca, con los dos nombres", "Aguas Aigua Serena" in ley and "Refrescos Nord Cola" in ley, str(ley[:4]))
+    await pg.evaluate("() => { const p = document.querySelector('path.dn-slice'); p.dispatchEvent(new MouseEvent('click', { bubbles: true })); }")
+    sel = await pg.evaluate("() => (window.__sel || []).map(s => s.key)")
+    check("expandir: el clic selecciona la fila Familia + Marca", len(sel) == 1 and sel[0].count("=") == 2, str(sel))
+    await eventos(pg, "expandir jerarquía")
+    await pg.close()
+    # Infografía: misma configuración que la captura central de la ficha (tools/simulador/ficha.py, 620×218, mínimo 10 px).
+    import ficha as FI
+    d = FI.dv({"dataTable": {"position": "right"}, "accessibility": {"minFontSize": 10}}, compare=True, target=True)
+    pg = await page(b, d, 620, 218, name="infografia_central")
+    lab = await pg.evaluate("() => Array.from(document.querySelectorAll('text.dn-label')).map(t => t.getAttribute('data-key'))")
+    sl = await pg.evaluate("() => Array.from(document.querySelectorAll('path.dn-slice')).map(p => p.getAttribute('data-key'))")
+    pct = {r["key"]: pct_num(r["pct"]) for r in filas_datos(await info(pg))}
+    con = [pct.get(k, 0) for k in lab]
+    sin = [pct.get(k, 0) for k in sl if k not in lab]
+    check("infografía (620×218): si un sector lleva etiqueta, todos los mayores también", not con or not sin or max(sin) <= min(con), f"con={con} sin={sin}")
+    check("infografía: Aigua Serena (24 %) y Other (22 %) con etiqueta", "string:Aigua Serena" in lab and any("other" in k for k in lab), str(lab))
+    await pg.close()
+
+
 async def clic_otros(pg):
     """Clic en Otros: tiempo (selección + repintado), filas que cubriría, identidades enviadas y aviso."""
     return await pg.evaluate(r"""() => { const p = document.querySelector('path.dn-slice[data-key*="other"]');
@@ -2362,6 +2332,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--revision" in sys.argv:
+            await tanda_revision(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--smsel" in sys.argv:
             await tanda_sm_seleccion(b)
             await b.close()
@@ -2381,7 +2357,7 @@ async def main():
             print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
             return
         if "--filtro" in sys.argv:
-            await tanda_filtro_otros(b)
+            await tanda_regresion_clic(b)
             await b.close()
             print()
             print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
@@ -2757,10 +2733,10 @@ async def main():
         await tanda_otros_seleccion(b)
         await tanda_muchas(b)
         await tanda_avisos_centro(b)
-        await tanda_filtro_otros(b)
         await tanda_regresion_clic(b)
         await tanda_video(b)
         await tanda_sm_seleccion(b)
+        await tanda_revision(b)
         await b.close()
     check(f"global: ninguna llamada a select() con más de {MAX_IDS} identidades", MAXSEL[0] <= MAX_IDS, str(MAXSEL[0]))
     print()
