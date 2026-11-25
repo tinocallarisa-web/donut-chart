@@ -672,9 +672,11 @@ async def bloque2(b):
     tip = await pg.evaluate("() => { const c = document.querySelector('.dn-table .dn-c.dn-name[data-key]'); const r = c.getBoundingClientRect(); c.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.x + 3, clientY: r.y + 3 })); return (window.__tip.dataItems || []).map(d => d.displayName); }")
     check("tabla compartida: el tooltip de una fila trae el detalle de los 9 paneles", sum(1 for z in ZORD if z in tip) == 9, str(tip))
     sel = await pg.evaluate("() => { const p = document.querySelectorAll('.dn-panel')[3].querySelector('path.dn-slice'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); return (window.__sel || []).map(s => s.key); }")
-    marca = sel[0].split("|")[0] if sel else ""
-    check("clic en un sector de un panel: filtra la categoría en todos los paneles (todas sus filas)", sel and all(k.startswith(marca + "|") for k in sel)
-          and abs(litros_identidades(sel) - POR_MARCA[marca.split("=", 1)[1]]) < 1, f"{len(sel)} filas {sel[:2]}")
+    # Desde el 25-11 (como los nativos): un sector de un panel filtra la categoría en ese panel.
+    partes = dict(x.split("=", 1) for x in sel[0].split("|")) if sel else {}
+    esp = sum((r["Litros"] or 0) for r in VENTAS if r["Marca"] == partes.get("Marca") and r["Zona"] == partes.get("Zona"))
+    check("clic en un sector de un panel: filtra la categoría en ese panel", sel and all(k.startswith("Marca=" + partes.get("Marca", "") + "|Zona=" + partes.get("Zona", "")) for k in sel)
+          and abs(litros_identidades(sel) - esp) < 1, f"{len(sel)} filas {sel[:2]}")
     n = await eventos(pg, "sm interacción")
     check("small multiples: interacción sin updates nuevos", n == 1, str(n))
     await pg.close()
@@ -1194,7 +1196,9 @@ async def tanda_25b(b):
         lbl = f"Familia×Marca todo {W}x{H}"
         pg = await page(b, dv_ventas({}, segment="Marca", cat="Familia", compare=True, target=True, nota=True, legacy=False), W, H, name=f"t2_fam_marca_todo_{W}x{H}")
         S = await sb(pg)
-        comprobar_anillo(S, W, H, lbl, quiere=W == 960)  # a 620×520 con tabla y Summary el anillo es fino: sin etiqueta es lo correcto
+        # Con el dataset de4d520 hay ✕ (Zumos) y se reserva el borde de los iconos: el anillo es más fino y puede quedarse sin
+        # etiquetas; se comprueban sus normas si las hay.
+        comprobar_anillo(S, W, H, lbl, quiere=False)
         check(f"{lbl}: con Compare, Summary encendido (Automatic)", len(S["summary"]) == 1, str(S["summary"]))
         comprobar_summary(S, W, H, lbl)
         await eventos(pg, lbl)
@@ -1257,11 +1261,13 @@ async def tanda_25b(b):
         await pg.close()
     print("25-11 (3) · Summary y objetivo: ≈ no es fallo")
     for lbl, dv, quiere in [
-        ("Familia (dataset real, todas ≈)", dv_ventas({}, cat="Familia", compare=True, target=True, legacy=False), "All 6 categories are near the target."),
+        # Dataset de4d520: por Familia, Aguas ✓ 104, Cerveza 0,0 ✓ 108, Zumos ✕ 86 y el resto ≈.
+        ("Familia (dataset de4d520: 2 cumplen, 1 falla, 3 cerca)", dv_ventas({}, cat="Familia", compare=True, target=True, legacy=False), "1 of 6 categories misses the target."),
+        ("Familia, solo ≈ (Met at 110, Close at 80)", dv_ventas({"target": {"metAt": 110, "closeAt": 80}}, cat="Familia", compare=True, target=True, legacy=False), "All 6 categories are near the target."),
         ("Marca (con ✕)", dv_ventas({"slices": {"maxSlices": 12, "groupBelow": 0}}, compare=True, target=True, legacy=False), None),
         ("Marca Close at 50 % (✓ y ≈, sin ✕)", dv_ventas({"target": {"closeAt": 50}}, compare=True, target=True, legacy=False), None),
     ]:
-        tag = "t3_summary_" + ("familia" if "Familia" in lbl else "marca_x" if "(con ✕)" in lbl else "marca_mix")
+        tag = "t3_summary_" + ("familia_solo_aprox" if "solo ≈" in lbl else "familia" if "Familia" in lbl else "marca_x" if "(con ✕)" in lbl else "marca_mix")
         pg = await page(b, dv, 1200, 640, name=tag)
         S = await sb(pg)
         i = await info(pg)
@@ -1274,14 +1280,16 @@ async def tanda_25b(b):
             check(f"Summary {lbl}: el caso tiene ✕ y lo cuenta como fallo", "✕" in iconos and "miss" in t, iconos)
         if "≈" in lbl and "✓" in lbl:
             check(f"Summary {lbl}: el caso tiene ✓ y ≈ y ningún ✕", "✓" in iconos and "≈" in iconos and "✕" not in iconos, iconos)
-        if "todas ≈" in lbl:
+        if "solo ≈" in lbl:
             check(f"Summary {lbl}: todas ≈ en la tabla y ninguna contada como fallo", set(iconos) == {"≈"} and "miss" not in t, iconos)
+        if "de4d520" in lbl:
+            check(f"Summary {lbl}: iconos de la tabla por Familia", iconos == "≈✓✓✕≈≈", iconos)
         await eventos(pg, f"summary {lbl}")
         await pg.close()
     pg = await page(b, dv_ventas({}, cat="Familia", compare=True, target=True, legacy=False), 960, 540, locale="es-ES")
     S = await sb(pg)
     t = S["summary"][0]["text"] if S["summary"] else ""
-    check("Summary Familia en español: «Las 6 categorías están cerca del objetivo.»", "Las 6 categorías están cerca del objetivo." in t, t)
+    check("Summary Familia en español: «1 de 6 categorías no cumple el objetivo.»", "1 de 6 categorías no cumple el objetivo." in t, t)
     await pg.close()
     pg = await page(b, dv_ventas({}, compare=True, target=True, legacy=False), 960, 540, plan=None, edit=False, name="t2_summary_free_lectura")
     S = await sb(pg)
@@ -1342,7 +1350,8 @@ async def tanda_fuentes(b):
             i = await info(pg)
             comprobar_dibujo(i, W, H, lbl, mira_suma=False)
             usa = lambda x: x is not None and f in x["fam"]
-            check(f"{lbl}: etiquetas con la fuente elegida", F["lab"] and all(f in l["fam"] for l in F["lab"]), str({l["fam"] for l in F["lab"]})[:80])
+            # A 380×260, con los iconos del objetivo (✕ Zumos, dataset de4d520) las etiquetas pueden no caber: si las hay, con la fuente.
+            check(f"{lbl}: etiquetas con la fuente elegida", (F["lab"] or W < 500) and all(f in l["fam"] for l in F["lab"]), str({l["fam"] for l in F["lab"]})[:80])
             check(f"{lbl}: centro (valor y título) con la fuente elegida", F["center"] and all(f in c["fam"] for c in F["center"]), str({c["fam"] for c in F["center"]})[:80])
             check(f"{lbl}: leyenda, tabla y resumen con la fuente elegida", usa(F["legend"]) and (F["table"] is None or usa(F["table"])) and (F["summary"] is None or usa(F["summary"])),
                   f"{F['legend'] and F['legend']['fam']} | {F['table'] and F['table']['fam']}")
@@ -1401,9 +1410,11 @@ SMT = r"""() => {
     return { text: t.textContent, fs: parseFloat(getComputedStyle(t).fontSize), fam: getComputedStyle(t).fontFamily, box: R(b), txt: R(vis) }; });
   const panels = Array.from(root.querySelectorAll('.dn-panel')).map(g => {
     // Lo dibujado del donut: sectores, anillo de segmentos, anillo de escala e iconos del objetivo.
-    const ps = Array.from(g.querySelectorAll('path.dn-slice, path.dn-seg, .dn-ring line, .dn-ring circle, .dn-ring path, .dn-ticon'));
+    // Sin los iconos del objetivo: van en su banda alrededor del anillo y no centran ni pegan el título.
+    const ps = Array.from(g.querySelectorAll('path.dn-slice, path.dn-seg, .dn-ring line, .dn-ring circle, .dn-ring path'));
     const bs = ps.map(p => p.getBoundingClientRect());
-    return { x0: Math.min(...bs.map(b => b.left)) - hr.left, x1: Math.max(...bs.map(b => b.right)) - hr.left, y0: Math.min(...bs.map(b => b.top)) - hr.top, y1: Math.max(...bs.map(b => b.bottom)) - hr.top };
+    return { x0: Math.min(...bs.map(b => b.left)) - hr.left, x1: Math.max(...bs.map(b => b.right)) - hr.left, y0: Math.min(...bs.map(b => b.top)) - hr.top, y1: Math.max(...bs.map(b => b.bottom)) - hr.top,
+             icons: g.querySelectorAll('.dn-ticon').length };
   });
   const lg = root.querySelector('.dn-legend');
   return { titles, panels, legendFs: lg ? parseFloat(getComputedStyle(lg).fontSize) : 0 };
@@ -1429,7 +1440,8 @@ async def tanda_sm_titulos(b):
                 if abs((t["txt"]["x0"] + t["txt"]["x1"]) / 2 - cxp) > 3:
                     mal_c.append(t["text"])
                 gap = p["y0"] - t["txt"]["y1"]
-                if gap < -0.5 or gap > t["fs"] * 0.6 + 6:
+                # Con iconos del objetivo, el título queda encima de su banda (unos 20 px más).
+                if gap < -0.5 or gap > t["fs"] * 0.6 + 6 + (22 if p.get("icons") else 0):
                     mal_g.append((t["text"], round(gap, 1)))
             check(f"{lbl}: cada título centrado sobre su donut", not mal_c, str(mal_c))
             check(f"{lbl}: cada título pegado a su donut (sin hueco grande ni encima)", not mal_g, str(mal_g))
@@ -1886,8 +1898,10 @@ async def tanda_otros_seleccion(b):
     k = await pg.evaluate("() => { const p = Array.from(document.querySelectorAll('path.dn-slice')).find(x => x.getAttribute('data-key') === 'string:Refrescos'); p.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; }")
     E = await pg.evaluate(ESTADO)
     env = filas(E["sel"])
-    check("H3 clic en Refrescos con small multiples por Canal: filtra la familia en todos los paneles", env is not None and abs(env - FAM["Refrescos"]) < 1, f"{env} {len(E['sel'])} ids")
-    TABLA.append(("H3 clic en Refrescos con small multiples por Canal", len(E["sel"]), env, E["center"][1] if len(E["center"]) > 1 else "(por panel)", FAM["Refrescos"]))
+    # Como los nativos (25-11): el sector de un panel es la familia en ese panel (HOME es el primero).
+    esp_h = sum((r["Litros"] or 0) for r in VENTAS if r["Familia"] == "Refrescos" and r["Canal"] == "HOME")
+    check("H3 clic en Refrescos de HOME con small multiples por Canal: filtra Refrescos · HOME", env is not None and abs(env - esp_h) < 1, f"{env} {len(E['sel'])} ids")
+    TABLA.append(("H3 clic en Refrescos de HOME con small multiples por Canal", len(E["sel"]), env, E["center"][1] if len(E["center"]) > 1 else "", esp_h))
     await pg.close()
     # I) sin Segment: solo Category, y Category + small multiples.
     for lbl, dvx in [("I1 solo Category: clic en Refrescos", dv_ventas({}, cat="Familia", legacy=False)),
@@ -1896,8 +1910,9 @@ async def tanda_otros_seleccion(b):
         await pg.evaluate("() => { const p = Array.from(document.querySelectorAll('path.dn-slice')).find(x => x.getAttribute('data-key') === 'string:Refrescos'); p.dispatchEvent(new MouseEvent('click', { bubbles: true })); }")
         E = await pg.evaluate(ESTADO)
         env = filas(E["sel"])
-        check(f"{lbl}: filtra toda la familia", env is not None and abs(env - FAM["Refrescos"]) < 1, f"{env} {E['sel'][:3]}")
-        TABLA.append((lbl, len(E["sel"]), env, E["center"][1] if len(E["center"]) > 1 else "", FAM["Refrescos"]))
+        esp_i = FAM["Refrescos"] if "I1" in lbl else sum((r["Litros"] or 0) for r in VENTAS if r["Familia"] == "Refrescos" and r["Canal"] == "HOME")
+        check(f"{lbl}: filtra {'toda la familia' if 'I1' in lbl else 'Refrescos en el panel pinchado (HOME)'}", env is not None and abs(env - esp_i) < 1, f"{env} {E['sel'][:3]}")
+        TABLA.append((lbl, len(E["sel"]), env, E["center"][1] if len(E["center"]) > 1 else "", esp_i))
         await pg.close()
     print("  Tabla de casos: identidades · filas enviadas (Litros) · centro · esperado (Ventas)")
     for lbl, n, env, cen, esp in TABLA:
@@ -2204,6 +2219,46 @@ async def tanda_video(b):
             comprobar_dibujo(i, W, H, lbl, mira_suma=False)
             await eventos(pg, lbl)
             await pg.close()
+    print("25-11 (15) · Dataset de4d520: truncado con tolerancia al ruido y estado por panel")
+    pg = await page(b, dv_ventas({"slices": {"maxSlices": 12, "groupBelow": 0}}, target=True, legacy=False), 1200, 640)
+    i = await info(pg)
+    t = {r["name"]: r["tgt"] for r in filas_datos(i)}
+    check("Aigua Serena ✓ 104 % (103,99999… no se trunca a 103)", t.get("Aigua Serena", "").replace(" ", " ") == "✓ 104%", t.get("Aigua Serena"))
+    check("Fruitia ✕ 86 % (85,99999… no se trunca a 85)", t.get("Fruitia", "").replace(" ", " ") == "✕ 86%", t.get("Fruitia"))
+    check("Nord 0,0 ✓ 108 %", t.get("Nord 0,0", "").replace(" ", " ") == "✓ 108%", t.get("Nord 0,0"))
+    await pg.close()
+    for lbl, tgt, quiere in [("99,9999999 % con Met at 100", 1 / 0.999999999, "≈ 99%"), ("100 % exacto", 1.0, "✓ 100%")]:
+        dv = dv_ventas({}, target=True, legacy=False)
+        tv = dv["categorical"]["values"][1]["values"]
+        vv = dv["categorical"]["values"][0]["values"]
+        dv["categorical"]["values"][1]["values"] = [v * tgt for v in vv]
+        pg = await page(b, dv, 960, 540)
+        i = await info(pg)
+        r0 = filas_datos(i)[0]["tgt"].replace(" ", " ")
+        check(f"sintético {lbl}: {quiere}", r0 == quiere, r0)
+        await pg.close()
+    # Caso de Tino: Familia, Plan litros, small multiples por Canal, Show at most 5, Status on slices = All.
+    pg = await page(b, dv_ventas({"slices": {"maxSlices": 5}, "target": {"statusOnSlices": "all"}}, cat="Familia", facet="Canal", target=True, legacy=False), 1250, 600, name="estado_por_panel_all")
+    I = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-ticon')).map(g => [document.querySelectorAll('.dn-sm-title')[+g.getAttribute('data-panel')].textContent, g.getAttribute('data-key').replace('string:', ''), g.getAttribute('data-status'), g.querySelector('text').textContent, g.querySelector('circle').getAttribute('fill')])")
+    fam = defaultdict(lambda: [0.0, 0.0])
+    for r in VENTAS:
+        x = fam[(r["Canal"], r["Familia"])]
+        x[0] += r["Litros"] or 0
+        x[1] += r["Plan litros"] or 0
+    def estado(canal, key):
+        if "other" in key:
+            v = sum(fam[(canal, f)][0] for f in ("Isotónicas y energéticas", "Té y café frío"))
+            p = sum(fam[(canal, f)][1] for f in ("Isotónicas y energéticas", "Té y café frío"))
+        else:
+            v, p = fam[(canal, key)]
+        q = 100 * v / p
+        return "✓" if q >= 100 else "≈" if q >= 90 else "✕"
+    mal = [(c, k, g, txt) for c, k, g, txt, _ in I if g != estado(c, k) or txt != g]
+    colores = {g: fill for _, _, g, _, fill in I}
+    check("Status on slices = All, por panel: el glifo de cada sector es el de su estado en ese panel", I and not mal, str(mal) + f" ({len(I)} iconos)")
+    check("AFH: Refrescos y Other llevan ≈ (97,2 % y 98,6 %), no ✓", [g for c, k, g, *_ in I if c == "AFH" and (k == "Refrescos" or "other" in k)] == ["≈", "≈"], str([x for x in I if x[0] == "AFH"]))
+    check("cada estado con su color (✓ verde, ≈ ámbar, ✕ rojo)", len(set(colores.values())) == len(colores), str(colores))
+    await pg.close()
     # Zoom del host (transform: scale 1,25, como el vídeo): la disposición no cambia.
     dvz = dv_ventas({}, cat="Familia", facet="Canal", compare=True, target=True, legacy=False)
     pg = await page(b, dvz, 1040, 576)
@@ -2215,6 +2270,60 @@ async def tanda_video(b):
     con = await pg.evaluate("() => { const t = document.querySelector('.dn-table'); return [t.offsetWidth, t.offsetHeight, Array.from(document.querySelectorAll('.dn-panel .dn-slices')).map(g => g.getBoundingClientRect().width / 1.25)]; }")
     await shot(pg, "sm_tabla_zoom125")
     check("zoom 1,25 del host: misma tabla y mismos donuts que sin zoom", abs(sin[0] - con[0]) <= 2 and abs(sin[1] - con[1]) <= 2 and all(abs(a - c) <= 2 for a, c in zip(sin[2], con[2])), f"{sin} vs {con}")
+    await pg.close()
+
+
+# ── Small multiples: selección por panel, como los nativos (25-11) ─────────────
+
+async def tanda_sm_seleccion(b):
+    print("25-11 (16) · Small multiples: un sector de un panel selecciona esa categoría en ese panel")
+    FC = defaultdict(float)
+    for r in VENTAS:
+        FC[(r["Familia"], r["Canal"])] += r["Litros"] or 0
+    FAM = {f: v[0] for f, v in ventas_por("Familia").items()}
+    dv = dv_ventas({}, cat="Familia", facet="Canal", legacy=False)
+    pg = await page(b, dv, 1250, 600, name="sm_sel_panel")
+    paneles = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-sm-title')).map(t => t.textContent)")
+    ih, ia = paneles.index("HOME"), paneles.index("AFH")
+    clic = "([pi, k, ctrl]) => { const p = Array.from(document.querySelectorAll('path.dn-slice')).find(x => x.getAttribute('data-panel') === String(pi) && x.getAttribute('data-key') === k); p.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: ctrl })); }"
+    await pg.evaluate(clic, [ih, "string:Refrescos", False])
+    await pg.mouse.move(3, 595)
+    sel = await pg.evaluate("() => (window.__sel || []).map(s => s.key)")
+    check("clic en Refrescos de HOME: filas Refrescos · HOME (suma de Ventas)", sel and abs(litros_identidades(sel) - FC[("Refrescos", "HOME")]) < 1, f"{sel} {litros_identidades(sel)}")
+    ops = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-sg')).filter(g => g.getAttribute('data-key') === 'string:Refrescos').map(g => [g.getAttribute('data-panel'), g.getAttribute('opacity')])")
+    check("Refrescos se ve seleccionado solo en HOME (en AFH atenuado)", dict(ops).get(str(ih)) == "1" and dict(ops).get(str(ia)) != "1", str(ops))
+    ctr = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-panel')).map(p => Array.from(p.querySelectorAll('.dn-center-text')).map(t => t.textContent))")
+    check("centro: HOME dice Refrescos; AFH su total", ctr[ih][0] == "Refrescos" and "Refrescos" not in ctr[ia][0], str(ctr))
+    lg = await pg.evaluate("() => { const e = document.querySelector('.dn-legend .dn-li[data-key=\"string:Refrescos\"]'); return e.style.opacity; }")
+    check("leyenda: Refrescos parcial (0,7) con la selección solo en un panel", lg == "0.7", lg)
+    await pg.evaluate(clic, [ia, "string:Aguas", True])
+    await pg.mouse.move(3, 595)
+    sel = await pg.evaluate("() => (window.__sel || []).map(s => s.key)")
+    esp = FC[("Refrescos", "HOME")] + FC[("Aguas", "AFH")]
+    check("Ctrl en Aguas de AFH: Refrescos · HOME + Aguas · AFH", abs(litros_identidades(sel) - esp) < 1, f"{litros_identidades(sel)} vs {esp}")
+    ids_marcador = sel
+    await pg.evaluate("() => document.querySelector('.dn-legend .dn-li[data-key=\"string:Refrescos\"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))")
+    sel = await pg.evaluate("() => (window.__sel || []).map(s => s.key)")
+    check("clic en la leyenda: la familia en todos los paneles", abs(litros_identidades(sel) - FAM["Refrescos"]) < 1, f"{litros_identidades(sel)}")
+    await eventos(pg, "sm selección por panel")
+    await pg.close()
+    # Lazo dentro de un panel: categoría + ese panel.
+    pg = await page(b, dv, 1250, 600)
+    I = await pg.evaluate("() => { const hr = document.getElementById('host').getBoundingClientRect(); return Array.from(document.querySelectorAll('text.dn-label')).map(t => { const r = t.getBoundingClientRect(); const pa = t.closest('.dn-panel').getAttribute('data-panel'); return [pa, t.getAttribute('data-key'), (r.left + r.right) / 2 - hr.left, (r.top + r.bottom) / 2 - hr.top]; }); }")
+    pa = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-sm-title')).map(t => t.textContent).indexOf('AFH')")
+    x = next(v for v in I if v[0] == str(pa) and v[1] == "string:Aguas")
+    await lazo(pg, x[2] - 3, x[3] - 3, x[2] + 5, x[3] + 5)
+    sel = await pg.evaluate("() => (window.__sel || []).map(s => s.key)")
+    check("lazo en Aguas de AFH: filas Aguas · AFH", abs(litros_identidades(sel) - FC[("Aguas", "AFH")]) < 1, f"{sel}")
+    await pg.close()
+    # Marcador: restaura la selección por panel.
+    pg = await page(b, dv, 1250, 600)
+    await pg.evaluate("(ks) => { window.__sel = ks.map(key => ({ key, getKey(){return key;}, equals(o){return !!o && o.key === key;}, includes(){return false;} })); window.__onSel(window.__sel); }", ids_marcador)
+    await pg.wait_for_timeout(30)
+    ops = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-sg')).map(g => [g.getAttribute('data-panel'), g.getAttribute('data-key'), g.getAttribute('opacity')])")
+    on = sorted((paneles[int(p_)], k.replace("string:", "")) for p_, k, o in ops if o == "1")
+    check("marcador: restaura Refrescos · HOME y Aguas · AFH por panel", on == sorted([("HOME", "Refrescos"), ("AFH", "Aguas")]), str(on))
+    check("marcador sin persistProperties", await pg.evaluate("() => __persist.length") == 0, "")
     await pg.close()
 
 
@@ -2253,6 +2362,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--smsel" in sys.argv:
+            await tanda_sm_seleccion(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--video" in sys.argv:
             await tanda_video(b)
             await b.close()
@@ -2509,9 +2624,13 @@ async def main():
         check("mismas 5 marcas + Otros que con una fila por marca", [r["name"] for r in filas[:5]] == MARCAS[:5], str([r["name"] for r in filas]))
         await pg.evaluate("() => { const p = document.querySelector('path.dn-slice[data-key*=\"other\"]'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); }")
         sel = await pg.evaluate("() => (window.__sel || []).map(s => s.key)")
+        # Con small multiples (Zona) el clic en un panel selecciona Otros en ese panel (25-11, como los nativos).
         marcas_sel = {k.split("|")[0].split("=", 1)[1] for k in sel}
-        check("Otros con 180 filas: pasa las identidades de todas las filas de sus 5 marcas", marcas_sel == set(MARCAS[5:]) and
-              abs(litros_identidades(sel) - sum(POR_MARCA[m] for m in MARCAS[5:])) < 1, f"{len(sel)} filas")
+        zonas = {dict(x.split("=", 1) for x in k.split("|")).get("Zona") for k in sel}
+        z = next(iter(zonas)) if len(zonas) == 1 else None
+        esp = sum((r["Litros"] or 0) for r in VENTAS if r["Marca"] in MARCAS[5:] and r["Zona"] == z)
+        check("Otros con 180 filas: todas las filas de sus 5 marcas en el panel pinchado", z and marcas_sel <= set(MARCAS[5:]) and
+              abs(litros_identidades(sel) - esp) < 1, f"{len(sel)} filas, zona {z}")
         await eventos(pg, "filas")
         await pg.close()
 
@@ -2641,6 +2760,7 @@ async def main():
         await tanda_filtro_otros(b)
         await tanda_regresion_clic(b)
         await tanda_video(b)
+        await tanda_sm_seleccion(b)
         await b.close()
     check(f"global: ninguna llamada a select() con más de {MAX_IDS} identidades", MAXSEL[0] <= MAX_IDS, str(MAXSEL[0]))
     print()

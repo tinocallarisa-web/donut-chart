@@ -1138,6 +1138,26 @@ export class Visual implements IVisual {
 
     private static pairKey(entryKey: string, segKey: string): string { return entryKey + "␞" + segKey; }
 
+    /**
+     * Selección por panel (small multiples, como los nativos): «␜panel␜clave» = la clave (categoría, par o miembro de
+     * Otros) solo en las filas de ese panel. Sin prefijo, la clave en todos los paneles (leyenda, tabla del Total).
+     */
+    private static scoped(fkey: string, key: string): string { return "␜" + fkey + "␜" + key; }
+    private static unscope(key: string): { fkey: string | null; inner: string } {
+        if (key.charAt(0) !== "␜") return { fkey: null, inner: key };
+        const j = key.indexOf("␜", 1);
+        return { fkey: key.slice(1, j), inner: key.slice(j + 1) };
+    }
+    /** Claves que valen en un panel: las globales y las de ese panel, sin prefijo. */
+    private keysIn(fkey: string | null): Set<string> {
+        const out = new Set<string>();
+        for (const k of this.selKeys) {
+            const u = Visual.unscope(k);
+            if (u.fkey === null || u.fkey === fkey) out.add(u.inner);
+        }
+        return out;
+    }
+
     private pairOf(key: string | null): { e: Entry; sd: Dim; si: number } | null {
         if (!key || key.indexOf("␞") < 0 || !this.model) return null;
         const i = key.indexOf("␞");
@@ -1170,7 +1190,7 @@ export class Visual implements IVisual {
             const seen = new Map<number, string>();
             let ok = true;
             for (const x of vals) {
-                const t = Math.floor(x.pct * f + 1e-9) / f;
+                const t = this.truncTgt(x.pct, d) / f;
                 if ((x.g === "✓" && t < met) || (x.g === "≈" && t < close)) { ok = false; break; }
                 const prev = seen.get(t);
                 if (prev !== undefined && prev !== x.g) { ok = false; break; }
@@ -1182,8 +1202,24 @@ export class Visual implements IVisual {
     }
 
     private fmtTgt(pct: number): string {
-        const f = Math.pow(10, this.tgtDec);
-        return this.fmtPct(Math.floor(pct * f + 1e-9), this.tgtDec);
+        return this.fmtPct(this.truncTgt(pct, this.tgtDec), this.tgtDec);
+    }
+
+    /**
+     * % of target truncado a d decimales (en unidades de 10^-d) con tolerancia al ruido (coma flotante y plan redondeado:
+     * 103,99999… →
+     * 104), sin cruzar nunca hacia arriba el umbral de su estado: un ≈ sigue por debajo de Met at y un ✕ por debajo de
+     * Close at (99,9999999 % con Met at 100 sigue siendo ≈ 99).
+     */
+    private truncTgt(pct: number, d: number): number {
+        const f = Math.pow(10, d);
+        const met = Number(this.settings.target?.metAt) || 100;
+        const close = Math.min(met, Number(this.settings.target?.closeAt) || 90);
+        // Tolerancia de 0,0001 puntos: el plan redondeado a 1 decimal y sumado por filas deja errores de ~1e-5 puntos
+        // (Aigua Serena: 103,9999927 %); 1e-6 no bastaba.
+        const tol = Math.floor((pct + 1e-4) * f);
+        const thr = pct >= met ? null : pct >= close ? met : close;
+        return thr !== null && tol / f >= thr ? Math.floor(pct * f) : tol;
     }
 
     /** Estado frente al objetivo: ✓ (≥ Met at) · ≈ (≥ Close at) · ✕; forma y color. null sin objetivo. */
@@ -1429,7 +1465,9 @@ export class Visual implements IVisual {
     private smTableCap(pos: string, aw: number, ah: number, pad: number): number {
         const sm = this.settings.smallMultiples;
         const n = Math.max(1, this.model?.facets.length ?? 1);
-        const R = this.smMinR;
+        // Radio de la celda: el mínimo del donut más lo que se reserva alrededor (anillo de escala e iconos del objetivo).
+        const r0 = this.smMinR;
+        const R = r0 + (this.settings.scaleRing.mode !== "off" ? Math.max(3, Math.round(r0 * 0.06)) + 2 : 0) + this.iconSpaceFor(r0 * 1.2);
         const gap = Math.max(0, Math.min(40, Number(sm.gap))) * Math.min(1, this.k);
         const th = Math.max(10, this.minFs, this.fz(Number(sm.titleFontSize))) * 1.3 + Math.max(2, Math.round(3 * this.k));
         const cellW = 2 * R + 6, cellH = 2 * R + 6 + th;
@@ -2758,16 +2796,16 @@ export class Visual implements IVisual {
      * no se suman otra vez); si no, cuentan sus miembros de «Otros» o sus pares seleccionados. El % suma los mismos
      * porcentajes redondeados que enseña el visual (sectores, miembros, pares), para no contradecirlo.
      */
-    private selectionInfo(p: PanelDraw): { name: string; value: number; pct: number; fmt?: string } | null {
+    private selectionInfo(p: PanelDraw, ks: Set<string> = this.selKeys): { name: string; value: number; pct: number; fmt?: string } | null {
         let value = 0, pct = 0, n = 0, last = "";
         for (const e of p.entries) {
-            if (this.selKeys.has(e.key)) { value += e.value; pct += e.pct; n++; last = e.key; continue; }
+            if (ks.has(e.key)) { value += e.value; pct += e.pct; n++; last = e.key; continue; }
             if (e.isOther) e.members.forEach((c, i) => {
-                if (!this.selKeys.has(c.key)) return;
+                if (!ks.has(c.key)) return;
                 value += p.fkey !== null ? Math.max(0, c.byFacet.get(p.fkey)?.value ?? 0) : c.value;
                 pct += e.memberPct[i] ?? 0; n++; last = c.key;
             });
-            for (const sa of p.segArcs) if (sa.e.key === e.key && this.selKeys.has(sa.key)) { value += sa.value; pct += sa.pct; n++; last = sa.key; }
+            for (const sa of p.segArcs) if (sa.e.key === e.key && ks.has(sa.key)) { value += sa.value; pct += sa.pct; n++; last = sa.key; }
         }
         if (!n) return null;
         if (n === 1) return this.infoIn(p, last);
@@ -2918,6 +2956,7 @@ export class Visual implements IVisual {
 
     /** ¿La clave es algo seleccionable (sector, miembro de "Otros" o par categoría·segmento)? */
     private known(key: string | null): boolean {
+        if (key && key.charAt(0) === "␜") return this.known(Visual.unscope(key).inner);
         return !!key && (!!this.entryOf(key) || !!this.catOf(key) || (this.segOn && !!this.pairOf(key)));
     }
 
@@ -2938,7 +2977,10 @@ export class Visual implements IVisual {
         if (toggle) { e.stopPropagation(); this.setExpanded(!this.otherExpanded); return; }
         if (!this.canInteract) return;
         if (this.known(key)) {
-            this.toggle(key, e.ctrlKey || e.metaKey);
+            // Small multiples, como los nativos: un sector de un panel selecciona esa clave en ese panel.
+            const panel = this.keyAt(e).panel;
+            const P = this.smOn && panel !== null ? this.panels.find(x => x.index === panel) : null;
+            this.toggle(P && P.fkey !== null ? Visual.scoped(P.fkey, key) : key, e.ctrlKey || e.metaKey);
         } else {
             this.selKeys.clear();
             this.pushSelection();
@@ -3041,8 +3083,9 @@ export class Visual implements IVisual {
         for (const p of this.panels) {
             const g = p.geo;
             if (!g) continue;
-            for (const a of p.arcs) if (touches(g.cx, g.cy, a.a0, a.a1, g.ri, g.Rin)) out.add(a.e.key);
-            for (const sa of p.segArcs) if (touches(g.cx, g.cy, sa.a0, sa.a1, g.Rin + this.ringSep(g.R), g.R)) out.add(sa.key);
+            const sc = (k: string) => (this.smOn && p.fkey !== null ? Visual.scoped(p.fkey, k) : k);
+            for (const a of p.arcs) if (touches(g.cx, g.cy, a.a0, a.a1, g.ri, g.Rin)) out.add(sc(a.e.key));
+            for (const sa of p.segArcs) if (touches(g.cx, g.cy, sa.a0, sa.a1, g.Rin + this.ringSep(g.R), g.R)) out.add(sc(sa.key));
         }
         return Array.from(out);
     }
@@ -3235,6 +3278,8 @@ export class Visual implements IVisual {
      * panel filtra igual que el de la leyenda o la tabla, que no son de un panel); un miembro de «Otros», sus filas.
      */
     private rowsOf(key: string): number[] {
+        const u = Visual.unscope(key);
+        if (u.fkey !== null) return this.rowsIn(u.inner, u.fkey);
         const pr = this.segOn ? this.pairOf(key) : null;
         if (pr) {
             const out: number[] = [];
@@ -3248,6 +3293,22 @@ export class Visual implements IVisual {
         return ch ? ch.c.rows.slice() : [];
     }
 
+    /** Filas de una clave dentro de un panel (las de su valor de Small multiples). */
+    private rowsIn(key: string, fkey: string): number[] {
+        const out: number[] = [];
+        const push = (a: { rows: number[] } | undefined) => { if (a) for (const r of a.rows) out.push(r); };
+        const pr = this.segOn ? this.pairOf(key) : null;
+        if (pr) {
+            const keys = this.segListOf(pr.e)[pr.si].keys;
+            for (const c of pr.e.members) for (const k of keys) push(c.parts.get(fkey + "␟" + k));
+            return out;
+        }
+        const e = this.entryOf(key);
+        const cats = e ? e.members : (this.catOf(key) ? [this.catOf(key).c] : []);
+        for (const c of cats) push(c.byFacet.get(fkey));
+        return out;
+    }
+
     private idsOf(key: string): ISelectionId[] {
         return this.rowsOf(key).map(r => this.rowId(r));
     }
@@ -3259,6 +3320,16 @@ export class Visual implements IVisual {
      */
     private normalizeSel(): void {
         if (!this.selKeys.size || !this.model) return;
+        // Por panel: la clave global cubre sus versiones por panel; una categoría en un panel cubre sus pares y miembros
+        // en ese panel.
+        for (const k of Array.from(this.selKeys)) {
+            const u = Visual.unscope(k);
+            if (u.fkey === null) continue;
+            const pr = this.segOn ? this.pairOf(u.inner) : null;
+            const owner = pr ? pr.e.key : (this.entryOf(u.inner) ? u.inner : this.catOf(u.inner)?.e.key ?? null);
+            const covered = this.selKeys.has(u.inner) || (owner !== null && owner !== u.inner && (this.selKeys.has(owner) || this.selKeys.has(Visual.scoped(u.fkey, owner))));
+            if (covered) this.selKeys.delete(k);
+        }
         for (const e of this.entries) {
             const segKeys = this.segOn ? this.segListOf(e).map(it => Visual.pairKey(e.key, it.sd.key)) : [];
             if (!this.selKeys.has(e.key) && segKeys.length && segKeys.every(k => this.selKeys.has(k))) this.selKeys.add(e.key);
@@ -3404,8 +3475,21 @@ export class Visual implements IVisual {
     }
 
     /** Cuánto de una categoría está seleccionado: entera, en parte (pares o miembros de «Otros») o nada. */
-    private selLevel(e: Entry): "full" | "part" | "none" {
+    private selLevel(e: Entry, fkey?: string | null): "full" | "part" | "none" {
+        if (fkey !== undefined && fkey !== null) {
+            // En un panel: las claves globales y las de ese panel.
+            const ks = this.keysIn(fkey);
+            if (ks.has(e.key)) return "full";
+            if (e.isOther && e.members.some(c => ks.has(c.key))) return "part";
+            for (const k of ks) if (k.indexOf(e.key + "␞") === 0) return "part";
+            return "none";
+        }
         if (this.selKeys.has(e.key)) return "full";
+        // Fuera de los paneles (leyenda, tabla del Total): una selección solo en algunos paneles es parcial.
+        for (const k of this.selKeys) {
+            const u = Visual.unscope(k);
+            if (u.fkey !== null && (u.inner === e.key || u.inner.indexOf(e.key + "␞") === 0 || e.members.some(c => c.key === u.inner))) return "part";
+        }
         if (e.isOther && e.members.some(c => this.selKeys.has(c.key))) return "part";
         const pre = e.key + "␞";
         for (const k of this.selKeys) if (k.indexOf(pre) === 0) return "part";
@@ -3414,7 +3498,7 @@ export class Visual implements IVisual {
 
     /** select(lista) no alterna: la selección se calcula aquí y se pasa entera (o clear si queda vacía). */
     private toggle(key: string, multi: boolean): void {
-        const pr = this.segOn ? this.pairOf(key) : null;
+        const pr = this.segOn && key.charAt(0) !== "␜" ? this.pairOf(key) : null;
         if (multi && pr && this.selKeys.has(pr.e.key)) {
             // Ctrl+clic en un par de una categoría seleccionada entera: queda la categoría menos ese par.
             this.selKeys.delete(pr.e.key);
@@ -3467,6 +3551,17 @@ export class Visual implements IVisual {
                     if (all(this.rowsOf(pk))) this.selKeys.add(pk);
                 }
             }
+            // Small multiples: lo que esté entero en un panel (categoría o par), por panel.
+            if (this.smOn && !this.selKeys.has(e.key)) {
+                for (const f of this.model.facets) {
+                    const sk = Visual.scoped(f.key, e.key);
+                    if (all(this.rowsOf(sk))) { this.selKeys.add(sk); continue; }
+                    if (this.segOn) for (const it of this.segListOf(e)) {
+                        const pk = Visual.pairKey(e.key, it.sd.key);
+                        if (!this.selKeys.has(pk) && all(this.rowsOf(Visual.scoped(f.key, pk)))) this.selKeys.add(Visual.scoped(f.key, pk));
+                    }
+                }
+            }
         }
         this.normalizeSel();
     }
@@ -3479,11 +3574,16 @@ export class Visual implements IVisual {
             for (const c of e.members) valid.add(c.key);
             if (this.segOn) for (const it of this.segListOf(e)) valid.add(Visual.pairKey(e.key, it.sd.key));
         }
-        for (const k of Array.from(this.selKeys)) if (!valid.has(k)) this.selKeys.delete(k);
+        const facets = new Set((this.model?.facets ?? []).map(f => f.key));
+        for (const k of Array.from(this.selKeys)) {
+            const u = Visual.unscope(k);
+            if (!valid.has(u.inner) || (u.fkey !== null && (!this.smOn || !facets.has(u.fkey)))) this.selKeys.delete(k);
+        }
     }
 
     private isSelected(e: Entry): boolean {
         if (this.selKeys.has(e.key)) return true;
+        if (this.selLevel(e) !== "none") return true;
         if (e.isOther && e.members.some(c => this.selKeys.has(c.key))) return true;
         const pre = e.key + "␞";
         for (const k of this.selKeys) if (k.indexOf(pre) === 0) return true;
@@ -3503,7 +3603,9 @@ export class Visual implements IVisual {
             const e = this.entryOf(el.getAttribute("data-key"));
             if (!e) return;
             // Interior: entera = 1; solo algunos pares o miembros = parcial (0,6); nada = atenuado.
-            const lv = any ? this.selLevel(e) : "full";
+            const pi = el.getAttribute("data-panel");
+            const P = this.smOn && pi !== null ? this.panels.find(x => x.index === Number(pi)) : null;
+            const lv = any ? this.selLevel(e, P ? P.fkey : undefined) : "full";
             let op = lv === "full" ? 1 : lv === "part" ? 0.6 : 0.35;
             if (hoverEntry && hoverEntry.key !== e.key) op = Math.min(op, 0.6);
             el.setAttribute("opacity", String(op));
@@ -3511,7 +3613,10 @@ export class Visual implements IVisual {
         this.svg.selectAll<SVGGElement, unknown>(".dn-segg").each((_d, i, nodes) => {
             const el = nodes[i];
             const k = el.getAttribute("data-key"), parent = el.getAttribute("data-parent");
-            const sel = this.selKeys.has(k) || this.selKeys.has(parent);
+            const pi = el.querySelector("path.dn-seg")?.getAttribute("data-panel");
+            const P = this.smOn && pi != null ? this.panels.find(x => x.index === Number(pi)) : null;
+            const ks = P ? this.keysIn(P.fkey) : this.selKeys;
+            const sel = ks.has(k) || ks.has(parent);
             let op = any && !sel ? 0.35 : 1;
             if (hover && hover !== k && hover !== parent) op = Math.min(op, 0.6);
             el.setAttribute("opacity", String(op));
@@ -3566,8 +3671,9 @@ export class Visual implements IVisual {
         for (const p of this.panels) {
             if (!p.g || !p.geo) continue;
             let info = hover ? this.infoIn(p, hover) : null;
-            if (!info && this.selKeys.size === 1) info = this.infoIn(p, Array.from(this.selKeys)[0]);
-            else if (!info && this.selKeys.size > 1) info = this.selectionInfo(p);
+            const ks = this.keysIn(p.fkey);
+            if (!info && ks.size === 1) info = this.infoIn(p, Array.from(ks)[0]);
+            else if (!info && ks.size > 1) info = this.selectionInfo(p, ks);
             this.drawCenter(p, info);
         }
     }
