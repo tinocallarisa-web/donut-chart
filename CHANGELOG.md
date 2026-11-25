@@ -18,5 +18,5 @@
 - Accessibility card: high contrast, patterns, focus colour and width, minimum text size, reduce motion.
 - Number format of the measure, Dynamic format strings included; Conditional formatting (fx) on slice colours, border and table header; On-object formatting; 12 languages.
 - Up to 30,000 rows per block, with up to 10 more blocks requested from Power BI; a footnote when rows are missing.
-- The five largest categories always keep their own slice; selections above 1,000 rows are shown inside the visual only, with a note.
+- At least the min(5, Show at most − 1) largest categories always have a name; selections above 1,000 items or rows are shown inside the visual only, with a note; while editing, a suggestion when a donut is not the form for the data.
 - Report theme and Classic styles, setup guide, start screen in three sizes. No network requests and no privileges.

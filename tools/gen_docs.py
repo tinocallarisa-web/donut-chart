@@ -126,8 +126,9 @@ FAQ = [
     ("What is Other, and how do I open it?",
      "<p>Categories beyond <strong>Show at most</strong> (6 by default) or below <strong>Group below %</strong> (3% by default) go into "
      "Other, always the last slice, with its count: \"Other (5)\". In the data table, click <strong>Other (5) ▸</strong> to list its "
-     "members with their own values and percentages (→ on the keyboard). The five largest categories always keep their own slice, even below Group below %, so a donut is never all Other. Clicking the Other slice filters the page by every item inside "
-     "it, not by a label. Set Show at most to 20 and Group below to 0 to draw every category.</p>"),
+     "members with their own values and percentages (→ on the keyboard). Always at least the min(5, Show at most − 1) largest categories have a name (all of them if they fit in Show at most), even below "
+     "Group below %, so a donut is never an all-grey Other. Clicking the Other slice filters the page by every item inside it, not by a "
+     "label — unless that is more than 1,000 items (see below). Set Show at most to 20 and Group below to 0 to draw every category.</p>"),
     ("Why is a value not drawn?",
      "<p>A slice is an angle of a whole, and it cannot be negative or empty. Negative, zero and blank values are left out and counted in "
      "a footnote — \"Excluded: 1 negative (−0.3M), 1 blank\" — so nothing disappears in silence. Percentages use the positive total.</p>"),
@@ -179,10 +180,16 @@ FAQ = [
      "several rows, and adding up a measure such as a margin % or an average across them would give a false figure, so it is left out. "
      "Use a report page tooltip instead: it is computed by Power BI for the slice.</p>"),
     ("Why does a selection say \"shown here only\"?",
-     "<p>With Segment or Small multiples, a selection is passed to Power BI as rows. Above 1,000 rows — for example Other over thousands "
-     "of points of sale — Power BI cannot filter the rest of the page reliably, so the selection is drawn inside the visual only, with "
-     "the note \"Too many rows to filter other visuals (N) — select fewer items or remove Segment/Small multiples\". Nothing is filtered "
-     "outside and bookmarks do not keep that selection. Select fewer slices, or filter the page with a slicer.</p>"),
+     "<p>A selection is passed to Power BI as one identity per item — or, with Segment or Small multiples, per row. Above 1,000 — for "
+     "example Other over thousands of points of sale — Power BI cannot filter the rest of the page reliably, so the selection is drawn "
+     "inside the visual only, with a note: \"Too many items to filter other visuals (N) — select fewer items\", or with Segment or Small "
+     "multiples \"Too many rows to filter other visuals (N) — select fewer items or remove Segment/Small multiples\". Nothing is "
+     "filtered outside, Other included, and bookmarks do not keep that selection. Select fewer slices, or filter the page with a "
+     "slicer.</p>"),
+    ("What does \"N categories: the top K hold X%. A bar chart or treemap reads this better\" mean?",
+     "<p>A suggestion for the report author, shown only while you edit; readers of the report never see it. It appears when there are "
+     "more than 20 categories and the slices with a name hold less than 50% of the total, or Other holds more than 60%. Most of the data "
+     "is then in a grey slice, and a bar chart or a treemap reads it better.</p>"),
     ("How many rows can it use?",
      "<p>Power BI sends up to 30,000 combinations of category, segment and panel at a time. When there are more, the visual asks for "
      "further blocks, up to 10 more, and adds them up (checked in Power BI Desktop with 54,662 rows). While it loads, a footnote says "
@@ -340,7 +347,7 @@ labels, the center, the legend, the data table, the scale ring or a small multip
 <li>Click a slice, a legend item or a table row to filter the rest of the page. Ctrl/Cmd + click adds; click the background to clear.</li>
 <li><strong>Lasso selection</strong>: drag on the chart to draw a rectangle and select every slice it touches, in every panel; Ctrl or Shift + drag adds. Turn it off in Format → Slices.</li>
 <li>Clicking Other filters by every item inside it. In the data table, Other ▸ opens its members, and each one can be selected.</li>
-<li>With Segment, the outer ring selects the category and segment pair. With Segment or Small multiples, a selection above 1,000 rows is shown inside the visual only, with a note.</li>
+<li>With Segment, the outer ring selects the category and segment pair. A selection of more than 1,000 items (or rows, with Segment or Small multiples) is shown inside the visual only, with a note.</li>
 <li>The center shows what you point at or select; with several slices selected, their sum.</li>
 <li>Highlight: when another visual filters this one, the highlighted part of each slice is drawn and the rest is dimmed, Other included.</li>
 <li>Bookmarks restore the selection. Right-click opens the Power BI context menu. A hierarchy in Category gives <strong>Drilldown</strong>.</li>

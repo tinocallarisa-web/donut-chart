@@ -27,8 +27,8 @@ author changes Style template in the Format pane. Never on selection or in the s
 
 ROWS
 Categorical mapping, window of 30,000; fetchMoreData, up to 10 more segments (tested in Desktop
-with 54,662 rows). A footnote says when rows are missing. Selections above 1,000 row identities
-are drawn locally only, with a note; select() is not called. Segment: 6 largest segments per category + Other (n).
+with 54,662 rows). A footnote says when rows are missing. Selections above 1,000 identities
+(items or rows) are drawn locally only, with a note; select() is not called, no filter. Segment: 6 largest segments per category + Other (n).
 
 PRIVACY
 privileges []. No network, no telemetry, no browser storage. src uses no innerHTML. 12 languages.

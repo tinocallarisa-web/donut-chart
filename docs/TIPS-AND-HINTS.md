@@ -38,8 +38,8 @@ Rows: up to 30,000 at a time; the visual asks Power BI for up to 10 more blocks.
   the only thing that names the slice.
 - **Show the data table without Pro.** In Automatic it appears with Compare with, Target or Annotation. Set Format → Data
   table → Position to Right, Left or Bottom to show it with just Values.
-- **Open Other.** In the data table, click Other (5) ▸ (→ on the keyboard). The five largest categories always keep their
-  own slice. Show at most 20 and Group below 0 draw every category.
+- **Open Other.** In the data table, click Other (5) ▸ (→ on the keyboard). The largest categories always keep a name, never
+  an all-grey Other. Show at most 20 and Group below 0 draw every category.
 - **Center.** Point at a slice to read its name, value and share; select several to read their sum.
 - **Sort.** Click a header of the data table; click again to reverse. Not saved with the report.
 - **⚠ in the change column.** Value and share moved in opposite directions: value up but share down because the total grew
@@ -51,8 +51,9 @@ Rows: up to 30,000 at a time; the visual asks Power BI for up to 10 more blocks.
   proportional to its total. Too many panels: "Showing N of M panels".
 - **A tooltip measure does not show.** With Segment or Small multiples a slice is several rows and the measure is not
   summed (a margin % summed would be false). Use a report page tooltip.
-- **Large selections.** With Segment or Small multiples, a selection above 1,000 rows is drawn only inside the visual, with the
-  note "Too many rows to filter other visuals"; nothing is filtered outside and bookmarks do not keep it.
+- **Large selections.** A selection of more than 1,000 items (rows, with Segment or Small multiples) is drawn only inside the
+  visual, with a note ("Too many items…" or "Too many rows…"); nothing is filtered outside, Other included, and bookmarks
+  do not keep it.
 - **Fonts.** Labels, center, legend, data table, summary, footnotes and small multiples titles each have a font.
 - **Conditional formatting (fx).** Format → Slices → Colors → All slices (fx); also the border and the table header.
 - **Styles.** Report theme and Classic are free; Boardroom, Ledger, Editorial, Signal, Aurora and Terrace are Pro.
