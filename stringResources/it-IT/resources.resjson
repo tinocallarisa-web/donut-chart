@@ -237,6 +237,7 @@
   "UI_Loading": "Caricamento di altre righe: {0} finora",
   "UI_Rounded": "Percentuali arrotondate per sommare 100%",
   "UI_NewNote": "nuovo: nessun valore in {0} · uscito: nessun valore ora",
+  "UI_PreviewTop": "Anteprima Pro: prime {0} categorie",
   "UI_SegNested": "Ogni {0} appartiene a un solo {1}: metti {1} in Categoria e {0} in Segmento",
   "UI_ManyCats": "{0} categorie: le prime {1} pesano il {2}. Un grafico a barre o una treemap si legge meglio.",
   "UI_NotesNotText": "Annotazioni richiede testo: imposta il campo su Primo",

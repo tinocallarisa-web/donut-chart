@@ -237,6 +237,7 @@
   "UI_Loading": "Chargement d’autres lignes : {0} pour l’instant",
   "UI_Rounded": "Pourcentages arrondis pour totaliser 100 %",
   "UI_NewNote": "nouveau : aucune valeur dans {0} · sorti : aucune valeur maintenant",
+  "UI_PreviewTop": "Aperçu Pro : {0} premières catégories",
   "UI_SegNested": "Chaque {0} appartient à un seul {1} : placez {1} dans Catégorie et {0} dans Segment",
   "UI_ManyCats": "{0} catégories : les {1} premières pèsent {2}. Un graphique à barres ou un treemap se lit mieux.",
   "UI_NotesNotText": "Annotations attend du texte : réglez le champ sur Premier",

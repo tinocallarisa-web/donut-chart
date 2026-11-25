@@ -237,6 +237,7 @@
   "UI_Loading": "Loading more rows: {0} so far",
   "UI_Rounded": "Percentages rounded to add up to 100%",
   "UI_NewNote": "new: no value in {0} · gone: no value now",
+  "UI_PreviewTop": "Pro preview: first {0} categories",
   "UI_SegNested": "Each {0} belongs to one {1}: put {1} in Category and {0} in Segment",
   "UI_ManyCats": "{0} categories: the top {1} hold {2}. A bar chart or treemap reads this better.",
   "UI_NotesNotText": "Annotations expects text: set the field to First",

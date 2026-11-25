@@ -237,6 +237,7 @@
   "UI_Loading": "Ładowanie kolejnych wierszy: na razie {0}",
   "UI_Rounded": "Procenty zaokrąglone, aby sumowały się do 100%",
   "UI_NewNote": "nowe: brak wartości w {0} · wypadło: brak wartości teraz",
+  "UI_PreviewTop": "Podgląd Pro: pierwsze kategorie ({0})",
   "UI_SegNested": "Każdy element {0} należy do jednego {1}: umieść {1} w Kategorii, a {0} w Segmencie",
   "UI_ManyCats": "Kategorie: {0}; pierwsze {1} to {2}. Wykres słupkowy lub treemap czyta się lepiej.",
   "UI_NotesNotText": "Adnotacje wymagają tekstu: ustaw pole na Pierwszy",

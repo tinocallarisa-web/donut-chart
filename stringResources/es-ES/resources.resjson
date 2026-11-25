@@ -237,6 +237,7 @@
   "UI_Loading": "Cargando más filas: {0} por ahora",
   "UI_Rounded": "Porcentajes redondeados para que sumen 100 %",
   "UI_NewNote": "nueva: sin valor en {0} · sale: sin valor ahora",
+  "UI_PreviewTop": "Vista previa Pro: primeras {0} categorías",
   "UI_SegNested": "Cada {0} pertenece a un solo {1}: pon {1} en Categoría y {0} en Segmento",
   "UI_ManyCats": "{0} categorías: las {1} primeras suman el {2}. Un gráfico de barras o un treemap se lee mejor.",
   "UI_NotesNotText": "Anotaciones espera texto: pon el campo en Primero",

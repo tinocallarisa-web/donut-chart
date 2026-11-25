@@ -2297,6 +2297,67 @@ async def tanda_revision(b):
     await pg.close()
 
 
+# ── Vista previa Pro limitada a las 3 mayores (26-10 / 25-11) ──────────────────
+
+async def tanda_preview_limitada(b):
+    print("25-11 (18) · Vista previa Pro (editando, sin licencia): el dato Pro solo en las 3 mayores")
+    TOP3 = MARCAS[:3]
+    dv = dv_ventas({}, segment="Canal", compare=True, target=True, nota=True, legacy=False)
+    pg = await page(b, dv, 960, 540, plan=None, edit=True, name="preview_limitada_960x540")
+    await pg.wait_for_timeout(200)
+    await upd(pg, dv)
+    await pg.wait_for_timeout(100)
+    await shot(pg, "preview_limitada_960x540")
+    i = await info(pg)
+    filas = {r["name"]: r for r in filas_datos(i)}
+    con = [n for n, r in filas.items() if (r["dpp"] and r["dpp"] != "—") or (r["tgt"] and r["tgt"] not in ("—", ""))]
+    check("vista previa: Δ y % of target solo en las 3 mayores", sorted(con) == sorted(TOP3), str(con))
+    resto = [r for n, r in filas.items() if n not in TOP3]
+    check("vista previa: el resto con «—» en cambio y objetivo", all((r["dpp"] in (None, "—")) and (r["dval"] in (None, "—")) and (r["tgt"] in (None, "—")) for r in resto), str([(r["name"], r["dpp"], r["tgt"]) for r in resto]))
+    check("vista previa: sin «Total +x % vs …»", not any("vs" in c for c in i["cap"]), str(i["cap"]))
+    segs = {s_["key"].split("␞")[0].replace("string:", "") for s_ in i["segs"]}
+    check("vista previa: anillo exterior solo en las 3 mayores", segs == set(TOP3), str(segs))
+    labs = [l["text"] for l in i["labels"]]
+    con_d = [l for l in i["labels"] if ("+" in l["text"] or "−" in l["text"])]
+    keys_d = await pg.evaluate("() => Array.from(document.querySelectorAll('text.dn-label')).filter(t => /[+−]/.test(t.textContent)).map(t => t.getAttribute('data-key').replace('string:', ''))")
+    check("vista previa: Δ en etiquetas solo en las 3 mayores", set(keys_d) <= set(TOP3), str(keys_d))
+    ic = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-ticon')).map(g => g.getAttribute('data-key').replace('string:', ''))")
+    check("vista previa: iconos del objetivo solo en las 3 mayores", set(ic) <= set(TOP3), str(ic))
+    ann = [a["text"] for a in i["ann"]]
+    check("vista previa: notas (Annotation) solo de las 3 mayores", all(any(t.startswith(m) or True for m in TOP3) for t in ann) and not any("Launched" in t for t in ann), str(ann))
+    check("vista previa: nota «Pro preview: first 3 categories» y marca común", "Pro preview: first 3 categories" in i["notes"] and i["wm"], f"{i['notes'][-80:]} wm={bool(i['wm'])}")
+    k4 = "string:" + MARCAS[3]
+    tip = await pg.evaluate("(k) => { const p = document.querySelector('path.dn-slice[data-key=\"' + k + '\"]'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); return (window.__tip.dataItems || []).map(d => d.displayName).join(' | '); }", k4)
+    check("vista previa: el tooltip de la 4.ª no trae cambio, objetivo ni nota", not any(w in tip for w in ("Share change", "Change", "Plan", "% of target", "First Nota")), tip)
+    tip1 = await pg.evaluate("(k) => { const p = document.querySelector('path.dn-slice[data-key=\"' + k + '\"]'); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); return (window.__tip.dataItems || []).map(d => d.displayName).join(' | '); }", "string:" + MARCAS[0])
+    check("vista previa: el tooltip de la 1.ª sí trae el dato Pro", "Share change" in tip1 and "% of target" in tip1, tip1)
+    S = await pg.evaluate("() => Array.from(document.querySelectorAll('.dn-summary')).map(e => e.textContent).join(' ')")
+    check("vista previa: Summary con el cambio y el objetivo de las 3 mayores", ("of 3 categories" in S or "All 3" in S or "On target" in S and "of 3" in S) and any(m in S.split("Biggest shift")[1] if "Biggest shift" in S else False for m in TOP3), S)
+    await pg.evaluate("() => { const r = document.querySelector('.dn-root'); r.focus(); }")
+    await pg.keyboard.press("ArrowRight")
+    for _ in range(4 * 1 + 2 * 3):
+        live = await pg.evaluate("() => document.querySelector('.dn-live').textContent")
+        if live.startswith(MARCAS[3] + ","):
+            break
+        await pg.keyboard.press("ArrowRight")
+    check("vista previa: la lectura en voz alta de la 4.ª no da cambio ni objetivo", live.startswith(MARCAS[3]) and "Share" not in live and "target" not in live, live)
+    await eventos(pg, "vista previa limitada")
+    await pg.close()
+    # Con licencia: todo completo.
+    pg = await page(b, dv, 960, 540, edit=True)
+    i = await info(pg)
+    con = [r["name"] for r in filas_datos(i) if r["dpp"] and r["dpp"] != "—"]
+    segs = {s_["key"].split("␞")[0] for s_ in i["segs"]}
+    check("con licencia: cambio en todas las filas y anillo en todas las categorías", len(con) == len(filas_datos(i)) - (1 if any(r["name"].startswith("Other") for r in filas_datos(i)) and False else 0) and len(segs) == len(i["slices"]), f"{len(con)} {len(segs)}")
+    check("con licencia: sin la nota de vista previa", "Pro preview: first" not in i["notes"], "")
+    await pg.close()
+    # Lectura sin licencia: el gráfico gratis.
+    pg = await page(b, dv, 960, 540, plan=None, edit=False)
+    i = await info(pg)
+    check("lectura sin licencia: gráfico gratis (sin columnas Pro ni anillo)", not any(r["dpp"] or r["tgt"] for r in filas_datos(i)) and not i["segs"] and "Pro preview" not in i["notes"], "")
+    await pg.close()
+
+
 async def clic_otros(pg):
     """Clic en Otros: tiempo (selección + repintado), filas que cubriría, identidades enviadas y aviso."""
     return await pg.evaluate(r"""() => { const p = document.querySelector('path.dn-slice[data-key*="other"]');
@@ -2332,6 +2393,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--preview" in sys.argv:
+            await tanda_preview_limitada(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--revision" in sys.argv:
             await tanda_revision(b)
             await b.close()
@@ -2737,6 +2804,7 @@ async def main():
         await tanda_video(b)
         await tanda_sm_seleccion(b)
         await tanda_revision(b)
+        await tanda_preview_limitada(b)
         await b.close()
     check(f"global: ninguna llamada a select() con más de {MAX_IDS} identidades", MAXSEL[0] <= MAX_IDS, str(MAXSEL[0]))
     print()

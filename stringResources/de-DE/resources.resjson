@@ -237,6 +237,7 @@
   "UI_Loading": "Weitere Zeilen werden geladen: bisher {0}",
   "UI_Rounded": "Prozentwerte gerundet, damit sie 100 % ergeben",
   "UI_NewNote": "neu: kein Wert in {0} · weg: jetzt kein Wert",
+  "UI_PreviewTop": "Pro-Vorschau: erste {0} Kategorien",
   "UI_SegNested": "Jede(s) {0} gehört zu genau einem {1}: {1} in Kategorie und {0} in Segment ziehen",
   "UI_ManyCats": "{0} Kategorien: die ersten {1} machen {2} aus. Ein Balkendiagramm oder eine Treemap ist besser lesbar.",
   "UI_NotesNotText": "Anmerkungen erwartet Text: Feld auf „Erste“ stellen",

@@ -237,6 +237,7 @@
   "UI_Loading": "Meer rijen laden: tot nu toe {0}",
   "UI_Rounded": "Percentages afgerond zodat ze samen 100% zijn",
   "UI_NewNote": "nieuw: geen waarde in {0} · weg: nu geen waarde",
+  "UI_PreviewTop": "Pro-voorbeeld: eerste {0} categorieën",
   "UI_SegNested": "Elke {0} hoort bij één {1}: zet {1} in Categorie en {0} in Segment",
   "UI_ManyCats": "{0} categorieën: de eerste {1} zijn samen {2}. Een staafdiagram of treemap leest beter.",
   "UI_NotesNotText": "Aantekeningen verwacht tekst: zet het veld op Eerste",

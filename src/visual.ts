@@ -106,6 +106,8 @@ for (const k of PRO_STYLES) {
  * la selección se ve solo dentro del visual, con aviso, y no se envía nada hacia fuera.
  */
 const MAX_SELECT_IDS = 1000;
+/** Categorías con el dato Pro en la vista previa sin licencia (las mayores por valor). */
+const PREVIEW_TOP = 3;
 // Lección (25-11): declarar general.filter rompe select() en Desktop (un clic normal dejó de filtrar); por eso «Otros»
 // por encima del tope no usa un filtro NotIn. Ver memoria.
 /** Segmentos con nombre por categoría en el anillo exterior; el resto, en un «Other (n)» de la categoría. */
@@ -225,6 +227,11 @@ export class Visual implements IVisual {
     private localOnly = false;
     /** Decimales de % of target en este update (computeTgtDec). */
     private tgtDec = 0;
+    /**
+     * Vista previa Pro limitada (norma de cartera, 26-10): editando sin licencia, el dato de Compare, Target, Segment y
+     * Annotations solo en las PREVIEW_TOP mayores categorías; el resto, «—» o sin anillo. Vacío = sin límite.
+     */
+    private previewKeys: Set<string> | null = null;
     private selN = 0;
     /** Por update: segmentos de cada categoría (top SEG_MAX + «Other») y sus valores (ver segListOf / segSplit). */
     private segLists = new Map<string, { sd: Dim; keys: string[] }[]>();
@@ -824,6 +831,7 @@ export class Visual implements IVisual {
         // Pro: cambio frente a Compare with, orden (cabecera / Sort by change) y paneles. Colores antes de ordenar: el
         // color va con la categoría, no con la posición.
         this.computeChanges();
+        this.previewKeys = this.computePreviewKeys();
         this.tgtDec = this.computeTgtDec();
         this.applySort();
         this.panels = this.buildPanels();
@@ -1159,6 +1167,23 @@ export class Visual implements IVisual {
         return si >= 0 ? { e, sd: l[si].sd, si } : null;
     }
 
+    /** Las PREVIEW_TOP mayores categorías con nombre, solo en la vista previa sin licencia con alguna función de datos Pro. */
+    private computePreviewKeys(): Set<string> | null {
+        if (this.isPro || !this.proPreview) return null;
+        const t = this.attemptedProFeatures().touched;
+        if (!["comparison", "targets", "segments", "annotations"].some(f => t.has(f))) return null;
+        return new Set(this.entries.filter(e => !e.isOther).slice().sort((a, b) => b.value - a.value).slice(0, PREVIEW_TOP).map(e => e.key));
+    }
+
+    /** ¿Lleva el dato Pro esta clave (categoría, miembro de Otros o par)? Con licencia, siempre. */
+    private pv(key: string | null | undefined): boolean {
+        if (!this.previewKeys) return true;
+        if (!key) return false;
+        const inner = Visual.unscope(key).inner;
+        const i = inner.indexOf("␞");
+        return this.previewKeys.has(i >= 0 ? inner.slice(0, i) : inner);
+    }
+
     /**
      * Decimales de % of target (para todo el visual: tabla, tooltip, voz): 0 salvo que hagan falta para que el número no
      * contradiga su símbolo (Met at 99,5: «✕ 99%» junto a «✓ 99%»). Se busca el mínimo, hasta 2, con el que: un ✓ no
@@ -1172,6 +1197,7 @@ export class Visual implements IVisual {
         const vals: { pct: number; g: string }[] = [];
         const add = (v: number, t: number | null) => { const st = this.tgtStatus(v, t); if (st) vals.push({ pct: st.pct, g: st.glyph }); };
         for (const e of this.entries) {
+            if (!this.pv(e.key)) continue;
             add(e.value, e.tgt);
             if (e.isOther) for (const c of e.members) add(c.value, c.tgt !== null && c.tgt > 0 ? c.tgt : null);
         }
@@ -1297,6 +1323,7 @@ export class Visual implements IVisual {
             if (down.length) out.push(this.tf("UI_MixDown", "⚠ {0}: value down, share up", down.join(", ")));
             if (v.tags) out.push(this.tf("UI_NewNote", "new: no value in {0} · gone: no value now", this.cmpName));
         }
+        if (this.previewKeys) out.push(this.tf("UI_PreviewTop", "Pro preview: first {0} categories", String(PREVIEW_TOP)));
         if (this.editing && this.segNested && this.previewOf("segments")) {
             const cat = m.categoryName, seg = m.segmentCol.source.displayName;
             out.push(this.tf("UI_SegNested", "Each {0} belongs to one {1}: put {1} in Category and {0} in Segment", cat, seg));
@@ -1498,12 +1525,12 @@ export class Visual implements IVisual {
             out.push(this.tf("UI_SumTop3", "The top three add up to {0}.", this.fmtPct(reales.slice(0, 3).reduce((a, e) => a + e.pct, 0))));
         }
         if (this.cmpOn) {
-            const mov = this.entries.filter(e => e.ch && !e.ch.isNew && !e.ch.isGone && e.ch.dpp10 !== 0)
+            const mov = this.entries.filter(e => this.pv(e.key) && e.ch && !e.ch.isNew && !e.ch.isGone && e.ch.dpp10 !== 0)
                 .sort((a, b) => Math.abs(b.ch.dpp10) - Math.abs(a.ch.dpp10))[0];
             if (mov) out.push(this.tf("UI_SumMove", "Biggest shift vs {0}: {1}, {2} pp.", this.cmpName, mov.name, this.fmtPP(mov.ch.dpp10)));
         }
         if (this.tgtOn) {
-            const st = this.entries.map(e => this.tgtStatus(e.value, e.tgt)).filter(x => !!x);
+            const st = this.entries.filter(e => this.pv(e.key)).map(e => this.tgtStatus(e.value, e.tgt)).filter(x => !!x);
             if (st.length) {
                 // Fallo = ✕ (el criterio de Status on slices = Misses only); ≈ es «en el objetivo dentro de la tolerancia».
                 const n = String(st.length);
@@ -1724,7 +1751,7 @@ export class Visual implements IVisual {
         };
         this.entries.slice(0, n - f).forEach((e, idx) => {
             const ci = item(e.key, e.name, this.swatch(e, this.arcIndexOf(e, idx), fs), "");
-            if (!this.segOn || !withSeg) { list.appendChild(ci); return; }
+            if (!this.segOn || !withSeg || !this.pv(e.key)) { list.appendChild(ci); return; }
             const grp = document.createElement("div");
             grp.className = "dn-lgroup";
             grp.appendChild(ci);
@@ -1860,6 +1887,8 @@ export class Visual implements IVisual {
             if (showDV) out.dval = warn(this.chgText(ch, "val"), ch.mix);
             return out;
         };
+        // Vista previa limitada: las filas sin dato Pro llevan «—» en las columnas de cambio (sin minibarra ni ⚠).
+        const dash: Content = { bar: "", dpp: "—", dval: "—" };
         const tgtCell = (v: number, t: number | null): string | Node => {
             const st = this.tgtStatus(v, t);
             if (!st) return "—";
@@ -1887,7 +1916,8 @@ export class Visual implements IVisual {
             if (cmp || this.smOn) {
                 const tc = cmp ? this.cmpTotal() : 0;
                 // Con small multiples la tabla es la del total de todos los paneles: lo dice su título.
-                const cap = tc > 0 ? this.tf("UI_TotalVs", "Total {0} vs {1}", this.fmtSignedPct(m.total / tc - 1), this.cmpName) : this.smOn ? this.t("UI_Total", "Total") : "";
+                // En la vista previa limitada no se da el cambio del total (sería el dato completo).
+                const cap = tc > 0 && !this.previewKeys ? this.tf("UI_TotalVs", "Total {0} vs {1}", this.fmtSignedPct(m.total / tc - 1), this.cmpName) : this.smOn ? this.t("UI_Total", "Total") : "";
                 // Título de la tabla, fuera de la rejilla y con aire: con el total del donut apagado por defecto, integrarlo
                 // en la fila Total lo haría desaparecer; como título no se mezcla con las columnas.
                 if (cap) {
@@ -1953,20 +1983,22 @@ export class Visual implements IVisual {
                 b.style.color = color;
                 nameNode = b;
             }
-            row("", e.key, e.key, { sw, name: nameNode, val: val(e.value, e.members[0].fmt), pct: pctOf(e.key), ...chg(e.ch), tgt: tgtCell(e.value, e.tgt) }, mark(e.ch));
-            if (!e.isOther) noteRows(e.members[0].notes, e.key);
-            else if (!o.expanded) e.members.forEach(c => noteRows(c.notes, e.key, c.name));
+            const lleva = this.pv(e.key);
+            row("", e.key, e.key, { sw, name: nameNode, val: val(e.value, e.members[0].fmt), pct: pctOf(e.key), ...(lleva ? chg(e.ch) : dash),
+                tgt: lleva ? tgtCell(e.value, e.tgt) : "—" }, lleva ? mark(e.ch) : undefined);
+            if (lleva && !e.isOther) noteRows(e.members[0].notes, e.key);
+            else if (lleva && !o.expanded) e.members.forEach(c => noteRows(c.notes, e.key, c.name));
             if (e.isOther && o.expanded) {
                 e.members.forEach((c, i) => {
                     const ch = e.memberCh ? e.memberCh[i] : undefined;
-                    const rr = row("dn-child", c.key, c.key, { sw: "", name: c.name, val: val(c.value, c.fmt), pct: pctOf(c.key), ...chg(ch),
-                        tgt: tgtCell(c.value, c.tgt !== null && c.tgt > 0 ? c.tgt : null) }, mark(ch));
+                    const rr = row("dn-child", c.key, c.key, { sw: "", name: c.name, val: val(c.value, c.fmt), pct: pctOf(c.key), ...(lleva ? chg(ch) : dash),
+                        tgt: lleva ? tgtCell(c.value, c.tgt !== null && c.tgt > 0 ? c.tgt : null) : "—" }, lleva ? mark(ch) : undefined);
                     rr.forEach(x => x.setAttribute("data-child", "1"));
                     rr[ni].style.color = muted;
-                    noteRows(c.notes, c.key);
+                    if (lleva) noteRows(c.notes, c.key);
                 });
             }
-            if (o.segRows && this.segOn) {
+            if (o.segRows && this.segOn && lleva) {
                 const split = this.segSplit(e, null, segUnitsT(e));
                 split.forEach((x, si) => {
                     // Solo los segmentos con valor en esta categoría (con Segment poco poblado, nada de filas a 0 %).
@@ -1990,16 +2022,16 @@ export class Visual implements IVisual {
         // Las que salen: con su cuota anterior en el cambio, sin sector (no tienen valor actual).
         for (const e of cmp ? this.goneEntries : []) {
             const gsw = this.swatch({ ...e, color: "transparent" }, -1, o.fs);
-            const r = row("dn-gone", undefined, null, { sw: gsw, name: e.name, val: "—", pct: this.fmtPct(0, dT), ...chg(e.ch), tgt: "" }, mark(e.ch));
+            const r = row("dn-gone", undefined, null, { sw: gsw, name: e.name, val: "—", pct: this.fmtPct(0, dT), ...(this.previewKeys ? dash : chg(e.ch)), tgt: "" }, this.previewKeys ? undefined : mark(e.ch));
             r.forEach(c => { c.style.color = muted; });
         }
         if (o.total) {
             const tc = this.cmpTotal();
             const tt = this.targetTotals();
             const totCh: Content = {};
-            if (showDV && tc > 0) totCh.dval = this.fmtSignedPct(m.total / tc - 1);
+            if (showDV && tc > 0) totCh.dval = this.previewKeys ? "—" : this.fmtSignedPct(m.total / tc - 1);
             const r = row("dn-t", undefined, null, { sw: "", name: this.t("UI_Total", "Total"), val: val(m.total, m.format), pct: this.fmtPct(100 * Math.pow(10, dT), dT),
-                ...totCh, tgt: tgt ? tgtCell(m.total, tt.tgt > 0 ? tt.tgt : null) : undefined });
+                ...totCh, tgt: tgt ? (this.previewKeys ? "—" : tgtCell(m.total, tt.tgt > 0 ? tt.tgt : null)) : undefined });
             r.forEach(c => { c.style.borderTopColor = this.hc ? this.hcFg : alpha(color, 0.35); });
         }
         this.styleGrid(grid, cols.length, color);
@@ -2490,6 +2522,7 @@ export class Visual implements IVisual {
             const sgen = d3.arc<any>().innerRadius(r0).outerRadius(r1).padRadius(r1).padAngle(gap > 0 ? gap / Math.max(r1, 1) : 0);
             const gs = pg.append("g").attr("class", "dn-segs").attr("transform", "translate(" + cx + "," + cy + ")");
             for (const a of p.arcs) {
+                if (!this.pv(a.e.key)) continue;   // vista previa limitada: anillo solo en las mayores
                 const split = this.segSplit(a.e, p.fkey, a.e.pct);
                 const tot = split.reduce((x, y) => x + y.v, 0);
                 let ang = a.a0;
@@ -2540,7 +2573,7 @@ export class Visual implements IVisual {
 
     /** ¿Algún sector de algún panel lleva icono? Si no, no se reserva hueco en el borde. */
     private anyStatusIcon(): boolean {
-        return this.panels.some(p => p.entries.some(e => this.showsStatus(this.tgtStatus(e.value, e.tgt))));
+        return this.panels.some(p => p.entries.some(e => this.pv(e.key) && this.showsStatus(this.tgtStatus(e.value, e.tgt))));
     }
 
     /** Icono de estado del objetivo en el borde exterior de cada sector (✓ ≈ ✕), solo donde cabe sin pisar al vecino. */
@@ -2551,7 +2584,7 @@ export class Visual implements IVisual {
         const gi = pg.append("g").attr("class", "dn-ticons").attr("transform", "translate(" + g0.cx + "," + g0.cy + ")");
         for (const a of p.arcs) {
             const st = this.tgtStatus(a.e.value, a.e.tgt);
-            if (!st || !this.showsStatus(st)) continue;
+            if (!st || !this.showsStatus(st) || !this.pv(a.e.key)) continue;
             if ((a.a1 - a.a0) * r < d * 1.15) continue;
             const am = (a.a0 + a.a1) / 2;
             const x = Math.sin(am) * r, y = -Math.cos(am) * r;
@@ -2599,7 +2632,7 @@ export class Visual implements IVisual {
             default: parts = [pct];
         }
         // "36 % +2,1": el Δ pp detrás del %, solo si cabe en TODAS (es lo primero que se retira).
-        if (this.cmpOn && e.ch && parts.some(x => x.kind === "pct")) parts.push({ kind: "chg", text: e.ch.isNew ? this.t("UI_New", "new") : this.fmtPP(e.ch.dpp10) });
+        if (this.cmpOn && this.pv(e.key) && e.ch && parts.some(x => x.kind === "pct")) parts.push({ kind: "chg", text: e.ch.isNew ? this.t("UI_New", "new") : this.fmtPP(e.ch.dpp10) });
         return parts;
     }
 
@@ -3195,7 +3228,7 @@ export class Visual implements IVisual {
         items.push({ displayName: this.t("UI_Share", "Share"), value: this.fmtPct(pct) });
         const hl = e ? e.hl : ch0 ? ch0.c.hl : null;
         if (m.hasHighlights && hl !== null && !P) items.push({ displayName: this.t("UI_Highlighted", "Highlighted"), value: this.fmtFull(hl, fmt) });
-        this.proTipLines(items, value, cmp, chg, tgt, fmt);
+        if (this.pv(e ? e.key : ch0 ? ch0.e.key : null)) this.proTipLines(items, value, cmp, chg, tgt, fmt);
         if (e && e.isOther) {
             const mp = e.memberPct;
             e.members.slice(0, 10).forEach((c, i) => {
@@ -3205,7 +3238,7 @@ export class Visual implements IVisual {
             if (e.members.length > 10) items.push({ displayName: this.tf("UI_More", "+{0} more", String(e.members.length - 10)), value: "" });
         }
         // Anotaciones (Pro): el texto completo también en el tooltip.
-        if (this.annOn) {
+        if (this.annOn && this.pv(e ? e.key : ch0 ? ch0.e.key : null)) {
             const cats = e ? (e.isOther ? [] : e.members) : ch0 ? [ch0.c] : [];
             for (const c of cats) for (const n of c.notes) items.push({ displayName: m.annotationCol.source.displayName, value: n });
         }
@@ -3618,7 +3651,7 @@ export class Visual implements IVisual {
             if (e.isOther && this.otherExpanded && this.tableEl && this.tableEl.getAttribute("data-expanded") === "true") {
                 e.members.forEach((c, i) => out.push({ kind: "child", e, c, i }));
             }
-            if (this.segOn) this.segListOf(e).forEach((it, si) => out.push({ kind: "seg", e, sd: it.sd, si, key: Visual.pairKey(e.key, it.sd.key) }));
+            if (this.segOn && this.pv(e.key)) this.segListOf(e).forEach((it, si) => out.push({ kind: "seg", e, sd: it.sd, si, key: Visual.pairKey(e.key, it.sd.key) }));
         }
         return out;
     }
@@ -3646,15 +3679,17 @@ export class Visual implements IVisual {
         if (it.kind === "entry") {
             const e = it.e;
             let txt = e.name + ", " + this.fmtFull(e.value, e.members[0].fmt) + ", " + this.fmtPct(e.pct) + ", " + pos;
-            txt += this.announcePro(e.value, e.ch, e.tgt);
-            if (this.annOn && !e.isOther && e.members[0].notes.length) txt += ". " + e.members[0].notes.join(". ");
+            if (this.pv(e.key)) {
+                txt += this.announcePro(e.value, e.ch, e.tgt);
+                if (this.annOn && !e.isOther && e.members[0].notes.length) txt += ". " + e.members[0].notes.join(". ");
+            }
             if (e.isOther) txt += ". " + (this.otherExpanded ? this.t("UI_Collapse", "Left arrow collapses the list") : this.t("UI_Expand", "Right arrow expands the list"));
             if (this.isSelected(e)) txt += ". " + this.t("UI_Selected", "Selected");
             this.live.textContent = txt;
         } else if (it.kind === "child") {
             const ch = it.e.memberCh ? it.e.memberCh[it.i] : undefined;
             this.live.textContent = it.c.name + ", " + this.fmtFull(it.c.value, it.c.fmt) + ", " + this.fmtPct(it.e.memberPct[it.i]) + ", " + pos
-                + this.announcePro(it.c.value, ch, it.c.tgt !== null && it.c.tgt > 0 ? it.c.tgt : null) + (this.annOn && it.c.notes.length ? ". " + it.c.notes.join(". ") : "");
+                + (this.pv(it.e.key) ? this.announcePro(it.c.value, ch, it.c.tgt !== null && it.c.tgt > 0 ? it.c.tgt : null) + (this.annOn && it.c.notes.length ? ". " + it.c.notes.join(". ") : "") : "");
         } else {
             const x = this.segSplit(it.e, null, it.e.pct)[it.si];
             this.live.textContent = it.e.name + " · " + it.sd.name + ", " + this.fmtFull(x.v, it.e.members[0].fmt) + ", " + this.fmtPct(x.pct) + ", " + pos
