@@ -98,6 +98,8 @@ for (const k of PRO_STYLES) {
     TEMPLATES[k] = { labels: { color: t.text }, center: { color: t.text }, legend: { color: t.text }, dataTable: { color: t.text },
         scaleRing: { color: t.axis }, slices: { otherColor: luminance(t.bg) < 0.2 ? "#8C8C8C" : "#A19F9D" } };
 }
+/** Nota «Percentages rounded to add up to 100%»: desactivada (Tino, 25-11); se conserva por si se ofrece como opción. */
+const SHOW_ROUNDED_NOTE = false;
 const FONT_DEFAULT = "'Segoe UI', wf_segoe-ui_normal, helvetica, arial, sans-serif";
 
 /** "Report theme" (por defecto): los colores del tema del informe, como un visual nativo. */
@@ -1112,7 +1114,7 @@ export class Visual implements IVisual {
     /**
      * Notas al pie. Regla (Tino, 25-11): una nota solo sale si lo que explica está a la vista.
      *  - Excluded (negativos, blancos, ceros) y filas incompletas o cargando: siempre (afectan al dibujo entero).
-     *  - Redondeo a 100 %: solo con porcentajes visibles (etiquetas con % o columna Share de la tabla).
+     *  - Redondeo a 100 %: hoy no sale (SHOW_ROUNDED_NOTE); si se activa, solo con porcentajes visibles.
      *  - ⚠ de mezcla: solo por cada fila con ⚠ dibujado, con su nombre y el sentido («⚠ Zumos: value up, share down»).
      *  - new / gone: solo si la tabla enseña esas marcas.
      *  - El aviso «Target total ≠ actual» se retira: el % de objetivo de cada categoría no depende de él y el total ya
@@ -1132,7 +1134,7 @@ export class Visual implements IVisual {
             if (parts.length) out.push(this.tf("UI_Excluded", "Excluded: {0}", parts.join(", ")));
             if (this.moreState === "incomplete") out.push(this.tf("UI_Incomplete", "Showing {0} rows; Other is incomplete", this.int(m.rowCount)));
             else if (this.moreState === "loading") out.push(this.tf("UI_Loading", "Loading more rows: {0} so far", this.int(m.rowCount)));
-            if (v.pct && this.roundedNote) out.push(this.t("UI_Rounded", "Percentages rounded to add up to 100%"));
+            if (SHOW_ROUNDED_NOTE && v.pct && this.roundedNote) out.push(this.t("UI_Rounded", "Percentages rounded to add up to 100%"));
             const up = (v.mix ?? []).filter(x => (x.ch.dval ?? 0) > 0).map(x => x.name);
             const down = (v.mix ?? []).filter(x => !((x.ch.dval ?? 0) > 0)).map(x => x.name);
             if (up.length) out.push(this.tf("UI_MixUp", "⚠ {0}: value up, share down", up.join(", ")));
