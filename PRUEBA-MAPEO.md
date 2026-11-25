@@ -64,3 +64,7 @@ cuando `format` no llega; compare = 0 con valor > 0 → "new"; centro = total de
 
 - **Filtro por pares de segmento OK:** con Familia en Category, Marca en Segment, compare, target y nota, clic en un
   trozo del anillo exterior filtra correctamente la tarjeta de suma (identidad categoría + segmento).
+
+## Verificado en Desktop (Tino, 25-11, build .65)
+
+- Filtro con tarjeta de suma (Familia × Marca, Other (2)): clic en categoría, Other, lazo interior/exterior y mixto → la tarjeta coincide con el centro. Antes (.59/.62) la identidad «de categoría» era la de su primera fila (Refrescos → solo Nord Cola 2,22M); arreglado con identidades de todas las filas (aa59126).
