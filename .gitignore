@@ -7,3 +7,4 @@ webpack.statistics.*.html
 _releases/
 __pycache__/
 tools/simulador/capturas/
+!Model_videos.pbix
