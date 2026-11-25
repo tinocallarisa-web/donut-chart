@@ -37,7 +37,7 @@ import { dataViewWildcard } from "powerbi-visuals-utils-dataviewutils";
 import "./../style/visual.less";
 
 import { STRINGS } from "./strings";
-import { OBJECTS, PANE, PropSpec } from "./formatSpec";
+import { FONTS, FontSpec, GROUPS, OBJECTS, PANE, PropSpec } from "./formatSpec";
 import { buildModel, groupEntries, largestRemainder, computeChange, splitChange, Model, Entry, Cat, Change, Dim, OTHER_KEY } from "./model";
 import { createProWatermark, renderProWatermark } from "./comun/watermark";
 
@@ -78,7 +78,7 @@ const CLASSIC = ["#118DFF", "#12239E", "#E66C37", "#6B007B", "#E044A7", "#744EC2
 
 const TEMPLATES: Record<string, Settings> = {
     report: {},
-    classic: { labels: { color: "#252423" }, center: { color: "#252423" }, legend: { color: "#252423" },
+    classic: { labels: { color: "#252423" }, center: { color: "#252423" }, legend: { color: "#252423" }, dataTable: { color: "#252423" },
         scaleRing: { color: "#605E5C" }, slices: { otherColor: "#A19F9D" } },
 };
 
@@ -95,7 +95,7 @@ export const STYLE_TOKENS: Record<string, StyleTokens> = {
 };
 for (const k of PRO_STYLES) {
     const t = STYLE_TOKENS[k];
-    TEMPLATES[k] = { labels: { color: t.text }, center: { color: t.text }, legend: { color: t.text },
+    TEMPLATES[k] = { labels: { color: t.text }, center: { color: t.text }, legend: { color: t.text }, dataTable: { color: t.text },
         scaleRing: { color: t.axis }, slices: { otherColor: luminance(t.bg) < 0.2 ? "#8C8C8C" : "#A19F9D" } };
 }
 const FONT_DEFAULT = "'Segoe UI', wf_segoe-ui_normal, helvetica, arial, sans-serif";
@@ -106,7 +106,7 @@ function reportTemplate(host: IVisualHost): Settings {
     const fg: string = pal?.foreground?.value ?? "#252423";
     const soft: string = pal?.foregroundNeutralSecondary?.value ?? "#605E5C";
     const ter: string = pal?.foregroundNeutralTertiary?.value ?? "#A19F9D";
-    return { labels: { color: fg }, center: { color: fg }, legend: { color: fg }, scaleRing: { color: soft }, slices: { otherColor: ter } };
+    return { labels: { color: fg }, center: { color: fg }, legend: { color: fg }, dataTable: { color: fg }, scaleRing: { color: soft }, slices: { otherColor: ter } };
 }
 
 let instanceCounter = 0;
@@ -121,6 +121,7 @@ interface Arc { e: Entry; a0: number; a1: number; idx: number; }
 interface SegArc { e: Entry; sd: Dim; si: number; key: string; a0: number; a1: number; value: number; hl: number; pct: number; color: string; }
 /** Un donut dibujado: el total, o un panel de Small multiples con sus filas (mismo conjunto de "Otros" y colores). */
 interface PanelDraw { index: number; fkey: string | null; title: string; entries: Entry[]; total: number; arcs: Arc[]; segArcs: SegArc[]; geo: Geo | null; g: Sel<SVGGElement> | null; }
+interface FontInfo { family: string; bold: boolean; italic: boolean; underline: boolean; }
 interface TableOpts { fs: number; expanded: boolean; fold: number; compact: boolean; header: boolean; total: boolean; rounded: boolean; segRows: boolean; ann: boolean; bar: boolean; second: boolean; }
 type FocusItem = { kind: "entry"; e: Entry } | { kind: "child"; e: Entry; c: Cat; i: number } | { kind: "seg"; e: Entry; sd: Dim; si: number; key: string };
 
@@ -177,8 +178,14 @@ export class Visual implements IVisual {
     private tableEl: HTMLDivElement | null = null;
     /** Letra de la tabla dibujada: las etiquetas nunca la superan. */
     private tableFs = 0;
-    /** Leyenda compacta (Content = Legend, o Automatic sin Compare/Target/Annotation en los pozos). */
-    private legendMode = false;
+    /** Leyenda clásica dibujada (independiente de la tabla) y su letra. */
+    private legendEl: HTMLDivElement | null = null;
+    private legendFs = 0;
+    /** Las etiquetas nunca superan la letra de la leyenda ni la de la tabla (la menor de las dibujadas). */
+    private get capFs(): number {
+        const v = [this.legendFs, this.tableFs].filter(x => x > 0);
+        return v.length ? Math.min(...v) : 0;
+    }
     /** Segment anidado en Category (cada categoría en un solo segmento): sin anillo exterior. */
     private segNested = false;
     private canvasCtx: CanvasRenderingContext2D | null = null;
@@ -364,7 +371,7 @@ export class Visual implements IVisual {
      * % de la tabla con sus propios decimales, por resto mayor (suman 100 y los de "Otros" suman lo de "Otros").
      */
     private tablePct(): { pct: Map<string, number>; adjusted: boolean } {
-        const d = this.pctDec("legend");
+        const d = this.pctDec("dataTable");
         const units = 100 * Math.pow(10, d);
         const lr = largestRemainder(this.entries.map(e => e.value), units);
         const pct = new Map<string, number>();
@@ -396,13 +403,41 @@ export class Visual implements IVisual {
 
     private get font(): string { return this.look?.font ?? FONT_DEFAULT; }
 
-    private measure(text: string, size: number, bold = false): number {
+    /** Ancho del texto con la fuente real (familia, negrita, cursiva): las fuentes anchas deciden si caben. */
+    private measure(text: string, size: number, bold = false, f: FontInfo | null = null): number {
         if (!this.canvasCtx) {
             try { this.canvasCtx = document.createElement("canvas").getContext("2d"); } catch { this.canvasCtx = null; }
         }
-        if (!this.canvasCtx) return text.length * size * 0.56;
-        this.canvasCtx.font = (bold ? "600 " : "") + size + "px " + this.font;
+        const b = bold || !!f?.bold;
+        if (!this.canvasCtx) return text.length * size * (b ? 0.66 : 0.56);
+        this.canvasCtx.font = (f?.italic ? "italic " : "") + (b ? "700 " : "") + size + "px " + (f?.family ?? this.font);
         return this.canvasCtx.measureText(text).width;
+    }
+
+    /**
+     * Fuente elegida en el panel para un objeto (FontControl). Vacía = la del estilo activo (Report theme: la del
+     * informe por defecto; cada estilo de la colección, la suya).
+     */
+    private fontOf(obj: string, fam = "fontFamily", bold: string | null = "bold", ital: string | null = "italic", und: string | null = "underline"): FontInfo {
+        const o = this.settings?.[obj] ?? {};
+        const v = String(o[fam] || "").trim();
+        return { family: v ? cssFamily(v) : this.font, bold: bold ? !!o[bold] : false, italic: ital ? !!o[ital] : false, underline: und ? !!o[und] : false };
+    }
+
+    private get lblFont(): FontInfo { return this.fontOf("labels"); }
+
+    /** Aplica una fuente a un elemento HTML (tabla, leyenda, Summary, títulos de panel). */
+    private static styleFont(el: HTMLElement, f: FontInfo, setWeight = true): void {
+        el.style.fontFamily = f.family;
+        if (setWeight) el.style.fontWeight = f.bold ? "700" : "";
+        el.style.fontStyle = f.italic ? "italic" : "";
+        el.style.textDecoration = f.underline ? "underline" : "";
+    }
+
+    /** Aplica una fuente a un texto SVG. */
+    private static svgFont(t: Sel<SVGTextElement>, f: FontInfo): void {
+        t.style("font-family", f.family).attr("font-weight", f.bold ? 700 : 400).attr("font-style", f.italic ? "italic" : null)
+            .attr("text-decoration", f.underline ? "underline" : null);
     }
 
     /** Texto que escala con el visual: k = lado menor / 300 (0,6–1,8), nunca bajo 8 px ni bajo el mínimo de Accessibility. */
@@ -419,7 +454,9 @@ export class Visual implements IVisual {
         for (const obj of Object.keys(OBJECTS)) {
             out[obj] = {};
             for (const p of OBJECTS[obj].props) {
-                const saved = o?.[obj]?.[p.name];
+                let saved = o?.[obj]?.[p.name];
+                // Informes anteriores al 25-11: la tabla vivía en el objeto legend (mismos nombres de propiedad).
+                if (saved === undefined && obj === "dataTable" && p.name !== "position" && o?.legend?.content === "table") saved = o?.legend?.[p.name];
                 let v: any = p.type === "fill" ? saved?.solid?.color : saved;
                 if (v === undefined || v === null) v = t?.[obj]?.[p.name];
                 if (v === undefined || v === null) v = p.def;
@@ -431,6 +468,13 @@ export class Visual implements IVisual {
                 }
                 out[obj][p.name] = v;
             }
+        }
+        // Migración de la leyenda-tabla (antes del 25-11, legend.content = table): la tabla pasa a Data table en la posición
+        // que tenía (Top no existe en la tabla: Bottom) y la leyenda clásica se apaga, para que el informe se vea como antes.
+        if (o?.legend?.content === "table" && o?.dataTable?.position === undefined) {
+            const old = String(o.legend.position ?? "auto");
+            out.dataTable.position = old === "top" ? "bottom" : old;
+            out.legend.position = "off";
         }
         return out;
     }
@@ -690,9 +734,11 @@ export class Visual implements IVisual {
 
     private clearDrawing(): void {
         this.svg.selectAll("*").remove();
-        d3.select(this.root).selectAll(".dn-landing, .dn-msg, .dn-table, .dn-notes, .dn-summary").remove();
+        d3.select(this.root).selectAll(".dn-landing, .dn-msg, .dn-table, .dn-legend, .dn-notes, .dn-summary").remove();
         this.tableEl = null;
         this.tableFs = 0;
+        this.legendEl = null;
+        this.legendFs = 0;
         this.geo = null;
         this.arcs = [];
         d3.select(this.root).selectAll(".dn-sm-title, .dn-smnote").remove();
@@ -866,16 +912,31 @@ export class Visual implements IVisual {
     private get annOn(): boolean { return !!this.model?.annotationCol && this.settings.annotations?.show !== false && this.previewOf("annotations"); }
     /** Columnas Pro que la tabla dibuja de verdad (con su pozo, su licencia o vista previa y su interruptor en Legend). */
     private get proColumns(): boolean {
-        const l = this.settings.legend ?? {};
+        const l = this.settings.dataTable ?? {};
         return (this.cmpOn && l.colChange !== false) || (this.tgtOn && l.colTarget !== false) || (this.annOn && l.colNote !== false) || (this.segOn && !!l.segRows);
     }
 
-    /** Content efectivo de la leyenda: Automatic = Table si hay Compare, Target o Annotation en los pozos; si no, Legend. */
-    private legendContent(): "legend" | "table" {
-        const c = String(this.settings.legend?.content ?? "auto");
-        if (c === "legend" || c === "table") return c;
+    /**
+     * ¿Se pide la tabla de datos? Off = no; Automatic = con Compare, Target o Annotation en los pozos (o si un informe
+     * anterior al 25-11 tenía la leyenda en Content = Table). Que llegue a dibujarse depende además de que tenga columnas.
+     */
+    private tableWanted(): boolean {
+        const pos = String(this.settings.dataTable?.position ?? "auto");
+        if (pos === "off") return false;
+        if (pos !== "auto" || this.legacyTable) return true;
         const has = (r: string) => !!this.model?.hasRole(r);
-        return has("compare") || has("target") || has("annotation") ? "table" : "legend";
+        return has("compare") || has("target") || has("annotation");
+    }
+
+    /** Informe guardado con la leyenda-tabla anterior (legend.content = table): la tabla sigue encendida. */
+    private get legacyTable(): boolean {
+        return (this.dataView?.metadata?.objects as any)?.legend?.content === "table";
+    }
+
+    /** Columnas de cifras que la tabla dibujaría: sin ninguna no hay tabla (nunca una tabla de una sola columna). */
+    private get tableHasData(): boolean {
+        const l = this.settings.dataTable ?? {};
+        return l.colValue !== false || l.colShare !== false || (this.cmpOn && l.colChange !== false) || (this.tgtOn && l.colTarget !== false);
     }
 
     private get cmpName(): string { return this.model?.compareCol?.source.displayName ?? ""; }
@@ -1085,53 +1146,72 @@ export class Visual implements IVisual {
 
     // ── Disposición ──────────────────────────────────────────────────────────
 
+    /**
+     * Disposición: Summary arriba; después la leyenda clásica (por fuera) y la tabla de datos (dentro del hueco que deja),
+     * cada una con su posición; el donut ocupa lo que queda. Sin tabla, los avisos van al pie.
+     */
     private layoutAndDraw(W: number, H: number): void {
         const s = this.settings;
         const pad = Math.max(2, Math.round(4 * this.k));
-        let pos = String(s.legend.position);
-        const auto = pos === "auto";
-        if (auto) pos = W / Math.max(1, H) >= 1.3 ? "right" : "bottom";
-        this.legendMode = pos !== "off" && this.legendContent() === "legend";
-        // Frase de resumen arriba: lo que ocupa se descuenta del alto para la leyenda y el donut.
         const top0 = this.drawSummary(W, H, pad);
-        const Hs = H - top0;
         let ax = pad, ay = top0 + pad;
-        let aw = W - 2 * pad, ah = Hs - 2 * pad;
-        if (pos !== "off") {
-            let t = this.legendMode ? this.fitLegend(pos, W, Hs, pad) : this.fitTable(pos, W, Hs, pad);
+        let aw = W - 2 * pad, ah = H - top0 - 2 * pad;
+        type Fit = { el: HTMLDivElement; w: number; h: number; score: number; fs: number; lines?: number };
+        const place = (t: Fit, pos: string) => {
+            t.el.setAttribute("data-pos", pos);
+            if (pos === "right" || pos === "left") {
+                t.el.style.left = (pos === "right" ? ax + aw - t.w : ax) + "px";
+                t.el.style.top = (ay + Math.max(0, Math.round((ah - t.h) / 2))) + "px";
+                if (pos === "left") ax += t.w + pad;
+                aw -= t.w + pad;
+            } else {
+                t.el.style.top = (pos === "bottom" ? ay + ah - t.h : ay) + "px";
+                t.el.style.left = (ax + Math.max(0, Math.round((aw - t.w) / 2))) + "px";
+                if (pos === "top") ay += t.h + pad;
+                ah -= t.h + pad;
+            }
+        };
+        // Leyenda clásica. Automatic: arriba en línea si cabe en dos líneas sin plegar; si no, al lado en un visual ancho
+        // (el hueco sobrante es horizontal) o arriba partida en líneas en uno alto (el sobrante es vertical).
+        let lpos = String(s.legend.position);
+        if (lpos !== "off") {
+            let t: Fit | null;
+            if (lpos === "auto") {
+                t = this.fitLegend("top", aw + 2 * pad, ah + 2 * pad, pad);
+                lpos = "top";
+                if ((!t || t.score > 0 || (t.lines ?? 1) > 2) && aw / Math.max(1, ah) >= 1.3) {
+                    const alt = this.fitLegend("right", aw + 2 * pad, ah + 2 * pad, pad);
+                    if (alt && (!t || alt.score <= t.score)) { if (t) t.el.remove(); t = alt; lpos = "right"; }
+                    else if (alt) alt.el.remove();
+                }
+            } else t = this.fitLegend(lpos, aw + 2 * pad, ah + 2 * pad, pad);
+            if (t) { this.legendEl = t.el; this.legendFs = t.fs; place(t, lpos); }
+        }
+        // Tabla de datos.
+        if (this.tableWanted()) {
+            let tpos = String(s.dataTable.position);
+            const auto = tpos === "auto";
+            if (auto) tpos = aw / Math.max(1, ah) >= 1.3 ? "right" : "bottom";
+            let t: Fit | null = this.fitTable(tpos, aw + 2 * pad, ah + 2 * pad, pad);
             // Con columnas Pro, en Automático se prueba también la otra posición y gana la que menos recorta.
-            if (!this.legendMode && auto && this.proColumns && (!t || t.score > 0)) {
-                const otra = pos === "right" ? "bottom" : "right";
-                const alt = this.fitTable(otra, W, Hs, pad);
-                if (alt && (!t || alt.score < t.score)) { if (t) t.el.remove(); t = alt; pos = otra; }
+            if (auto && this.proColumns && (!t || t.score > 0)) {
+                const otra = tpos === "right" ? "bottom" : "right";
+                const alt = this.fitTable(otra, aw + 2 * pad, ah + 2 * pad, pad);
+                if (alt && (!t || alt.score < t.score)) { if (t) t.el.remove(); t = alt; tpos = otra; }
                 else if (alt) alt.el.remove();
             }
-            if (t) {
-                this.tableEl = t.el;
-                this.tableFs = t.fs;
-                t.el.setAttribute("data-pos", pos);
-                if (pos === "right" || pos === "left") {
-                    t.el.style.left = (pos === "right" ? W - pad - t.w : pad) + "px";
-                    t.el.style.top = (top0 + Math.max(pad, Math.round((Hs - t.h) / 2))) + "px";
-                    aw = W - 3 * pad - t.w;
-                    if (pos === "left") ax = 2 * pad + t.w;
-                } else {
-                    t.el.style.top = (pos === "bottom" ? H - pad - t.h : top0 + pad) + "px";
-                    t.el.style.left = Math.max(pad, Math.round((W - t.w) / 2)) + "px";
-                    ah = Hs - 3 * pad - t.h;
-                    if (pos === "top") ay = top0 + 2 * pad + t.h;
-                }
-            }
-        } else {
-            const notes = this.notesList();
+            if (t) { this.tableEl = t.el; this.tableFs = t.fs; place(t, tpos); }
+        }
+        if (!this.tableEl) {
+            const notes = this.notesList(false);
             if (notes.length) {
                 const n = document.createElement("div");
                 n.className = "dn-notes";
-                Object.assign(n.style, { left: pad + "px", width: (W - 2 * pad) + "px", fontSize: this.fz(8.5) + "px", color: this.mutedInk });
+                Object.assign(n.style, { left: ax + "px", width: aw + "px", fontSize: Math.max(this.minFs, this.fz(8.5)) + "px", color: this.mutedInk });
                 for (const t of notes) { const d = document.createElement("div"); d.textContent = t; n.appendChild(d); }
                 this.root.appendChild(n);
                 const h = n.offsetHeight;
-                n.style.top = (H - pad - h) + "px";
+                n.style.top = (ay + ah - h) + "px";
                 ah -= h + pad;
             }
         }
@@ -1202,6 +1282,7 @@ export class Visual implements IVisual {
         Object.assign(el.style, { left: pad + "px", top: pad + "px", width: (W - 2 * pad) + "px", fontSize: fs + "px",
             color: this.hc ? this.hcFg : String(s.summary.color || this.ink) });
         el.setAttribute("aria-hidden", "true");
+        Visual.styleFont(el, this.fontOf("summary"));
         this.root.appendChild(el);
         for (const text of [ss.join(" "), ss[0]]) {
             el.textContent = text;
@@ -1238,12 +1319,13 @@ export class Visual implements IVisual {
         const maxW = side ? Math.floor(W * (mini ? 0.55 : pro ? 0.64 : 0.5)) : W - 2 * pad;
         const maxH = side ? H - 2 * pad : Math.floor(H * (mini ? 0.6 : pro ? 0.56 : 0.5));
         if (maxW < 40 || maxH < 12) return null;
-        const fs0 = this.fz(Number(s.legend.fontSize));
+        if (!this.tableHasData) return null;
+        const fs0 = this.fz(Number(s.dataTable.fontSize));
         const floorFs = Math.max(this.minFs, Math.round(fs0 * 0.9 * 2) / 2);
         const o: TableOpts = {
             fs: fs0, expanded: this.otherExpanded, fold: 0, compact: false,
-            header: !!s.legend.header, total: s.legend.totalRow === "on" || (s.legend.totalRow === "auto" && s.slices.shape === "pie"),
-            rounded: true, segRows: !!s.legend.segRows, ann: s.legend.colNote !== false, bar: true, second: true,
+            header: !!s.dataTable.header, total: s.dataTable.totalRow === "on" || (s.dataTable.totalRow === "auto" && s.slices.shape === "pie"),
+            rounded: true, segRows: !!s.dataTable.segRows, ann: s.dataTable.colNote !== false, bar: true, second: true,
         };
         let score = 0;
         let el: HTMLDivElement | null = null;
@@ -1272,7 +1354,7 @@ export class Visual implements IVisual {
             if (mini && o.header) { o.header = false; score += 20; continue; }
             if (o.total) { o.total = false; score += 20; continue; }
             if (o.header) { o.header = false; score += 30; continue; }
-            const chgCol = this.cmpOn && s.legend.colChange !== false;
+            const chgCol = this.cmpOn && s.dataTable.colChange !== false;
             if (o.bar && chgCol) { o.bar = false; score += 100; continue; }
             if (o.second && chgCol && s.compare.changeShown === "both") { o.second = false; score += 100; continue; }
             if (o.fs > this.minFs) { o.fs = Math.max(this.minFs, o.fs - 0.5); score += 1000; continue; }
@@ -1288,7 +1370,7 @@ export class Visual implements IVisual {
      * 10 px ni bajo el mínimo de Accessibility, y las etiquetas nunca la superan). Un nombre que no cabe se recorta con
      * elipsis (el tooltip del elemento lo da entero); no se quita ningún elemento salvo, al final, "+N more" si no caben.
      */
-    private fitLegend(pos: string, W: number, H: number, pad: number): { el: HTMLDivElement; w: number; h: number; score: number; fs: number } | null {
+    private fitLegend(pos: string, W: number, H: number, pad: number): { el: HTMLDivElement; w: number; h: number; score: number; fs: number; lines: number } | null {
         const s = this.settings;
         const side = pos === "right" || pos === "left";
         const mini = W < 200 || H < 140;
@@ -1297,24 +1379,23 @@ export class Visual implements IVisual {
         const maxH = side ? H - 2 * pad : Math.floor(H * (mini ? 0.42 : 0.3));
         if (maxW < fs * 3 || maxH < fs * 1.3) return null;
         const n = this.entries.length;
-        for (const withNotes of [true, false]) {
-            for (let fold = 0; fold <= n; fold = fold === 0 ? Math.min(2, n) : fold + 1) {
-                const el = this.buildLegend(side, fs, fold, maxW, withNotes);
-                el.style.visibility = "hidden";
-                el.style.left = "0px"; el.style.top = "0px";
-                el.style.width = "max-content";
-                this.root.appendChild(el);
-                let w = Math.ceil(el.getBoundingClientRect().width);
-                if (w > maxW) { el.style.width = maxW + "px"; w = maxW; }
-                const h = Math.ceil(el.getBoundingClientRect().height);
-                if (h <= maxH) {
-                    el.style.visibility = "";
-                    el.style.width = w + "px";
-                    return { el, w, h, score: fold, fs };
-                }
-                el.remove();
-                if (fold >= n) break;
+        for (let fold = 0; fold <= n; fold = fold === 0 ? Math.min(2, n) : fold + 1) {
+            const el = this.buildLegend(side, fs, fold, maxW, false);
+            el.style.visibility = "hidden";
+            el.style.left = "0px"; el.style.top = "0px";
+            el.style.width = "max-content";
+            this.root.appendChild(el);
+            let w = Math.ceil(el.getBoundingClientRect().width);
+            if (w > maxW) { el.style.width = maxW + "px"; w = maxW; }
+            const h = Math.ceil(el.getBoundingClientRect().height);
+            if (h <= maxH) {
+                el.style.visibility = "";
+                el.style.width = w + "px";
+                const tops = new Set(Array.from(el.querySelectorAll<HTMLElement>(".dn-li")).map(x => Math.round(x.getBoundingClientRect().top)));
+                return { el, w, h, score: fold, fs, lines: tops.size };
             }
+            el.remove();
+            if (fold >= n) break;
         }
         return null;
     }
@@ -1322,10 +1403,11 @@ export class Visual implements IVisual {
     private buildLegend(side: boolean, fs: number, fold: number, maxW: number, withNotes: boolean): HTMLDivElement {
         const s = this.settings;
         const el = document.createElement("div");
-        el.className = "dn-table dn-legend" + (side ? " dn-legend-v" : " dn-legend-h");
+        el.className = "dn-legend" + (side ? " dn-legend-v" : " dn-legend-h");
         el.setAttribute("aria-label", this.t("Obj_legend", "Legend"));
         const color = this.hc ? this.hcFg : String(s.legend.color || this.ink);
         Object.assign(el.style, { fontSize: fs + "px", color });
+        Visual.styleFont(el, this.fontOf("legend"));
         const list = document.createElement("div");
         list.className = "dn-litems";
         list.setAttribute("role", "list");
@@ -1399,15 +1481,17 @@ export class Visual implements IVisual {
         el.setAttribute("aria-label", this.t("UI_LegendTable", "Legend table"));
         // Cifras compactas = poco sitio: padding de celda más apretado (igual en todas las celdas).
         if (o.compact) el.classList.add("dn-tight");
-        const color = this.hc ? this.hcFg : String(s.legend.color || this.ink);
+        const color = this.hc ? this.hcFg : String(s.dataTable.color || this.ink);
         Object.assign(el.style, { fontSize: o.fs + "px", color });
-        const L = s.legend;
+        Visual.styleFont(el, this.fontOf("dataTable"));
+        const L = s.dataTable;
         const cmp = this.cmpOn && L.colChange !== false, tgt = this.tgtOn && L.colTarget !== false;
         const shown = String(s.compare?.changeShown ?? "both");
         const showPP = cmp && shown !== "value";
         const showDV = cmp && (shown === "value" || (shown === "both" && o.second));
         const showBar = showPP && o.bar;
-        const cols: string[] = ["sw", "name"];
+        // Con la leyenda clásica a la vista, la tabla no repite la muestra de color (no se lee doble).
+        const cols: string[] = this.legendEl ? ["name"] : ["sw", "name"];
         if (L.colValue !== false) cols.push("val");
         if (L.colShare !== false) cols.push("pct");
         if (showBar) cols.push("bar");
@@ -1416,13 +1500,14 @@ export class Visual implements IVisual {
         if (tgt) cols.push("tgt");
         const grid = document.createElement("div");
         grid.className = "dn-grid";
-        grid.style.gridTemplateColumns = "auto minmax(0, 1fr)" + " auto".repeat(cols.length - 2);
+        grid.style.gridTemplateColumns = (this.legendEl ? "" : "auto ") + "minmax(0, 1fr)" + " auto".repeat(cols.length - (this.legendEl ? 1 : 2));
+        const ni = cols.indexOf("name");
         el.appendChild(grid);
-        const units = String(s.legend.displayUnits), dec = this.numOpt("legend");
+        const units = String(s.dataTable.displayUnits), dec = this.numOpt("dataTable");
         // Auto = cifra completa; en tamaño mini (o si no cabe) la tabla pasa a unidades automáticas.
         const val = (v: number, fmt: string | undefined) => this.fmtValue(v, fmt ?? m.format, o.compact && units === "auto" ? "auto" : units, dec, "full");
         const tp = this.tablePct();
-        const dT = this.pctDec("legend");
+        const dT = this.pctDec("dataTable");
         const pctOf = (key: string) => this.fmtPct(tp.pct.get(key) ?? 0, dT);
         const muted = this.mutedInk;
         let ri = 0;
@@ -1510,9 +1595,10 @@ export class Visual implements IVisual {
         };
         const hColor = this.hc ? this.hcFg : String(L.headerColor || color);
         if (o.header) {
-            if (cmp) {
-                const tc = this.cmpTotal();
-                const cap = tc > 0 ? this.tf("UI_TotalVs", "Total {0} vs {1}", this.fmtSignedPct(m.total / tc - 1), this.cmpName) : "";
+            if (cmp || this.smOn) {
+                const tc = cmp ? this.cmpTotal() : 0;
+                // Con small multiples la tabla es la del total de todos los paneles: lo dice su título.
+                const cap = tc > 0 ? this.tf("UI_TotalVs", "Total {0} vs {1}", this.fmtSignedPct(m.total / tc - 1), this.cmpName) : this.smOn ? this.t("UI_Total", "Total") : "";
                 // Título de la tabla, fuera de la rejilla y con aire: con el total del donut apagado por defecto, integrarlo
                 // en la fila Total lo haría desaparecer; como título no se mezcla con las columnas.
                 if (cap) {
@@ -1585,7 +1671,7 @@ export class Visual implements IVisual {
                     const rr = row("dn-child", c.key, c.key, { sw: "", name: c.name, val: val(c.value, c.fmt), pct: pctOf(c.key), ...chg(ch),
                         tgt: tgtCell(c.value, c.tgt !== null && c.tgt > 0 ? c.tgt : null) }, mark(ch));
                     rr.forEach(x => x.setAttribute("data-child", "1"));
-                    rr[1].style.color = muted;
+                    rr[ni].style.color = muted;
                     noteRows(c.notes, c.key);
                 });
             }
@@ -1598,7 +1684,7 @@ export class Visual implements IVisual {
                     const ssw = this.segSwatch(this.segColor(e.color, si, split.length), si, o.fs);
                     const rr = row("dn-seg", key, key, { sw: ssw, name: x.sd.name, val: val(x.v, e.members[0].fmt), pct: this.fmtPct(x.pct, dT) });
                     rr.forEach(c => c.setAttribute("data-seg", "1"));
-                    rr[1].style.color = muted;
+                    rr[ni].style.color = muted;
                 });
             }
         });
@@ -1650,7 +1736,7 @@ export class Visual implements IVisual {
      * con ella), texto al 5 %; nunca en alto contraste.
      */
     private styleGrid(grid: HTMLDivElement, nCols: number, color: string): void {
-        const L = this.settings.legend;
+        const L = this.settings.dataTable;
         const mode = String(L.gridlines ?? "horizontal");
         const lineC = this.hc ? this.hcFg : String(L.gridColor || alpha(color, 0.18));
         const lw = Math.max(1, Number(L.gridWidth) || 1) + "px";
@@ -1686,11 +1772,11 @@ export class Visual implements IVisual {
     /** Fondo de la cabecera: color fijo o regla fx (evaluada por fila; se toma la primera con valor). Nunca en alto contraste. */
     private headerBg(): string {
         if (this.hc) return "";
-        const fixed = String(this.settings.legend?.headerBackground || "");
+        const fixed = String(this.settings.dataTable?.headerBackground || "");
         if (fixed) return fixed;
         const cats = this.dataView?.categorical?.categories ?? [];
         for (const cc of cats) for (const o of (cc.objects ?? []) as any[]) {
-            const v = o?.legend?.headerBackground?.solid?.color;
+            const v = o?.dataTable?.headerBackground?.solid?.color;
             if (v) return String(v);
         }
         return "";
@@ -1858,7 +1944,7 @@ export class Visual implements IVisual {
         p.arcs = this.makeArcs(p.entries, sa);
         const labelsOn = !!s.labels.show;
         // Las etiquetas nunca con más letra que la tabla (la tabla es la lectura principal).
-        const fsL = this.tableFs > 0 ? Math.max(this.minFs, Math.min(this.fz(Number(s.labels.fontSize)), this.tableFs)) : this.fz(Number(s.labels.fontSize));
+        const fsL = this.capFs > 0 ? Math.max(this.minFs, Math.min(this.fz(Number(s.labels.fontSize)), this.capFs)) : this.fz(Number(s.labels.fontSize));
         let R = R0;
         let labels: PlacedLabel[] = [];
         const outSpace = ringSpace + iconSpace;
@@ -1867,7 +1953,7 @@ export class Visual implements IVisual {
             // dentro: se encoge la letra de todas a la vez hasta el mínimo y luego se recorta el contenido de todas
             // (Δ → valor → nombre → %); el sector que no admite ni la mínima se queda sin etiqueta (el dato está en la tabla).
             // Fuera con guía solo con la tabla en Off, donde la etiqueta es lo único que nombra el sector.
-            const tableOn = !!this.tableEl;
+            const tableOn = !!this.tableEl || !!this.legendEl;
             const pmode = String(s.labels.position);
             const mode: "inside" | "auto" | "outside" = tableOn || pmode === "inside" ? "inside" : pmode === "outside" ? "outside" : "auto";
             const levels = Math.max(...p.arcs.map(a => this.variants(this.labelParts(a.e)).length));
@@ -1991,6 +2077,7 @@ export class Visual implements IVisual {
             Object.assign(t.style, { left: (x + pad + 2) + "px", top: (y + pad) + "px", width: Math.max(0, cw - 2 * pad - 4) + "px", fontSize: tfs + "px",
                 fontWeight: sm.titleBold ? "600" : "400", color: hc ? this.hcFg : String(sm.titleColor || this.ink), textAlign: sm.titleAlign === "center" ? "center" : "left",
                 lineHeight: "1.3" });
+            Visual.styleFont(t, this.fontOf("smallMultiples", "titleFontFamily", null, "titleItalic", "titleUnderline"), false);
             this.root.appendChild(t);
             const R = sm.sizeByTotal && maxT > 0 ? Math.max(4, R0 * Math.sqrt(p.total / maxT)) : R0;
             const cx = x + cw / 2, cy = y + titleH + dh / 2;
@@ -2003,7 +2090,7 @@ export class Visual implements IVisual {
             // El texto escala con el PANEL (lado menor / 300), no con el visual entero: paneles pequeños, letra pequeña.
             const kp = Math.max(0.6, Math.min(1.8, Math.min(cw, ch) / 300));
             let fsL = Math.max(this.minFs, Math.round(Number(s.labels.fontSize) * kp * 2) / 2);
-            if (this.tableFs > 0) fsL = Math.max(this.minFs, Math.min(fsL, this.tableFs));
+            if (this.capFs > 0) fsL = Math.max(this.minFs, Math.min(fsL, this.capFs));
             const levels = Math.max(1, ...panels.map(p => Math.max(0, ...p.arcs.map(a => this.variants(this.labelParts(a.e)).length))));
             const sizes: number[] = [];
             for (let f = fsL; f > this.minFs; f -= 0.5) sizes.push(f);
@@ -2103,7 +2190,7 @@ export class Visual implements IVisual {
             }
         }
         if (this.segOn && s.labels.show && s.labels.segment !== "off" && p.segArcs.length) {
-            const fsSeg = labels.length ? labels[0].fs : Math.max(this.minFs, this.tableFs > 0 ? Math.min(this.fz(Number(s.labels.fontSize)), this.tableFs) : this.fz(Number(s.labels.fontSize)));
+            const fsSeg = labels.length ? labels[0].fs : Math.max(this.minFs, this.capFs > 0 ? Math.min(this.fz(Number(s.labels.fontSize)), this.capFs) : this.fz(Number(s.labels.fontSize)));
             this.drawSegLabels(pg, p, Rin + Math.max(1.5, Math.min(3, R * 0.02)), R, cx, cy, fsSeg);
         }
         if (ringOn) this.drawScaleRing(pg, cx, cy, g0.ringR, sa);
@@ -2168,7 +2255,7 @@ export class Visual implements IVisual {
     private labelParts(e: Entry): LabelPart[] {
         const s = this.settings;
         let c = String(s.labels.content);
-        if (c === "auto") c = s.legend.position === "off" ? "namePercent" : "percent";
+        if (c === "auto") c = this.tableEl || this.legendEl ? "percent" : "namePercent";
         const pct: LabelPart = { kind: "pct", text: this.fmtPct(e.pct) };
         const val: LabelPart = { kind: "val", text: this.fmtValue(e.value, e.members[0].fmt ?? this.model.format, String(s.labels.displayUnits), this.numOpt("labels"), "compact") };
         const name: LabelPart = { kind: "name", text: e.name };
@@ -2224,6 +2311,7 @@ export class Visual implements IVisual {
      */
     private planLabels(arcs: Arc[], R: number, Rin: number, ri: number, cx: number, cy: number, ax: number, ay: number, aw: number, ah: number, fs: number, ringSpace: number,
         level: number, mode: "inside" | "auto" | "outside"): { placed: PlacedLabel[]; retired: number; needW: number } {
+        const lf = this.lblFont;
         const h = fs * 1.2;
         const gap = Number(this.settings.slices.gap) || 0;
         const placed: PlacedLabel[] = [];
@@ -2233,7 +2321,7 @@ export class Visual implements IVisual {
             const am = (a.a0 + a.a1) / 2;
             const radii = ri > 0 ? [(ri + Rin) / 2] : [Rin * 0.62, Rin * 0.72, Rin * 0.5];
             if (a.a1 - a.a0 >= 2 * Math.PI - 1e-6) radii.unshift(ri > 0 ? (ri + Rin) / 2 : 0);
-            const w = this.measure(text, fs) + 2;
+            const w = this.measure(text, fs, false, lf) + 2;
             for (const rm of radii) {
                 const x = rm * Math.sin(am), y = -rm * Math.cos(am);
                 if (this.fitsInSlice(x, y, w, h, a.a0, a.a1, ri, Rin, gap / 2 + 1)) {
@@ -2253,14 +2341,14 @@ export class Visual implements IVisual {
         }
         if (!outside.length) return { placed, retired, needW: 0 };
         const e = Math.max(6, fs * 0.8);
-        const needW = Math.max(...outside.map(o => this.measure(o.text, fs))) + 4;
+        const needW = Math.max(...outside.map(o => this.measure(o.text, fs, false, lf))) + 4;
         const rOut = R + ringSpace;
         const hOut = fs * 1.4;
         for (const side of [1, -1]) {
             const colX = cx + side * (rOut + e + 4);
             const avail = side > 0 ? ax + aw - (colX + 3) - 1 : colX - 3 - ax - 1;
             const mine = outside.filter(o => (Math.sin(o.am) >= 0 ? 1 : -1) === side);
-            const items = mine.filter(o => this.measure(o.text, fs) + 2 <= avail).map(o => ({ o, ideal: cy - (rOut + e) * Math.cos(o.am) }));
+            const items = mine.filter(o => this.measure(o.text, fs, false, lf) + 2 <= avail).map(o => ({ o, ideal: cy - (rOut + e) * Math.cos(o.am) }));
             retired += mine.length - items.length;
             const minY = ay + hOut / 2, maxY = ay + ah - hOut / 2;
             // Si no caben todas en la columna, se retiran enteras las de los sectores más pequeños.
@@ -2282,7 +2370,7 @@ export class Visual implements IVisual {
                 const p1: [number, number] = [cx + (rOut + e * 0.6) * Math.sin(am), cy - (rOut + e * 0.6) * Math.cos(am)];
                 const p2: [number, number] = [colX, ys[i]];
                 placed.push({ e: it.o.a.e, text: it.o.text, x: colX + side * 3, y: ys[i], anchor: side > 0 ? "start" : "end", inside: false,
-                    w: this.measure(it.o.text, fs) + 2, fs, leader: [p0, p1, p2] });
+                    w: this.measure(it.o.text, fs, false, lf) + 2, fs, leader: [p0, p1, p2] });
             });
         }
         return { placed, retired, needW };
@@ -2295,6 +2383,7 @@ export class Visual implements IVisual {
      * ni el nombre va sin etiqueta (el dato sigue en el tooltip). El % es del total, coherente con el anillo interior.
      */
     private drawSegLabels(pg: Sel<SVGGElement>, p: PanelDraw, r0: number, r1: number, cx: number, cy: number, fs: number): void {
+        const lf = this.lblFont;
         // Siguiendo el anillo (tangentes, giradas para leerse siempre de pie): en un anillo fino es la única orientación en
         // la que cabe un nombre. La misma para todas.
         const mode = String(this.settings.labels.segment);
@@ -2306,7 +2395,7 @@ export class Visual implements IVisual {
             for (const sa of p.segArcs) {
                 if (sa.a1 - sa.a0 <= 0) continue;
                 const text = withPct ? sa.sd.name + " " + this.fmtPct(sa.pct) : sa.sd.name;
-                const w = this.measure(text, fs);
+                const w = this.measure(text, fs, false, lf);
                 const span = w / rm + 6 / rm;
                 const sag = rm * (1 - Math.cos(Math.min(Math.PI / 2, w / (2 * rm))));
                 if (span > sa.a1 - sa.a0 || h + sag > r1 - r0 - 2) continue;
@@ -2330,7 +2419,8 @@ export class Visual implements IVisual {
             const fill = this.hc ? this.hcFg : contrast("#FFFFFF", l.sa.color) >= contrast("#252423", l.sa.color) ? "#FFFFFF" : "#252423";
             const t = g.append("text").attr("class", "dn-seglabel").attr("data-key", l.sa.key).attr("x", cx + l.x).attr("y", cy + l.y).attr("dy", "0.35em")
                 .attr("transform", "rotate(" + l.rot.toFixed(2) + " " + (cx + l.x).toFixed(2) + " " + (cy + l.y).toFixed(2) + ")")
-                .attr("text-anchor", "middle").attr("font-size", fs).attr("fill", fill).style("font-family", this.font).text(l.text);
+                .attr("text-anchor", "middle").attr("font-size", fs).attr("fill", fill).text(l.text);
+            Visual.svgFont(t, lf);
             if (this.hc) t.attr("paint-order", "stroke").attr("stroke", this.hcBg).attr("stroke-width", 3);
             else if (this.patternsOn) t.attr("paint-order", "stroke").attr("stroke", fill === "#FFFFFF" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)").attr("stroke-width", 2.5);
         }
@@ -2338,6 +2428,7 @@ export class Visual implements IVisual {
 
     private drawLabels(pg: Sel<SVGGElement>, labels: PlacedLabel[]): void {
         const s = this.settings;
+        const lf = this.lblFont;
         const g = pg.append("g").attr("class", "dn-labels").style("pointer-events", "none");
         const outColor = this.hc ? this.hcFg : String(s.labels.color || this.ink);
         for (const l of labels) {
@@ -2351,7 +2442,8 @@ export class Visual implements IVisual {
                 else fill = contrast("#FFFFFF", l.e.color) >= contrast("#252423", l.e.color) ? "#FFFFFF" : "#252423";
             }
             const t = g.append("text").attr("class", "dn-label").attr("data-key", l.e.key).attr("x", l.x).attr("y", l.y).attr("dy", "0.35em")
-                .attr("text-anchor", l.anchor).attr("font-size", l.fs).attr("fill", fill).style("font-family", this.font).text(l.text);
+                .attr("text-anchor", l.anchor).attr("font-size", l.fs).attr("fill", fill).text(l.text);
+            Visual.svgFont(t, lf);
             if (l.inside && this.patternsOn && !this.hc) {
                 t.attr("paint-order", "stroke").attr("stroke", fill === "#FFFFFF" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)").attr("stroke-width", 2.5);
             }
@@ -2390,6 +2482,9 @@ export class Visual implements IVisual {
         gc.selectAll("*").remove();
         if (!g0 || !m || s.slices.shape === "pie" || !s.center.show || g0.ri < 12) return;
         const color = this.hc ? this.hcFg : String(s.center.color || this.ink);
+        const tColor = this.hc ? this.hcFg : String(s.center.titleColor || color);
+        const vf = this.fontOf("center", "valueFontFamily", "valueBold", null, null);
+        const tf = this.fontOf("center", "titleFontFamily", null, null, null);
         const rr = g0.ri * 0.9;
         const custom = String(s.center.title || "").trim();
         const title = focus ? focus.name : (custom || m.measureName);
@@ -2398,12 +2493,14 @@ export class Visual implements IVisual {
         // Auto = unidades automáticas; con unidades elegidas, solo esas.
         const values = [this.fmtValue(v0, f0, cu, cd, "compact")];
         const sub = focus ? this.fmtPct(focus.pct) : "";
-        const fits = (lines: { text: string; fs: number; bold: boolean }[]) => {
+        type CL = { text: string; fs: number; bold: boolean };
+        // bold = la línea del valor (fuente del valor); las demás, la del título.
+        const fits = (lines: CL[]) => {
             const lh = lines.map(l => l.fs * 1.15);
             const total = lh.reduce((a, b) => a + b, 0);
             let y = -total / 2;
             for (let i = 0; i < lines.length; i++) {
-                const w = this.measure(lines[i].text, lines[i].fs, lines[i].bold);
+                const w = this.measure(lines[i].text, lines[i].fs, false, lines[i].bold ? vf : tf);
                 const yt = y, yb = y + lh[i];
                 const worst = Math.max(Math.abs(yt), Math.abs(yb));
                 if (Math.hypot(w / 2, worst) > rr) return false;
@@ -2411,9 +2508,12 @@ export class Visual implements IVisual {
             }
             return true;
         };
-        let chosen: { text: string; fs: number; bold: boolean }[] | null = null;
-        for (let fv = this.fz(Number(s.center.fontSize)); fv >= this.minFs && !chosen; fv -= 1) {
-            const ft = Math.max(this.minFs, fv * 0.45);
+        let chosen: CL[] | null = null;
+        // Value size y Title size escalan con k; si el valor no cabe en el agujero, encoge y el título con él (misma proporción).
+        const fv0 = this.fz(Number(s.center.fontSize));
+        const ratio = Math.max(0.2, Math.min(2, Number(s.center.titleFontSize) / Math.max(1, Number(s.center.fontSize))));
+        for (let fv = fv0; fv >= this.minFs && !chosen; fv -= 1) {
+            const ft = Math.max(this.minFs, fv * ratio);
             for (const v of values) {
                 const withAll = [{ text: title, fs: ft, bold: false }, { text: v, fs: fv, bold: true }];
                 if (sub) withAll.push({ text: sub, fs: ft, bold: false });
@@ -2426,9 +2526,11 @@ export class Visual implements IVisual {
         const lh = chosen.map(l => l.fs * 1.15);
         let y = g0.cy - lh.reduce((a, b) => a + b, 0) / 2;
         chosen.forEach((l, i) => {
-            gc.append("text").attr("class", "dn-center-text").attr("x", g0.cx).attr("y", y + lh[i] / 2).attr("dy", "0.35em").attr("text-anchor", "middle")
-                .attr("font-size", l.fs).attr("font-weight", l.bold ? 600 : 400).attr("fill", color).style("font-family", this.font).style("pointer-events", "none")
-                .attr("opacity", l.bold ? 1 : 0.85).text(l.text);
+            const t = gc.append("text").attr("class", "dn-center-text").attr("data-part", l.bold ? "value" : "title").attr("x", g0.cx).attr("y", y + lh[i] / 2)
+                .attr("dy", "0.35em").attr("text-anchor", "middle")
+                .attr("font-size", l.fs).attr("fill", l.bold ? color : tColor).style("pointer-events", "none")
+                .attr("opacity", l.bold || s.center.titleColor ? 1 : 0.85).text(l.text);
+            Visual.svgFont(t as unknown as Sel<SVGTextElement>, l.bold ? vf : tf);
             y += lh[i];
         });
     }
@@ -2780,8 +2882,9 @@ export class Visual implements IVisual {
             nodes[i].setAttribute("opacity", any && e && !this.isSelected(e) ? "0.45" : "1");
         });
         const focusKey = focus ? (focus.kind === "entry" ? focus.e.key : focus.kind === "child" ? focus.c.key : focus.key) : null;
-        if (this.tableEl) {
-            this.tableEl.querySelectorAll<HTMLElement>("[data-row]").forEach(c => {
+        for (const box of [this.tableEl, this.legendEl]) {
+            if (!box) continue;
+            box.querySelectorAll<HTMLElement>("[data-row]").forEach(c => {
                 const key = c.getAttribute("data-row");
                 const e = this.entryOf(key);
                 const pr = e ? null : this.pairOf(key);
@@ -2793,7 +2896,7 @@ export class Visual implements IVisual {
                 c.style.outlineColor = this.focusColor;
                 c.style.backgroundColor = hover === key ? (this.hc ? "transparent" : "rgba(127,127,127,0.12)") : (c.getAttribute("data-bg") || "");
             });
-            this.tableEl.style.setProperty("--dn-focus-w", Number(this.settings.accessibility.focusWidth) + "px");
+            box.style.setProperty("--dn-focus-w", Number(this.settings.accessibility.focusWidth) + "px");
         }
         // Anillo de foco sobre el sector (o sobre "Otros" si el foco está en uno de sus miembros), en cada panel.
         const gap = Number(this.settings.slices.gap) || 0;
@@ -2897,7 +3000,7 @@ export class Visual implements IVisual {
         const curKey = cur.kind === "entry" ? cur.e.key : cur.kind === "child" ? cur.c.key : cur.key;
         switch (e.key) {
             case "ArrowRight":
-                if (cur.kind === "entry" && cur.e.isOther && !this.otherExpanded && !this.legendMode) { this.setExpanded(true); break; }
+                if (cur.kind === "entry" && cur.e.isOther && !this.otherExpanded && !!this.tableEl) { this.setExpanded(true); break; }
                 this.focusIdx = Math.min(items.length - 1, this.focusIdx + 1); break;
             case "ArrowDown": this.focusIdx = Math.min(items.length - 1, this.focusIdx + 1); break;
             case "ArrowLeft":
@@ -3176,7 +3279,7 @@ export class Visual implements IVisual {
         if (p.type === "bool") return { ...base, control: { type: "ToggleSwitch" as any, properties: { descriptor, value: !!value } } } as any;
         if (p.type === "num") return { ...base, control: { type: "NumUpDown" as any, properties: { descriptor, value: value === null || value === "" ? undefined : Number(value),
             options: { minValue: p.min !== undefined ? { type: 0, value: p.min } : undefined, maxValue: p.max !== undefined ? { type: 1, value: p.max } : undefined } } } } as any;
-        if (p.type === "fill" && obj === "legend" && p.name === "headerBackground") {
+        if (p.type === "fill" && obj === "dataTable" && p.name === "headerBackground") {
             // Fondo de cabecera con fx (como "All slices"): comodín + ConstantOrRule; el color fijo se guarda a nivel general.
             const wild = dataViewWildcard.createDataViewWildcardSelector(dataViewWildcard.DataViewWildcardMatchingOption.InstancesAndTotals);
             return { ...base, control: { type: "ColorPicker" as any, properties: {
@@ -3207,20 +3310,24 @@ export class Visual implements IVisual {
             for (const g of c.groups) {
                 const spec = OBJECTS[g.obj];
                 const pie = this.settings.slices?.shape === "pie";
-                const slices = spec.props.filter(p => p.name !== g.toggle && !(g.obj === "slices" && p.name === "innerRadius" && pie)
-                    && !(g.obj === "labels" && p.name === "segment" && !has("segment"))
-                    && !(g.obj === "summary" && p.name !== "show" && !this.summaryOn)
-                    && !(g.obj === "legend" && !this.legendPropVisible(p.name)))
-                    .map(p => this.slice(g.obj, p));
+                const parts = this.objSlices(g.obj, p => p.name === g.toggle || (g.obj === "slices" && p.name === "innerRadius" && pie) || !this.propVisible(g.obj, p.name));
                 spec.props.forEach(p => revert.push({ objectName: g.obj, propertyName: p.name }));
-                const grp: any = { uid: c.uid + "-" + g.obj + "-group", displayName: g.key ? this.t(g.key, g.label) : undefined, slices };
+                const sinGrupo = parts.find(x => x.group === null);
+                const grp: any = { uid: c.uid + "-" + g.obj + "-group", displayName: g.key ? this.t(g.key, g.label) : undefined, slices: sinGrupo ? sinGrupo.slices : [] };
+
                 if (g.toggle) {
                     const tp = spec.props.find(p => p.name === g.toggle);
                     const ts: any = this.slice(g.obj, tp);
                     ts.suppressDisplayName = true;
                     if (c.groups.length === 1) cardToggle = ts; else grp.topLevelToggle = ts;
                 }
-                groups.push(grp);
+                const named = parts.filter(x => x.group !== null);
+                if (grp.slices.length || !named.length || grp.topLevelToggle) groups.push(grp);
+                // Grupos con nombre (Center: Title / Value) a continuación del grupo principal.
+                for (const x of named) {
+                    const gl = GROUPS[x.group];
+                    groups.push({ uid: c.uid + "-" + g.obj + "-" + x.group, displayName: gl ? this.t(gl[0], gl[1]) : x.group, slices: x.slices } as any);
+                }
             }
             if (c.uid === "slices") {
                 const colors = this.colorSlices();
@@ -3237,18 +3344,21 @@ export class Visual implements IVisual {
     }
 
     /**
-     * Qué propiedades de Legend salen en el panel: con Position = Off solo la posición; con Content = Legend nada de la
-     * tabla; con Table, cada columna Pro solo con su pozo puesto y el formato de números solo con su columna visible.
+     * Qué propiedades salen en el panel. Legend y Data table: con Position = Off solo la posición. Data table: cada
+     * columna Pro solo con su pozo puesto, el formato de números solo con su columna visible, los colores de cabecera y
+     * rejilla solo con cabecera y rejilla.
      */
-    private legendPropVisible(name: string): boolean {
-        const l = this.settings.legend ?? {};
+    private propVisible(obj: string, name: string): boolean {
+        const has = (r: string) => !!this.model?.hasRole(r);
+        if (obj === "labels" && name === "segment") return has("segment");
+        if (obj === "summary") return name === "show" || this.summaryOn;
+        if (obj === "legend") return name === "position" || this.settings.legend?.position !== "off";
+        if (obj !== "dataTable") return true;
+        const l = this.settings.dataTable ?? {};
         if (name === "position") return true;
         if (l.position === "off") return false;
-        if (name === "content" || name === "fontSize" || name === "color") return true;
-        if (this.legendContent() === "legend") return false;
         if ((name === "headerColor" || name === "headerBackground") && l.header === false) return false;
         if ((name === "gridColor" || name === "gridWidth") && l.gridlines === "none") return false;
-        const has = (r: string) => !!this.model?.hasRole(r);
         switch (name) {
             case "colChange": return has("compare");
             case "colTarget": return has("target");
@@ -3258,6 +3368,46 @@ export class Visual implements IVisual {
             case "percentDecimals": return l.colShare !== false;
         }
         return true;
+    }
+
+    /**
+     * Las tarjetas de un objeto: cada FontControl nativo (familia + tamaño + negrita/cursiva/subrayado) en el sitio de
+     * su familia, y los grupos (Center: Title / Value) si el objeto los declara.
+     */
+    private objSlices(obj: string, skip: (p: PropSpec) => boolean): { group: string | null; slices: powerbi.visuals.FormattingSlice[] }[] {
+        const spec = OBJECTS[obj];
+        const fonts = FONTS[obj] ?? [];
+        const used = new Set<string>();
+        fonts.forEach(f => [f.family, f.size, f.bold, f.italic, f.underline].forEach(n => { if (n) used.add(n); }));
+        const out: { group: string | null; slices: powerbi.visuals.FormattingSlice[] }[] = [];
+        const push = (group: string | null, sl: powerbi.visuals.FormattingSlice) => {
+            let g = out.find(x => x.group === group);
+            if (!g) { g = { group, slices: [] }; out.push(g); }
+            g.slices.push(sl);
+        };
+        for (const p of spec.props) {
+            if (skip(p)) continue;
+            const f = fonts.find(x => x.family === p.name);
+            if (f) { push(p.group ?? null, this.fontSlice(obj, f)); continue; }
+            if (used.has(p.name)) continue;
+            push(p.group ?? null, this.slice(obj, p));
+        }
+        return out;
+    }
+
+    private fontSlice(obj: string, f: FontSpec): powerbi.visuals.FormattingSlice {
+        const cur = this.settings?.[obj] ?? {};
+        const d = (name: string) => ({ objectName: obj, propertyName: name });
+        const sizeSpec = OBJECTS[obj].props.find(p => p.name === f.size);
+        const props: any = {
+            // Vacío = la fuente del estilo activo: el desplegable la enseña sin guardarla.
+            fontFamily: { descriptor: d(f.family), value: String(cur[f.family] || this.font) },
+            fontSize: { descriptor: d(f.size), value: Number(cur[f.size] ?? sizeSpec?.def ?? 10) },
+        };
+        if (f.bold) props.bold = { descriptor: d(f.bold), value: !!cur[f.bold] };
+        if (f.italic) props.italic = { descriptor: d(f.italic), value: !!cur[f.italic] };
+        if (f.underline) props.underline = { descriptor: d(f.underline), value: !!cur[f.underline] };
+        return { uid: obj + "-" + f.uid, displayName: this.t(f.key, f.label), control: { type: "FontControl", properties: props } } as any;
     }
 
     /**
@@ -3308,7 +3458,8 @@ export class Visual implements IVisual {
         marcar(".dn-slices", "slices", 3);
         marcar(".dn-label", "labels", 1);
         marcar(".dn-center-text", "center", 1);
-        marcar(".dn-table", "legend", 1);
+        marcar(".dn-legend", "legend", 1);
+        marcar(".dn-table", "dataTable", 1);
         marcar(".dn-ring", "scaleRing", 3);
         marcar(".dn-sm-title", "smallMultiples", 1);
     }
@@ -3318,9 +3469,11 @@ export class Visual implements IVisual {
         const ref = (o: string, p: string) => ({ reference: { objectName: o, propertyName: p }, label: this.propLabel(o, p) });
         switch (name) {
             case "slices": return { type: 3, fill: ref("slices", "otherColor") } as any;
-            case "labels": return { type: 1, fontSize: ref("labels", "fontSize"), fontColor: ref("labels", "color") } as any;
-            case "center": return { type: 1, fontSize: ref("center", "fontSize"), fontColor: ref("center", "color") } as any;
-            case "legend": return { type: 1, fontSize: ref("legend", "fontSize"), fontColor: ref("legend", "color") } as any;
+            case "labels": return { type: 1, fontFamily: ref("labels", "fontFamily"), fontSize: ref("labels", "fontSize"), fontColor: ref("labels", "color"),
+                bold: ref("labels", "bold"), italic: ref("labels", "italic"), underline: ref("labels", "underline") } as any;
+            case "center": return { type: 1, fontFamily: ref("center", "valueFontFamily"), fontSize: ref("center", "fontSize"), fontColor: ref("center", "color"), bold: ref("center", "valueBold") } as any;
+            case "legend": case "dataTable": return { type: 1, fontFamily: ref(name, "fontFamily"), fontSize: ref(name, "fontSize"), fontColor: ref(name, "color"),
+                bold: ref(name, "bold"), italic: ref(name, "italic"), underline: ref(name, "underline") } as any;
             case "scaleRing": return { type: 3, stroke: ref("scaleRing", "color") } as any;
             case "smallMultiples": return { type: 1, fontSize: ref("smallMultiples", "titleFontSize"), fontColor: ref("smallMultiples", "titleColor") } as any;
         }
@@ -3341,7 +3494,8 @@ export class Visual implements IVisual {
             case "slices": return [pick("slices", "shape"), pick("slices", "sort"), div, reset("slices"), nav("slices")] as any;
             case "labels": return [toggle("labels", "show"), pick("labels", "content"), pick("labels", "position"), div, reset("labels"), nav("labels")] as any;
             case "center": return [toggle("center", "show"), div, reset("center"), nav("center")] as any;
-            case "legend": return [pick("legend", "position"), pick("legend", "content"), toggle("legend", "header"), pick("legend", "totalRow"), div, reset("legend"), nav("legend")] as any;
+            case "legend": return [pick("legend", "position"), div, reset("legend"), nav("legend")] as any;
+            case "dataTable": return [pick("dataTable", "position"), toggle("dataTable", "header"), pick("dataTable", "totalRow"), pick("dataTable", "gridlines"), div, reset("dataTable"), nav("dataTable")] as any;
             case "scaleRing": return [pick("scaleRing", "mode"), div, reset("scaleRing"), nav("scaleRing")] as any;
             case "smallMultiples": return [toggle("smallMultiples", "titleBold"), toggle("smallMultiples", "border"), toggle("smallMultiples", "sizeByTotal"), div, reset("smallMultiples"), nav("smallMultiples")] as any;
         }
@@ -3368,6 +3522,12 @@ function alpha(color: string, a: number): string {
     if (!/^#?[0-9a-f]{6}$/i.test(String(color).trim())) return color;
     const [r, g, b] = rgbOf(color);
     return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+}
+
+/** Familia del panel (p. ej. "Arial Black" o la pila de Segoe UI) como font-family de CSS válido y con reserva. */
+function cssFamily(v: string): string {
+    if (/[,'"]/.test(v)) return v;
+    return "'" + v + "', " + FONT_DEFAULT;
 }
 
 function rgbOf(hex: string): [number, number, number] {

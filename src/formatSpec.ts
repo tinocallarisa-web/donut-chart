@@ -2,9 +2,10 @@
  * Tabla del panel de formato. Generado por tools/formato.py: no editar a mano.
  * Los nombres internos (objeto.propiedad) no se renombran nunca: los informes guardados dejarían de leerlos.
  */
-export type PropType = "bool" | "num" | "fill" | "enum" | "text";
+export type PropType = "bool" | "num" | "fill" | "enum" | "text" | "font";
 export interface PropSpec { name: string; type: PropType; def: string | number | boolean | null; key: string; label: string;
-    items?: [string, string, string][]; min?: number; max?: number; }
+    items?: [string, string, string][]; min?: number; max?: number; group?: string; }
+export interface FontSpec { uid: string; key: string; label: string; family: string; size: string; bold: string | null; italic: string | null; underline: string | null; }
 export interface ObjSpec { name: string; key: string; label: string; props: PropSpec[]; }
 export interface GroupSpec { obj: string; toggle: string | null; key?: string; label?: string; }
 export interface CardSpec { uid: string; key: string; label: string; groups: GroupSpec[]; }
@@ -309,6 +310,34 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "max": 24
             },
             {
+                "name": "fontFamily",
+                "type": "font",
+                "def": "",
+                "key": "Prop_labels_fontFamily",
+                "label": "Font"
+            },
+            {
+                "name": "bold",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_labels_bold",
+                "label": "Bold"
+            },
+            {
+                "name": "italic",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_labels_italic",
+                "label": "Italic"
+            },
+            {
+                "name": "underline",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_labels_underline",
+                "label": "Underline"
+            },
+            {
                 "name": "color",
                 "type": "fill",
                 "def": "#252423",
@@ -391,7 +420,42 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "type": "text",
                 "def": "",
                 "key": "Prop_center_title",
-                "label": "Title (blank = measure name)"
+                "label": "Title (blank = measure name)",
+                "group": "title"
+            },
+            {
+                "name": "titleFontFamily",
+                "type": "font",
+                "def": "",
+                "key": "Prop_center_titleFontFamily",
+                "label": "Title font",
+                "group": "title"
+            },
+            {
+                "name": "titleFontSize",
+                "type": "num",
+                "def": 9,
+                "key": "Prop_center_titleFontSize",
+                "label": "Title size",
+                "min": 6,
+                "max": 32,
+                "group": "title"
+            },
+            {
+                "name": "titleColor",
+                "type": "fill",
+                "def": "",
+                "key": "Prop_center_titleColor",
+                "label": "Title color",
+                "group": "title"
+            },
+            {
+                "name": "valueFontFamily",
+                "type": "font",
+                "def": "",
+                "key": "Prop_center_valueFontFamily",
+                "label": "Value font",
+                "group": "value"
             },
             {
                 "name": "fontSize",
@@ -400,14 +464,24 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "key": "Prop_center_fontSize",
                 "label": "Value size",
                 "min": 8,
-                "max": 48
+                "max": 48,
+                "group": "value"
+            },
+            {
+                "name": "valueBold",
+                "type": "bool",
+                "def": true,
+                "key": "Prop_center_valueBold",
+                "label": "Bold value",
+                "group": "value"
             },
             {
                 "name": "color",
                 "type": "fill",
                 "def": "#252423",
                 "key": "Prop_center_color",
-                "label": "Text color"
+                "label": "Value color",
+                "group": "value"
             },
             {
                 "name": "displayUnits",
@@ -446,7 +520,8 @@ export const OBJECTS: Record<string, ObjSpec> = {
                         "Enum_displayUnits_trillions",
                         "Trillions"
                     ]
-                ]
+                ],
+                "group": "value"
             },
             {
                 "name": "valueDecimals",
@@ -455,7 +530,8 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "key": "Prop_center_valueDecimals",
                 "label": "Value decimal places",
                 "min": 0,
-                "max": 9
+                "max": 9,
+                "group": "value"
             }
         ]
     },
@@ -515,6 +591,96 @@ export const OBJECTS: Record<string, ObjSpec> = {
                         "Automatic"
                     ],
                     [
+                        "top",
+                        "Enum_position_top",
+                        "Top"
+                    ],
+                    [
+                        "bottom",
+                        "Enum_position_bottom",
+                        "Bottom"
+                    ],
+                    [
+                        "left",
+                        "Enum_position_left",
+                        "Left"
+                    ],
+                    [
+                        "right",
+                        "Enum_position_right",
+                        "Right"
+                    ],
+                    [
+                        "off",
+                        "Enum_position_off",
+                        "Off"
+                    ]
+                ]
+            },
+            {
+                "name": "fontSize",
+                "type": "num",
+                "def": 10,
+                "key": "Prop_legend_fontSize",
+                "label": "Text size",
+                "min": 6,
+                "max": 24
+            },
+            {
+                "name": "fontFamily",
+                "type": "font",
+                "def": "",
+                "key": "Prop_legend_fontFamily",
+                "label": "Font"
+            },
+            {
+                "name": "bold",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_legend_bold",
+                "label": "Bold"
+            },
+            {
+                "name": "italic",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_legend_italic",
+                "label": "Italic"
+            },
+            {
+                "name": "underline",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_legend_underline",
+                "label": "Underline"
+            },
+            {
+                "name": "color",
+                "type": "fill",
+                "def": "#252423",
+                "key": "Prop_legend_color",
+                "label": "Text color"
+            }
+        ]
+    },
+    "dataTable": {
+        "name": "dataTable",
+        "key": "Obj_dataTable",
+        "label": "Data table",
+        "props": [
+            {
+                "name": "position",
+                "type": "enum",
+                "def": "auto",
+                "key": "Prop_dataTable_position",
+                "label": "Position",
+                "items": [
+                    [
+                        "auto",
+                        "Enum_position_auto",
+                        "Automatic"
+                    ],
+                    [
                         "right",
                         "Enum_position_right",
                         "Right"
@@ -523,11 +689,6 @@ export const OBJECTS: Record<string, ObjSpec> = {
                         "left",
                         "Enum_position_left",
                         "Left"
-                    ],
-                    [
-                        "top",
-                        "Enum_position_top",
-                        "Top"
                     ],
                     [
                         "bottom",
@@ -542,55 +703,31 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 ]
             },
             {
-                "name": "content",
-                "type": "enum",
-                "def": "auto",
-                "key": "Prop_legend_content",
-                "label": "Content",
-                "items": [
-                    [
-                        "auto",
-                        "Enum_content_auto",
-                        "Automatic"
-                    ],
-                    [
-                        "legend",
-                        "Enum_content_legend",
-                        "Legend"
-                    ],
-                    [
-                        "table",
-                        "Enum_content_table",
-                        "Table"
-                    ]
-                ]
-            },
-            {
                 "name": "header",
                 "type": "bool",
                 "def": true,
-                "key": "Prop_legend_header",
+                "key": "Prop_dataTable_header",
                 "label": "Show header"
             },
             {
                 "name": "headerColor",
                 "type": "fill",
                 "def": "",
-                "key": "Prop_legend_headerColor",
+                "key": "Prop_dataTable_headerColor",
                 "label": "Header text color"
             },
             {
                 "name": "headerBackground",
                 "type": "fill",
                 "def": "",
-                "key": "Prop_legend_headerBackground",
+                "key": "Prop_dataTable_headerBackground",
                 "label": "Header background"
             },
             {
                 "name": "totalRow",
                 "type": "enum",
                 "def": "auto",
-                "key": "Prop_legend_totalRow",
+                "key": "Prop_dataTable_totalRow",
                 "label": "Show total row",
                 "items": [
                     [
@@ -614,49 +751,49 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "name": "colValue",
                 "type": "bool",
                 "def": true,
-                "key": "Prop_legend_colValue",
+                "key": "Prop_dataTable_colValue",
                 "label": "Value column"
             },
             {
                 "name": "colShare",
                 "type": "bool",
                 "def": true,
-                "key": "Prop_legend_colShare",
+                "key": "Prop_dataTable_colShare",
                 "label": "Share % column"
             },
             {
                 "name": "colChange",
                 "type": "bool",
                 "def": true,
-                "key": "Prop_legend_colChange",
+                "key": "Prop_dataTable_colChange",
                 "label": "Change column"
             },
             {
                 "name": "colTarget",
                 "type": "bool",
                 "def": true,
-                "key": "Prop_legend_colTarget",
+                "key": "Prop_dataTable_colTarget",
                 "label": "% of target column"
             },
             {
                 "name": "colNote",
                 "type": "bool",
                 "def": true,
-                "key": "Prop_legend_colNote",
+                "key": "Prop_dataTable_colNote",
                 "label": "Notes"
             },
             {
                 "name": "segRows",
                 "type": "bool",
                 "def": false,
-                "key": "Prop_legend_segRows",
+                "key": "Prop_dataTable_segRows",
                 "label": "Segment rows"
             },
             {
                 "name": "gridlines",
                 "type": "enum",
                 "def": "horizontal",
-                "key": "Prop_legend_gridlines",
+                "key": "Prop_dataTable_gridlines",
                 "label": "Gridlines",
                 "items": [
                     [
@@ -680,14 +817,14 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "name": "gridColor",
                 "type": "fill",
                 "def": "",
-                "key": "Prop_legend_gridColor",
+                "key": "Prop_dataTable_gridColor",
                 "label": "Gridline color"
             },
             {
                 "name": "gridWidth",
                 "type": "num",
                 "def": 1,
-                "key": "Prop_legend_gridWidth",
+                "key": "Prop_dataTable_gridWidth",
                 "label": "Gridline width",
                 "min": 1,
                 "max": 4
@@ -696,30 +833,58 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "name": "banding",
                 "type": "bool",
                 "def": false,
-                "key": "Prop_legend_banding",
+                "key": "Prop_dataTable_banding",
                 "label": "Row banding"
             },
             {
                 "name": "fontSize",
                 "type": "num",
                 "def": 10,
-                "key": "Prop_legend_fontSize",
+                "key": "Prop_dataTable_fontSize",
                 "label": "Text size",
                 "min": 6,
                 "max": 24
             },
             {
+                "name": "fontFamily",
+                "type": "font",
+                "def": "",
+                "key": "Prop_dataTable_fontFamily",
+                "label": "Font"
+            },
+            {
+                "name": "bold",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_dataTable_bold",
+                "label": "Bold"
+            },
+            {
+                "name": "italic",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_dataTable_italic",
+                "label": "Italic"
+            },
+            {
+                "name": "underline",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_dataTable_underline",
+                "label": "Underline"
+            },
+            {
                 "name": "color",
                 "type": "fill",
                 "def": "#252423",
-                "key": "Prop_legend_color",
+                "key": "Prop_dataTable_color",
                 "label": "Text color"
             },
             {
                 "name": "displayUnits",
                 "type": "enum",
                 "def": "auto",
-                "key": "Prop_legend_displayUnits",
+                "key": "Prop_dataTable_displayUnits",
                 "label": "Display units",
                 "items": [
                     [
@@ -758,7 +923,7 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "name": "valueDecimals",
                 "type": "num",
                 "def": null,
-                "key": "Prop_legend_valueDecimals",
+                "key": "Prop_dataTable_valueDecimals",
                 "label": "Value decimal places",
                 "min": 0,
                 "max": 9
@@ -767,7 +932,7 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "name": "percentDecimals",
                 "type": "num",
                 "def": 0,
-                "key": "Prop_legend_percentDecimals",
+                "key": "Prop_dataTable_percentDecimals",
                 "label": "Percentage decimal places",
                 "min": 0,
                 "max": 4
@@ -806,11 +971,39 @@ export const OBJECTS: Record<string, ObjSpec> = {
             {
                 "name": "fontSize",
                 "type": "num",
-                "def": 10,
+                "def": 9,
                 "key": "Prop_summary_fontSize",
                 "label": "Text size",
-                "min": 8,
+                "min": 7,
                 "max": 24
+            },
+            {
+                "name": "fontFamily",
+                "type": "font",
+                "def": "",
+                "key": "Prop_summary_fontFamily",
+                "label": "Font"
+            },
+            {
+                "name": "bold",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_summary_bold",
+                "label": "Bold"
+            },
+            {
+                "name": "italic",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_summary_italic",
+                "label": "Italic"
+            },
+            {
+                "name": "underline",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_summary_underline",
+                "label": "Underline"
             },
             {
                 "name": "color",
@@ -962,11 +1155,32 @@ export const OBJECTS: Record<string, ObjSpec> = {
                 "label": "Title color"
             },
             {
+                "name": "titleFontFamily",
+                "type": "font",
+                "def": "",
+                "key": "Prop_smallMultiples_titleFontFamily",
+                "label": "Title font"
+            },
+            {
                 "name": "titleBold",
                 "type": "bool",
                 "def": true,
                 "key": "Prop_smallMultiples_titleBold",
                 "label": "Bold title"
+            },
+            {
+                "name": "titleItalic",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_smallMultiples_titleItalic",
+                "label": "Italic title"
+            },
+            {
+                "name": "titleUnderline",
+                "type": "bool",
+                "def": false,
+                "key": "Prop_smallMultiples_titleUnderline",
+                "label": "Underline title"
             },
             {
                 "name": "titleAlign",
@@ -1151,6 +1365,17 @@ export const PANE: CardSpec[] = [
         ]
     },
     {
+        "uid": "dataTable",
+        "key": "Obj_dataTable",
+        "label": "Data table",
+        "groups": [
+            {
+                "obj": "dataTable",
+                "toggle": null
+            }
+        ]
+    },
+    {
         "uid": "summary",
         "key": "Obj_summary",
         "label": "Summary",
@@ -1217,3 +1442,88 @@ export const PANE: CardSpec[] = [
         ]
     }
 ];
+export const FONTS: Record<string, FontSpec[]> = {
+    "labels": [
+        {
+            "uid": "font",
+            "key": "Font_labels_font",
+            "label": "Font",
+            "family": "fontFamily",
+            "size": "fontSize",
+            "bold": "bold",
+            "italic": "italic",
+            "underline": "underline"
+        }
+    ],
+    "center": [
+        {
+            "uid": "titleFont",
+            "key": "Font_center_titleFont",
+            "label": "Title font",
+            "family": "titleFontFamily",
+            "size": "titleFontSize",
+            "bold": null,
+            "italic": null,
+            "underline": null
+        },
+        {
+            "uid": "valueFont",
+            "key": "Font_center_valueFont",
+            "label": "Value font",
+            "family": "valueFontFamily",
+            "size": "fontSize",
+            "bold": "valueBold",
+            "italic": null,
+            "underline": null
+        }
+    ],
+    "legend": [
+        {
+            "uid": "font",
+            "key": "Font_legend_font",
+            "label": "Font",
+            "family": "fontFamily",
+            "size": "fontSize",
+            "bold": "bold",
+            "italic": "italic",
+            "underline": "underline"
+        }
+    ],
+    "dataTable": [
+        {
+            "uid": "font",
+            "key": "Font_dataTable_font",
+            "label": "Font",
+            "family": "fontFamily",
+            "size": "fontSize",
+            "bold": "bold",
+            "italic": "italic",
+            "underline": "underline"
+        }
+    ],
+    "summary": [
+        {
+            "uid": "font",
+            "key": "Font_summary_font",
+            "label": "Font",
+            "family": "fontFamily",
+            "size": "fontSize",
+            "bold": "bold",
+            "italic": "italic",
+            "underline": "underline"
+        }
+    ],
+    "smallMultiples": [
+        {
+            "uid": "titleFont",
+            "key": "Font_smallMultiples_titleFont",
+            "label": "Title font",
+            "family": "titleFontFamily",
+            "size": "titleFontSize",
+            "bold": "titleBold",
+            "italic": "titleItalic",
+            "underline": "titleUnderline"
+        }
+    ]
+};
+export const GROUPS: Record<string, [string, string]> = {"title": ["Grp_title", "Title"], "value": ["Grp_value", "Value"]};

@@ -186,5 +186,17 @@ P.update({
 "{0} of {1} categories miss the target.": ["{0} de {1} categorias não cumprem a meta.", "{0} catégories sur {1} n’atteignent pas l’objectif.", "{0} von {1} Kategorien verfehlen das Ziel.", "{0} categorie su {1} non raggiungono l’obiettivo.", "{0} van de {1} categorieën halen het doel niet.", "{0} z {1} kategorii nie osiąga celu.", "{1} 個のカテゴリのうち {0} 個が目標未達です。", "{1} 个类别中有 {0} 个未达成目标。", "{1}개 범주 중 {0}개가 목표에 미달합니다.", "{0} de {1} categorías no cumplen el objetivo."],
 "All {0} categories are near the target.": ["As {0} categorias estão perto da meta.", "Les {0} catégories sont proches de l’objectif.", "Alle {0} Kategorien liegen nahe am Ziel.", "Tutte le {0} categorie sono vicine all’obiettivo.", "Alle {0} categorieën zitten dicht bij het doel.", "Wszystkie kategorie ({0}) są blisko celu.", "{0} 個のカテゴリすべてが目標に近い水準です。", "全部 {0} 个类别均接近目标。", "{0}개 범주 모두 목표에 근접했습니다.", "Las {0} categorías están cerca del objetivo."],
 "On target: {0} of {1}; near it: {2}.": ["Na meta: {0} de {1}; perto dela: {2}.", "Objectif atteint : {0} sur {1} ; proches : {2}.", "Ziel erreicht: {0} von {1}; nahe dran: {2}.", "Obiettivo raggiunto: {0} su {1}; vicine: {2}.", "Doel gehaald: {0} van {1}; dichtbij: {2}.", "Cel osiągnięty: {0} z {1}; blisko celu: {2}.", "目標達成: {1} 個中 {0} 個、目標に近い: {2} 個。", "达成目标：{1} 个中的 {0} 个；接近目标：{2} 个。", "목표 달성: {1}개 중 {0}개, 목표 근접: {2}개.", "En el objetivo: {0} de {1}; cerca: {2}."],
+"Font": ["Fonte", "Police", "Schriftart", "Carattere", "Lettertype", "Czcionka", "フォント", "字体", "글꼴", "Fuente"],
+"Bold": ["Negrito", "Gras", "Fett", "Grassetto", "Vet", "Pogrubienie", "太字", "加粗", "굵게", "Negrita"],
+"Italic": ["Itálico", "Italique", "Kursiv", "Corsivo", "Cursief", "Kursywa", "斜体", "倾斜", "기울임꼴", "Cursiva"],
+"Underline": ["Sublinhado", "Souligné", "Unterstrichen", "Sottolineato", "Onderstrepen", "Podkreślenie", "下線", "下划线", "밑줄", "Subrayado"],
+"Bold value": ["Valor em negrito", "Valeur en gras", "Wert fett", "Valore in grassetto", "Waarde vet", "Pogrubiona wartość", "値を太字", "值加粗", "값 굵게", "Valor en negrita"],
+"Italic title": ["Título em itálico", "Titre en italique", "Titel kursiv", "Titolo in corsivo", "Titel cursief", "Tytuł kursywą", "タイトルを斜体", "标题倾斜", "제목 기울임꼴", "Título en cursiva"],
+"Underline title": ["Título sublinhado", "Titre souligné", "Titel unterstrichen", "Titolo sottolineato", "Titel onderstrepen", "Podkreślony tytuł", "タイトルに下線", "标题加下划线", "제목 밑줄", "Título subrayado"],
+"Title font": ["Fonte do título", "Police du titre", "Schriftart des Titels", "Carattere del titolo", "Lettertype titel", "Czcionka tytułu", "タイトルのフォント", "标题字体", "제목 글꼴", "Fuente del título"],
+"Value font": ["Fonte do valor", "Police de la valeur", "Schriftart des Werts", "Carattere del valore", "Lettertype waarde", "Czcionka wartości", "値のフォント", "值字体", "값 글꼴", "Fuente del valor"],
+"Value color": ["Cor do valor", "Couleur de la valeur", "Farbe des Werts", "Colore del valore", "Kleur waarde", "Kolor wartości", "値の色", "值颜色", "값 색", "Color del valor"],
+"Value size": ["Tamanho do valor", "Taille de la valeur", "Größe des Werts", "Dimensione del valore", "Grootte waarde", "Rozmiar wartości", "値のサイズ", "值大小", "값 크기", "Tamaño del valor"],
+"Data table": ["Tabela de dados", "Tableau de données", "Datentabelle", "Tabella dati", "Gegevenstabel", "Tabela danych", "データ テーブル", "数据表", "데이터 테이블", "Tabla de datos"],
 })
 

@@ -70,25 +70,46 @@ OBJECTS = [
         # Anillo exterior (Segment): Automatic = nombre + % del total si cabe en todos los que llevan nombre; si no, nombre.
         ("segment", "Segment labels", "enum", "auto", {"items": [("auto", "Automatic"), ("name", "Name"), ("namePercent", "Name and percent"), ("off", "Off")]}),
         ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
+        ("fontFamily", "Font", "font", "", {}),
+        ("bold", "Bold", "bool", False, {}),
+        ("italic", "Italic", "bool", False, {}),
+        ("underline", "Underline", "bool", False, {}),
         ("color", "Text color (outside)", "fill", "#252423", {}),
     ] + NUM_FORMAT + PCT_FORMAT),
     ("center", "Center", [
+        # Dos grupos en la tarjeta: Title (texto, fuente y tamaño, color) y Value (fuente, tamaño y negrita, color, formato).
+        # Fuente vacía = la del estilo activo. El título encoge con el valor en la misma proporción.
         ("show", "Show total in the center", "bool", True, {}),
-        ("title", "Title (blank = measure name)", "text", "", {}),
-        ("fontSize", "Value size", "num", 20, {"min": 8, "max": 48}),
-        ("color", "Text color", "fill", "#252423", {}),
-    ] + NUM_FORMAT),
+        ("title", "Title (blank = measure name)", "text", "", {"group": "title"}),
+        ("titleFontFamily", "Title font", "font", "", {"group": "title"}),
+        ("titleFontSize", "Title size", "num", 9, {"min": 6, "max": 32, "group": "title"}),
+        ("titleColor", "Title color", "fill", "", {"group": "title"}),
+        ("valueFontFamily", "Value font", "font", "", {"group": "value"}),
+        ("fontSize", "Value size", "num", 20, {"min": 8, "max": 48, "group": "value"}),
+        ("valueBold", "Bold value", "bool", True, {"group": "value"}),
+        ("color", "Value color", "fill", "#252423", {"group": "value"}),
+    ] + [(p, l, t, d, dict(x, group="value")) for p, l, t, d, x in NUM_FORMAT]),
     ("scaleRing", "Scale ring", [
         ("mode", "Marks", "enum", "quarters", {"items": [("off", "Off"), ("quarters", "Quarters (25 %)"), ("tens", "Every 10 %")]}),
         ("color", "Color", "fill", "#605E5C", {}),
     ]),
-    # Leyenda (nombre interno `legend`, lo detecta OKviz). Content: Legend = muestra + nombre, compacta como la nativa;
-    # Table = leyenda-tabla con columnas. Automatic = Table si hay Compare, Target o Annotation en los pozos; si no, Legend.
-    # Las columnas solo salen en el panel con Content = Table y cada una solo con su pozo puesto (getFormattingModel).
+    # Leyenda clásica (nombre interno `legend`, lo detecta OKviz): muestra + nombre (y los segmentos agrupados).
+    # Automatic: arriba en línea si cabe en dos líneas; si no, al lado en un visual ancho o abajo en uno alto.
     ("legend", "Legend", [
+        ("position", "Position", "enum", "auto", {"items": [("auto", "Automatic"), ("top", "Top"), ("bottom", "Bottom"),
+                                                             ("left", "Left"), ("right", "Right"), ("off", "Off")]}),
+        ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
+        ("fontFamily", "Font", "font", "", {}),
+        ("bold", "Bold", "bool", False, {}),
+        ("italic", "Italic", "bool", False, {}),
+        ("underline", "Underline", "bool", False, {}),
+        ("color", "Text color", "fill", "#252423", {}),
+    ]),
+    # Tabla de datos, independiente de la leyenda (Tino, 25-11). Automatic = encendida si hay Compare, Target o Annotation
+    # en los pozos. Nunca una tabla sin columnas de cifras. Cada columna Pro sale en el panel solo con su pozo puesto.
+    ("dataTable", "Data table", [
         ("position", "Position", "enum", "auto", {"items": [("auto", "Automatic"), ("right", "Right"), ("left", "Left"),
-                                                             ("top", "Top"), ("bottom", "Bottom"), ("off", "Off")]}),
-        ("content", "Content", "enum", "auto", {"items": [("auto", "Automatic"), ("legend", "Legend"), ("table", "Table")]}),
+                                                             ("bottom", "Bottom"), ("off", "Off")]}),
         ("header", "Show header", "bool", True, {}),
         # Cabecera en negrita con línea inferior al 35 % del texto; color de texto y fondo opcionales (fondo con fx).
         ("headerColor", "Header text color", "fill", "", {}),
@@ -106,13 +127,21 @@ OBJECTS = [
         ("gridWidth", "Gridline width", "num", 1, {"min": 1, "max": 4}),
         ("banding", "Row banding", "bool", False, {}),
         ("fontSize", "Text size", "num", 10, {"min": 6, "max": 24}),
+        ("fontFamily", "Font", "font", "", {}),
+        ("bold", "Bold", "bool", False, {}),
+        ("italic", "Italic", "bool", False, {}),
+        ("underline", "Underline", "bool", False, {}),
         ("color", "Text color", "fill", "#252423", {}),
     ] + NUM_FORMAT + PCT_FORMAT),
     # Frase de resumen arriba del gráfico. Automatic = encendida con Compare en los pozos. Cuotas: gratis; cambio y
     # objetivo: Pro (como sus columnas).
     ("summary", "Summary", [
         ("show", "Show summary", "enum", "auto", {"items": [("auto", "Automatic (with Compare)"), ("on", "On"), ("off", "Off")]}),
-        ("fontSize", "Text size", "num", 10, {"min": 8, "max": 24}),
+        ("fontSize", "Text size", "num", 9, {"min": 7, "max": 24}),
+        ("fontFamily", "Font", "font", "", {}),
+        ("bold", "Bold", "bool", False, {}),
+        ("italic", "Italic", "bool", False, {}),
+        ("underline", "Underline", "bool", False, {}),
         ("color", "Text color", "fill", "", {}),
     ]),
     # Pro (bloque 2): existen en el panel con su campo puesto; en el bloque 1 aún no dibujan nada.
@@ -136,7 +165,10 @@ OBJECTS = [
         ("gap", "Space between panels", "num", 8, {"min": 0, "max": 40}),
         ("titleFontSize", "Title size", "num", 12, {"min": 7, "max": 24}),
         ("titleColor", "Title color", "fill", "#252423", {}),
+        ("titleFontFamily", "Title font", "font", "", {}),
         ("titleBold", "Bold title", "bool", True, {}),
+        ("titleItalic", "Italic title", "bool", False, {}),
+        ("titleUnderline", "Underline title", "bool", False, {}),
         ("titleAlign", "Title alignment", "enum", "left", {"items": [("left", "Left"), ("center", "Center")]}),
         ("background", "Panel background", "fill", "", {}),
         ("border", "Panel border", "bool", False, {}),
@@ -153,6 +185,19 @@ OBJECTS = [
     ]),
 ]
 
+# Controles de fuente nativos (FontControl): (uid, etiqueta, familia, tamaño, negrita, cursiva, subrayado) por objeto.
+# El panel junta esas propiedades en un solo control, en el sitio de la familia.
+FONTS = {
+    "labels": [("font", "Font", "fontFamily", "fontSize", "bold", "italic", "underline")],
+    "center": [("titleFont", "Title font", "titleFontFamily", "titleFontSize", None, None, None),
+               ("valueFont", "Value font", "valueFontFamily", "fontSize", "valueBold", None, None)],
+    "legend": [("font", "Font", "fontFamily", "fontSize", "bold", "italic", "underline")],
+    "dataTable": [("font", "Font", "fontFamily", "fontSize", "bold", "italic", "underline")],
+    "summary": [("font", "Font", "fontFamily", "fontSize", "bold", "italic", "underline")],
+    "smallMultiples": [("titleFont", "Title font", "titleFontFamily", "titleFontSize", "titleBold", "titleItalic", "titleUnderline")],
+}
+GROUPS = {"title": "Title", "value": "Value"}
+
 # Orden común de la colección: Style template, tarjetas propias, leyenda, Pro, small multiples, accesibilidad.
 PANE = [
     ("style", "Style template", [("style", None, None)]),
@@ -161,6 +206,7 @@ PANE = [
     ("center", "Center", [("center", None, "show")]),
     ("scaleRing", "Scale ring", [("scaleRing", None, None)]),
     ("legend", "Legend", [("legend", None, None)]),
+    ("dataTable", "Data table", [("dataTable", None, None)]),
     ("summary", "Summary", [("summary", None, None)]),
     ("compare", "Compare with (Pro)", [("compare", None, None)]),
     ("target", "Target (Pro)", [("target", None, None)]),
@@ -172,7 +218,7 @@ PANE = [
 
 def cap_type(t):
     return {"bool": {"bool": True}, "num": {"numeric": True}, "fill": {"fill": {"solid": {"color": True}}},
-            "text": {"text": True}}.get(t)
+            "text": {"text": True}, "font": {"formatting": {"fontFamily": True}}}.get(t)
 
 
 def generar():
@@ -210,7 +256,7 @@ def generar():
             spec = {"name": p, "type": t, "def": d, "key": pkey, "label": plabel}
             if t == "enum":
                 spec["items"] = [[v, "Enum_%s_%s" % (p, v), vl] for v, vl in extra["items"]]
-            for k in ("min", "max"):
+            for k in ("min", "max", "group"):
                 if k in extra:
                     spec[k] = extra[k]
             tp.append(spec)
@@ -221,6 +267,15 @@ def generar():
     caps["enablePointerEventsFormatMode"] = True
     io.open(caps_p, "w", encoding="utf-8", newline="\n").write(json.dumps(caps, indent=2, ensure_ascii=False) + "\n")
 
+    fonts = {}
+    for obj, lst in FONTS.items():
+        fonts[obj] = []
+        for uid, lab, fam, size, bold, ital, und in lst:
+            key = "Font_%s_%s" % (obj, uid)
+            en[key] = lab
+            fonts[obj].append({"uid": uid, "key": key, "label": lab, "family": fam, "size": size, "bold": bold, "italic": ital, "underline": und})
+    for g, lab in GROUPS.items():
+        en["Grp_" + g] = lab
     pane = []
     for uid, label, groups in PANE:
         ckey = "Obj_" + uid
@@ -239,14 +294,17 @@ def generar():
           " * Tabla del panel de formato. Generado por tools/formato.py: no editar a mano.",
           " * Los nombres internos (objeto.propiedad) no se renombran nunca: los informes guardados dejarían de leerlos.",
           " */",
-          "export type PropType = \"bool\" | \"num\" | \"fill\" | \"enum\" | \"text\";",
+          "export type PropType = \"bool\" | \"num\" | \"fill\" | \"enum\" | \"text\" | \"font\";",
           "export interface PropSpec { name: string; type: PropType; def: string | number | boolean | null; key: string; label: string;",
-          "    items?: [string, string, string][]; min?: number; max?: number; }",
+          "    items?: [string, string, string][]; min?: number; max?: number; group?: string; }",
+          "export interface FontSpec { uid: string; key: string; label: string; family: string; size: string; bold: string | null; italic: string | null; underline: string | null; }",
           "export interface ObjSpec { name: string; key: string; label: string; props: PropSpec[]; }",
           "export interface GroupSpec { obj: string; toggle: string | null; key?: string; label?: string; }",
           "export interface CardSpec { uid: string; key: string; label: string; groups: GroupSpec[]; }",
           "export const OBJECTS: Record<string, ObjSpec> = " + json.dumps(ts_objs, ensure_ascii=False, indent=4) + ";",
-          "export const PANE: CardSpec[] = " + json.dumps(pane, ensure_ascii=False, indent=4) + ";", ""]
+          "export const PANE: CardSpec[] = " + json.dumps(pane, ensure_ascii=False, indent=4) + ";",
+          "export const FONTS: Record<string, FontSpec[]> = " + json.dumps(fonts, ensure_ascii=False, indent=4) + ";",
+          "export const GROUPS: Record<string, [string, string]> = " + json.dumps({g: ["Grp_" + g, l] for g, l in GROUPS.items()}, ensure_ascii=False) + ";", ""]
     io.open(os.path.join(ROOT, "src", "formatSpec.ts"), "w", encoding="utf-8", newline="\n").write("\n".join(ts))
 
     enp = os.path.join(ROOT, "stringResources", "en-US", "resources.resjson")

@@ -8,7 +8,7 @@
     .dn-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .dn-wmzone { position: absolute; display: none; pointer-events: none; z-index: 5; overflow: hidden; }
     .dn-slice { cursor: pointer; }
-    &.dn-motion .dn-sg, &.dn-motion .dn-c { transition: opacity 120ms ease; }
+    &.dn-motion .dn-sg, &.dn-motion .dn-c, &.dn-motion .dn-li { transition: opacity 120ms ease; }
     @media (prefers-reduced-motion: reduce) { &.dn-motion .dn-sg, &.dn-motion .dn-c { transition: none; } }
     .dn-msg { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; text-align: center; padding: 8px; box-sizing: border-box; }
     .dn-notes { position: absolute; line-height: 1.3; overflow-wrap: anywhere; }
@@ -110,18 +110,20 @@
     &.dn-motion .dn-segg { transition: opacity 120ms ease; }
 }
 
-// Leyenda compacta (Content = Legend): muestra + nombre; arriba/abajo fluye y parte líneas, a los lados lista vertical.
-.dn-table.dn-legend {
+// Leyenda clásica: muestra + nombre; arriba/abajo fluye y parte líneas, a los lados lista vertical.
+.dn-legend {
+    position: absolute; box-sizing: border-box; line-height: 1.25; cursor: default;
     .dn-litems { display: flex; flex-wrap: wrap; column-gap: 1em; row-gap: 0.2em; align-items: center; }
     &.dn-legend-h .dn-litems { justify-content: center; }
     &.dn-legend-v .dn-litems { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
-    .dn-li { display: flex; align-items: center; gap: 0.4em; min-width: 0; padding: 0.1em 0.15em; cursor: pointer; box-sizing: border-box; }
+    .dn-li { display: flex; align-items: center; gap: 0.4em; min-width: 0; padding: 0.1em 0.15em; cursor: pointer; box-sizing: border-box; outline-offset: 0; }
     .dn-li svg { display: block; flex-shrink: 0; }
     .dn-lname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dn-lmore { cursor: default; white-space: nowrap; }
     .dn-lgroup { display: flex; flex-wrap: wrap; align-items: center; column-gap: 0.5em; row-gap: 0.2em; min-width: 0; }
     &.dn-legend-v .dn-lgroup { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
     &.dn-legend-v .dn-lseg { padding-left: 1.2em; }
+    .dn-focusrow { outline: var(--dn-focus-w, 2px) solid; }
 }
 .dn-table.dn-tight {
     .dn-c { padding: 0.12em 0.22em; }

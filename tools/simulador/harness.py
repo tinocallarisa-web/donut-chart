@@ -72,8 +72,10 @@ def tabla_por_defecto(objects, seg_rows=False):
     return objects
 
 
-def dv_caso_a(objects=None, guia=False, highlights=None, negativos=False, colores=None, fmt=None):
-    objects = tabla_por_defecto(json.loads(json.dumps(objects or {})))
+def dv_caso_a(objects=None, guia=False, highlights=None, negativos=False, colores=None, fmt=None, legacy=True):
+    objects = json.loads(json.dumps(objects or {}))
+    if legacy:
+        tabla_por_defecto(objects)
     if not guia:
         objects.setdefault("style", {}).setdefault("guide", False)
     marcas = list(MARCAS)
@@ -793,13 +795,16 @@ async def bloque2(b):
 
 # ── Leyenda configurable, tabla limpia y Segment anidado (25-11) ─────────────
 
-LEG = r"""() => {
+LEG = r"""(which) => {
   const h = document.getElementById('host'), hr = h.getBoundingClientRect();
   const root = h.querySelector('.dn-root');
   const R = e => { const r = e.getBoundingClientRect(); return { x0: r.left - hr.left, y0: r.top - hr.top, x1: r.right - hr.left, y1: r.bottom - hr.top, w: r.width, h: r.height }; };
-  const t = root.querySelector('.dn-table');
+  const tl = root.querySelector('.dn-legend'), tt = root.querySelector('.dn-table');
+  const t = which === 'legend' ? tl : which === 'table' ? tt : (tt || tl);
   const ring = root.querySelector('.dn-slices');
   const out = { kind: !t ? 'none' : t.classList.contains('dn-legend') ? 'legend' : 'table', box: t ? R(t) : null, ring: ring ? R(ring) : null,
+    hasLegend: !!tl, hasTable: !!tt, lbox: tl ? R(tl) : null, tbox: tt ? R(tt) : null,
+    capFs: Math.min(...[tl, tt].filter(x => x).map(x => parseFloat(getComputedStyle(x).fontSize)).concat([999])),
     pos: t ? t.getAttribute('data-pos') : null, fs: t ? parseFloat(getComputedStyle(t).fontSize) : 0 };
   if (t && out.kind === 'legend') {
     const items = Array.from(t.querySelectorAll('.dn-li[data-key]'));
@@ -837,8 +842,8 @@ LEG = r"""() => {
 }"""
 
 
-async def leg(pg):
-    return await pg.evaluate(LEG)
+async def leg(pg, which="auto"):
+    return await pg.evaluate(LEG, which)
 
 
 def lado_ok(L, pos, W, H):
@@ -851,87 +856,116 @@ def lado_ok(L, pos, W, H):
 
 
 async def leyenda_25(b):
-    print("Leyenda 25-11 · Content Automatic / Legend / Table")
+    print("Leyenda y tabla 25-11 · valores por defecto (Legend y Data table independientes)")
     casos = [
-        ("auto solo Values", dv_caso_a({"legend": {"content": "auto"}}), "legend"),
-        ("auto con Compare", dv_ventas({}, compare=True, legacy=False), "table"),
-        ("auto con Target", dv_ventas({}, target=True, legacy=False), "table"),
-        ("auto con Annotation", dv_ventas({}, nota=True, legacy=False), "table"),
-        ("auto con solo Segment", dv_ventas({}, segment="Canal", legacy=False), "legend"),
-        ("legend con Compare", dv_ventas({"legend": {"content": "legend"}}, compare=True, legacy=False), "legend"),
-        ("table con solo Values", dv_caso_a({"legend": {"content": "table"}}), "table"),
+        ("solo Values", dv_caso_a({}, legacy=False), True, False),
+        ("con Compare", dv_ventas({}, compare=True, legacy=False), True, True),
+        ("con Target", dv_ventas({}, target=True, legacy=False), True, True),
+        ("con Annotation", dv_ventas({}, nota=True, legacy=False), True, True),
+        ("con solo Segment", dv_ventas({}, segment="Canal", legacy=False), True, False),
+        ("Compare con tabla Off", dv_ventas({"dataTable": {"position": "off"}}, compare=True, legacy=False), True, False),
+        ("solo Values con tabla a la derecha", dv_caso_a({"dataTable": {"position": "right"}}, legacy=False), True, True),
+        ("Compare con leyenda Off", dv_ventas({"legend": {"position": "off"}}, compare=True, legacy=False), False, True),
     ]
-    for lbl, dv, want in casos:
-        pg = await page(b, dv, 960, 540, name="ley_content_" + lbl.replace(" ", "_"))
+    for lbl, dv, wl, wt in casos:
+        pg = await page(b, dv, 960, 540, name="lt_def_" + lbl.replace(" ", "_"))
         L = await leg(pg)
-        check(f"content {lbl}: dibuja {want}", L["kind"] == want, L["kind"])
-        await eventos(pg, f"content {lbl}")
+        check(f"por defecto {lbl}: leyenda {'sí' if wl else 'no'}, tabla {'sí' if wt else 'no'}", L["hasLegend"] == wl and L["hasTable"] == wt, f"leyenda={L['hasLegend']} tabla={L['hasTable']}")
+        if wl and wt:
+            T = await leg(pg, "table")
+            check(f"por defecto {lbl}: con la leyenda a la vista la tabla no repite la muestra de color", "sw" not in T["cols"], str(T["cols"]))
+            check(f"por defecto {lbl}: leyenda y tabla sin pisarse", not overlap(L["lbox"], L["tbox"]), f"{L['lbox']} {L['tbox']}")
+        await eventos(pg, f"por defecto {lbl}")
         await pg.close()
 
-    print("Leyenda 25-11 · columnas on/off")
-    full = lambda extra: dv_ventas({"legend": dict({"content": "table"}, **extra)}, compare=True, target=True, nota=True, legacy=False)
+    print("Leyenda y tabla 25-11 · columnas on/off")
+    full = lambda extra: dv_ventas({"dataTable": dict(extra)}, compare=True, target=True, nota=True, legacy=False)
     pg = await page(b, full({}), 960, 540, name="ley_cols_todas")
-    L = await leg(pg)
+    L = await leg(pg, "table")
     check("columnas: todas por defecto", all(c in L["cols"] for c in ["val", "pct", "dpp", "tgt"]) and L["ann"] > 0, str(L["cols"]) + f" ann={L['ann']}")
     await pg.close()
     for prop, cols, nota in [("colValue", ["val"], False), ("colShare", ["pct"], False), ("colChange", ["dpp", "dval", "bar"], False),
                              ("colTarget", ["tgt"], False), ("colNote", [], True)]:
         pg = await page(b, full({prop: False}), 960, 540, name=f"ley_cols_sin_{prop}")
-        L = await leg(pg)
+        L = await leg(pg, "table")
         quedan = [c for c in ["val", "pct", "tgt"] if c not in cols]
         ok = not any(c in L["cols"] for c in cols) and all(c in L["cols"] for c in quedan) and ((L["ann"] == 0) if nota else (L["ann"] > 0))
         check(f"columna {prop} off: fuera y el resto sigue", ok, str(L["cols"]) + f" ann={L['ann']}")
         await eventos(pg, f"columna {prop} off")
         await pg.close()
     for on in (False, True):
-        objs = {"legend": {"content": "table"}}
+        objs = {"dataTable": {"position": "right"}}
         if on:
-            objs["legend"]["segRows"] = True
+            objs["dataTable"]["segRows"] = True
         pg = await page(b, dv_ventas(objs, segment="Canal", legacy=False), 1200, 640, name=f"ley_segrows_{'on' if on else 'off'}")
-        L = await leg(pg)
+        L = await leg(pg, "table")
         check(f"Segment rows {'on' if on else 'off (defecto)'}: {12 if on else 0} filas de segmento", L["seg"] == (12 if on else 0), str(L["seg"]))
         await pg.close()
     for W, H in [(960, 540), (380, 260)]:
-        pg = await page(b, full({"colValue": False, "colShare": False, "colChange": False, "colTarget": False, "colNote": False}), W, H)
+        pg = await page(b, full({"colValue": False, "colShare": False, "colChange": False, "colTarget": False}), W, H, name=f"lt_sin_columnas_{W}x{H}")
         L = await leg(pg)
-        check(f"todas las columnas off {W}x{H}: tabla de muestra + nombre sin errores", L["cols"] == ["sw", "name"], str(L["cols"]))
-        await eventos(pg, f"columnas off {W}x{H}")
+        check(f"sin columnas de cifras {W}x{H}: no hay tabla (nunca de una sola columna) y la leyenda identifica", not L["hasTable"] and L["hasLegend"], f"tabla={L['hasTable']} leyenda={L['hasLegend']}")
+        await eventos(pg, f"sin columnas {W}x{H}")
         await pg.close()
 
-    print("Leyenda 25-11 · seis posiciones × Legend/Table × 960×540 y 380×260")
-    for content in ("legend", "table"):
-        for W, H in [(960, 540), (380, 260)]:
-            for pos in ("auto", "right", "left", "top", "bottom", "off"):
-                lbl = f"{content} {pos} {W}x{H}"
-                objs = {"legend": {"content": content, "position": pos}}
-                dv = dv_caso_a(objs) if content == "legend" else dv_ventas(objs, compare=True, target=True, legacy=False)
-                pg = await page(b, dv, W, H, name=f"ley_{content}_{pos}_{W}x{H}")
-                L = await leg(pg)
-                if pos == "off":
-                    check(f"{lbl}: sin leyenda", L["kind"] == "none", L["kind"])
+    print("Leyenda y tabla 25-11 · posiciones (Legend: 6, Data table: 5) a 1250×600, 960×540 y 380×260")
+    for W, H in [(1250, 600), (960, 540), (380, 260)]:
+        for pos in ("auto", "top", "bottom", "left", "right", "off"):
+            lbl = f"legend {pos} {W}x{H}"
+            pg = await page(b, dv_caso_a({"legend": {"position": pos}}, legacy=False), W, H, name=f"ley_legend_{pos}_{W}x{H}")
+            L = await leg(pg, "legend")
+            if pos == "off":
+                check(f"{lbl}: sin leyenda", L["kind"] == "none", L["kind"])
+            else:
+                efectiva = L["pos"] if pos == "auto" else pos
+                check(f"{lbl}: leyenda en {efectiva}, dentro del visual y sin pisar el donut", L["kind"] == "legend" and L["pos"] == efectiva and lado_ok(L, efectiva, W, H),
+                      f"{L['kind']} {L['pos']} box={L['box']} ring={L['ring']}")
+                if pos == "auto":
+                    check(f"{lbl}: Automatic con 6 elementos va arriba en línea", L["pos"] == "top" and L["lines"] <= 2, f"{L['pos']} líneas={L['lines']}")
+                check(f"{lbl}: las etiquetas nunca superan la letra de la leyenda", all(x <= L["fs"] + 0.01 for x in L["labelSizes"]), f"{L['labelSizes']} vs {L['fs']}")
+                check(f"{lbl}: letra ≥ 10 px y escala con el visual", L["fs"] >= 10 and L["fs"] >= min(1.8, max(0.6, min(W, H) / 300)) * 10 - 0.01, f"{L['fs']}")
+                n_more = int(L["more"].split()[0].lstrip("+")) if L["more"] else 0
+                check(f"{lbl}: no desaparece ningún elemento (salvo '+N more' al final)", len(L["items"]) + (1 if n_more else 0) == L["slices"] or
+                      (n_more and len(L["items"]) + 1 <= L["slices"]), f"{len(L['items'])} items, more={L['more']}")
+                if efectiva in ("top", "bottom"):
+                    check(f"{lbl}: fluye en horizontal", L["lines"] < len(L["items"]), f"líneas={L['lines']} items={len(L['items'])}")
                 else:
-                    efectiva = pos if pos != "auto" else ("right" if W / H >= 1.3 else "bottom")
-                    if content == "table" and pos == "auto":
-                        efectiva = L["pos"]
-                    check(f"{lbl}: {content} en {efectiva}, dentro del visual y sin pisar el donut", L["kind"] == content and L["pos"] == efectiva and lado_ok(L, efectiva, W, H),
-                          f"{L['kind']} {L['pos']} box={L['box']} ring={L['ring']}")
-                    check(f"{lbl}: las etiquetas nunca superan la letra de la leyenda", all(x <= L["fs"] + 0.01 for x in L["labelSizes"]), f"{L['labelSizes']} vs {L['fs']}")
-                    if content == "legend":
-                        check(f"{lbl}: letra ≥ 10 px y escala con el visual", L["fs"] >= 10 and L["fs"] >= min(1.8, max(0.6, min(W, H) / 300)) * 10 - 0.01, f"{L['fs']}")
-                        n_more = int(L["more"].split()[0].lstrip("+")) if L["more"] else 0
-                        n_ent = L["slices"]  # un elemento por sector (Otros incluido)
-                        check(f"{lbl}: no desaparece ningún elemento (salvo '+N more' al final)", len(L["items"]) + (1 if n_more else 0) == n_ent or
-                              (n_more and len(L["items"]) + 1 <= n_ent), f"{len(L['items'])} items, more={L['more']}")
-                        if efectiva in ("top", "bottom"):
-                            check(f"{lbl}: fluye en horizontal", L["lines"] < len(L["items"]), f"líneas={L['lines']} items={len(L['items'])}")
-                        else:
-                            check(f"{lbl}: lista vertical", L["lines"] == len(L["items"]), f"líneas={L['lines']}")
-                await eventos(pg, lbl)
-                await pg.close()
+                    check(f"{lbl}: lista vertical", L["lines"] == len(L["items"]), f"líneas={L['lines']}")
+            await eventos(pg, lbl)
+            await pg.close()
+        for pos in ("auto", "right", "left", "bottom", "off"):
+            lbl = f"tabla {pos} {W}x{H}"
+            pg = await page(b, dv_ventas({"dataTable": {"position": pos}}, compare=True, target=True, legacy=False), W, H, name=f"ley_table_{pos}_{W}x{H}")
+            L = await leg(pg, "table")
+            if pos == "off":
+                check(f"{lbl}: sin tabla", L["kind"] == "none", L["kind"])
+            else:
+                efectiva = L["pos"] if pos == "auto" else pos
+                check(f"{lbl}: tabla en {efectiva}, dentro del visual y sin pisar el donut", L["kind"] == "table" and L["pos"] == efectiva and lado_ok(L, efectiva, W, H),
+                      f"{L['kind']} {L['pos']} box={L['box']} ring={L['ring']}")
+                check(f"{lbl}: las etiquetas nunca superan la letra de la tabla ni de la leyenda", all(x <= L["capFs"] + 0.01 for x in L["labelSizes"]), f"{L['labelSizes']} vs {L['capFs']}")
+                if L["hasLegend"]:
+                    check(f"{lbl}: leyenda y tabla sin pisarse", not overlap(L["lbox"], L["tbox"]), f"{L['lbox']} {L['tbox']}")
+            await eventos(pg, lbl)
+            await pg.close()
+
+    print("Leyenda y tabla 25-11 · small multiples (caso de Tino: Canal × Familia × Marca, compare, target, nota)")
+    for W, H in [(1250, 600), (960, 540), (380, 260)]:
+        lbl = f"SM Canal {W}x{H}"
+        pg = await page(b, dv_ventas({}, cat="Familia", segment="Marca", facet="Canal", compare=True, target=True, nota=True, legacy=False), W, H, name=f"lt_sm_tino_{W}x{H}")
+        L = await leg(pg)
+        if L["hasTable"]:
+            T = await leg(pg, "table")
+            check(f"{lbl}: la tabla es la del total, con su título y columnas de cifras", any(t.startswith("Total") for t in T["title"]) and any(c in T["cols"] for c in ("val", "pct")), f"{T['title']} {T['cols']}")
+            check(f"{lbl}: leyenda y tabla sin pisarse", not L["hasLegend"] or not overlap(L["lbox"], L["tbox"]), "")
+        check(f"{lbl}: hay leyenda clásica", L["hasLegend"], "")
+        check(f"{lbl}: dos paneles", await pg.evaluate("() => document.querySelectorAll('.dn-panel').length") == 2, "")
+        await eventos(pg, lbl)
+        await pg.close()
 
     print("Leyenda 25-11 · interacción de la leyenda compacta")
-    pg = await page(b, dv_caso_a({"legend": {"content": "legend", "position": "top"}}), 960, 540)
-    L = await leg(pg)
+    pg = await page(b, dv_caso_a({"legend": {"position": "top"}}, legacy=False), 960, 540)
+    L = await leg(pg, "legend")
     k2 = L["items"][1]["key"]
     sel = await pg.evaluate("(k) => { const it = document.querySelector('.dn-li[data-key=\"' + k + '\"]'); it.dispatchEvent(new MouseEvent('click', { bubbles: true })); return (window.__sel || []).map(s => s.key); }", k2)
     check("legend: clic en un elemento selecciona su sector", sel == ["Marca=" + L["items"][1]["name"]], str(sel))
@@ -953,13 +987,13 @@ async def leyenda_25(b):
     await pg.close()
 
     print("Leyenda 25-11 · nombres largos: elipsis y '+N more'")
-    largos = dv_caso_a({"legend": {"content": "legend", "position": "right"}})
+    largos = dv_caso_a({"legend": {"position": "right"}}, legacy=False)
     largos["categorical"]["categories"][0]["values"] = [m + " · edición especial de temporada de verano" for m in largos["categorical"]["categories"][0]["values"]]
     largos["categorical"]["categories"][0]["identity"] = [{"v": v} for v in largos["categorical"]["categories"][0]["values"]]
     for W, H, pos in [(960, 540, "right"), (380, 260, "right"), (380, 260, "top")]:
         largos["metadata"]["objects"]["legend"]["position"] = pos
         pg = await page(b, largos, W, H, name=f"ley_largos_{pos}_{W}x{H}")
-        L = await leg(pg)
+        L = await leg(pg, "legend")
         check(f"largos {pos} {W}x{H}: nombres recortados con elipsis", any(i["cut"] for i in L["items"]), str([i["cut"] for i in L["items"]]))
         check(f"largos {pos} {W}x{H}: ningún elemento sale del visual", all(i["x1"] <= W + 0.5 and i["y1"] <= H + 0.5 for i in L["items"]), "")
         await pg.hover(f".dn-li[data-key=\"{L['items'][0]['key']}\"]")
@@ -967,15 +1001,15 @@ async def leyenda_25(b):
         check(f"largos {pos} {W}x{H}: el tooltip lleva el nombre completo", "edición especial de temporada de verano" in tip, tip[:80])
         await eventos(pg, f"largos {pos} {W}x{H}")
         await pg.close()
-    pg = await page(b, dv_caso_a({"legend": {"content": "legend", "position": "bottom"}, "slices": {"maxSlices": 12, "groupBelow": 0}}), 300, 200, name="ley_more_300x200")
-    L = await leg(pg)
+    pg = await page(b, dv_caso_a({"legend": {"position": "bottom"}, "slices": {"maxSlices": 12, "groupBelow": 0}}, legacy=False), 300, 200, name="ley_more_300x200")
+    L = await leg(pg, "legend")
     n_more = int(L["more"].split()[0].lstrip("+")) if L["more"] else 0
     check("pequeño 300x200: los que no caben se pliegan en '+N more' y suman 10", len(L["items"]) + n_more == 10, f"{len(L['items'])} + {L['more']}")
     await pg.close()
 
     print("Leyenda 25-11 · tabla limpia: cabecera, rejilla, bandas, título y pie")
     for grid in ("none", "horizontal", "all"):
-        objs = {"legend": {"content": "table", "headerBackground": {"solid": {"color": "#DCE6F2"}}, "gridlines": grid}}
+        objs = {"dataTable": {"headerBackground": {"solid": {"color": "#DCE6F2"}}, "gridlines": grid}}
         pg = await page(b, dv_ventas(objs, compare=True, target=True, nota=True, legacy=False), 960, 540, name=f"ley_tabla_grid_{grid}")
         L = await leg(pg)
         check(f"grid {grid}: cabecera en negrita", all(int(h["fw"]) >= 700 for h in L["head"] if h["text"]), str([h["fw"] for h in L["head"]]))
@@ -993,7 +1027,7 @@ async def leyenda_25(b):
             check("grid all: líneas entre filas y entre columnas de cifras", L["bt"] > 0 and L["bl"] > 0, f"bt={L['bt']} bl={L['bl']}")
         await eventos(pg, f"grid {grid}")
         await pg.close()
-    pg = await page(b, dv_ventas({"legend": {"content": "table", "banding": True}}, compare=True, target=True, nota=True, legacy=False), 960, 540, name="ley_tabla_bandas")
+    pg = await page(b, dv_ventas({"dataTable": {"banding": True}}, compare=True, target=True, nota=True, legacy=False), 960, 540, name="ley_tabla_bandas")
     L = await leg(pg)
     check("bandas on: filas alternas con fondo", 0 < L["banded"] < L["bodyN"], f"{L['banded']}/{L['bodyN']}")
     await pg.hover(".dn-grid > .dn-c[data-bg]")
@@ -1001,41 +1035,41 @@ async def leyenda_25(b):
     L2 = await leg(pg)
     check("bandas on: el fondo vuelve tras pasar el ratón", L2["banded"] == L["banded"] and await pg.evaluate("() => Array.from(document.querySelectorAll('[data-bg]')).every(c => c.style.backgroundColor !== '')"), "")
     await pg.close()
-    pg = await page(b, dv_ventas({"legend": {"content": "table"}}, compare=True, target=True, legacy=False), 960, 540)
+    pg = await page(b, dv_ventas({}, compare=True, target=True, legacy=False), 960, 540)
     L = await leg(pg)
     check("bandas: apagadas por defecto", L["banded"] == 0, str(L["banded"]))
     check("pie de avisos separado por una línea y un punto menos de letra", L["foot"] and L["foot"]["bt"] >= 1 and L["foot"]["fs"] <= L["fs"] - 1 + 0.01, str(L["foot"]) + f" fs={L['fs']}")
     await pg.close()
-    pg = await page(b, dv_ventas({"legend": {"content": "table", "gridlines": "all"}}, compare=True, target=True, nota=True, legacy=False), 960, 540, hc=True, name="ley_tabla_hc")
+    pg = await page(b, dv_ventas({"dataTable": {"gridlines": "all"}}, compare=True, target=True, nota=True, legacy=False), 960, 540, hc=True, name="ley_tabla_hc")
     L = await leg(pg)
     check("alto contraste: sin fondo de cabecera ni bandas, líneas en el color del texto", L["banded"] == 0 and L["btColor"] in ("rgb(255, 255, 0)", "#FFFF00"), L["btColor"])
     await eventos(pg, "tabla hc")
     await pg.close()
     # Tabla con columnas recortadas (no caben barra ni segunda columna de cambio) y pequeño.
     for W, H in [(560, 300), (380, 260)]:
-        pg = await page(b, dv_ventas({"legend": {"content": "table"}}, compare=True, target=True, nota=True, legacy=False), W, H, name=f"ley_tabla_recortada_{W}x{H}")
+        pg = await page(b, dv_ventas({}, compare=True, target=True, nota=True, legacy=False), W, H, name=f"ley_tabla_recortada_{W}x{H}")
         i = await info(pg)
         comprobar_dibujo(i, W, H, f"tabla recortada {W}x{H}")
         await eventos(pg, f"tabla recortada {W}x{H}")
         await pg.close()
 
     print("Leyenda 25-11 · Segment anidado (Ventas: Marca/Familia)")
-    pg = await page(b, dv_ventas({"legend": {"content": "table", "segRows": True}}, segment="Familia", legacy=False), 960, 540, edit=True, name="seg_anidado_marca_familia")
+    pg = await page(b, dv_ventas({"dataTable": {"position": "right", "segRows": True}}, segment="Familia", legacy=False), 960, 540, edit=True, name="seg_anidado_marca_familia")
     L = await leg(pg)
     check("Marca × Familia: sin anillo exterior inútil", L["segPaths"] == 0 and L["seg"] == 0, f"paths={L['segPaths']} filas={L['seg']}")
     check("Marca × Familia: aviso con los nombres reales", "Each Marca belongs to one Familia: put Familia in Category and Marca in Segment" in L["notes"], L["notes"][:160])
     check("Marca × Familia: las categorías se dibujan", await pg.evaluate("() => document.querySelectorAll('path.dn-slice').length") >= 6, "")
     await eventos(pg, "Marca × Familia")
     await pg.close()
-    pg = await page(b, dv_ventas({"legend": {"content": "table", "segRows": True}}, segment="Familia", legacy=False), 960, 540, locale="es-ES")
+    pg = await page(b, dv_ventas({"dataTable": {"position": "right", "segRows": True}}, segment="Familia", legacy=False), 960, 540, locale="es-ES")
     L = await leg(pg)
     check("Marca × Familia en lectura: sin aviso (solo editando)", "belongs" not in L["notes"] and "pertenece" not in L["notes"], L["notes"][:80])
     await pg.close()
-    pg = await page(b, dv_ventas({"legend": {"content": "table", "segRows": True}}, segment="Familia", legacy=False), 960, 540, edit=True, locale="es-ES")
+    pg = await page(b, dv_ventas({"dataTable": {"position": "right", "segRows": True}}, segment="Familia", legacy=False), 960, 540, edit=True, locale="es-ES")
     L = await leg(pg)
     check("Marca × Familia en español: aviso traducido", "Cada Marca pertenece a un solo Familia" in L["notes"], L["notes"][:120])
     await pg.close()
-    pg = await page(b, dv_ventas({"legend": {"content": "table", "segRows": True}, "labels": {"content": "percent"}}, segment="Marca", cat="Familia", legacy=False), 960, 540, name="seg_familia_marca")
+    pg = await page(b, dv_ventas({"dataTable": {"position": "right", "segRows": True}, "labels": {"content": "percent"}}, segment="Marca", cat="Familia", legacy=False), 960, 540, name="seg_familia_marca")
     L = await leg(pg)
     check("Familia × Marca: anillo exterior dibujado", L["segPaths"] >= 10, str(L["segPaths"]))
     ref = next(x for x in L["pct"] if not x["seg"] and x["key"] and "Refrescos" in x["key"])
@@ -1064,11 +1098,12 @@ SB = r"""() => {
   const lab = Array.from(root.querySelectorAll('text.dn-label')).map(t => ({ text: t.textContent, fs: +t.getAttribute('font-size'), ...R(t) }));
   const segs = Array.from(root.querySelectorAll('path.dn-seg')).map(p => p.getAttribute('data-key'));
   const ring = root.querySelector('.dn-slices'), outer = root.querySelector('.dn-segs');
-  const t = root.querySelector('.dn-table');
+  const t = root.querySelector('.dn-table'), lg = root.querySelector('.dn-legend');
+  const fsOf = e => e ? parseFloat(getComputedStyle(e).fontSize) : 0;
   return { summary: sm.map(e => ({ text: e.textContent, fs: parseFloat(getComputedStyle(e).fontSize), full: e.getAttribute('data-full'), ...R(e) })),
-    segl, lab, segs, ring: ring ? R(ring) : null, outer: outer ? R(outer) : null, table: t ? R(t) : null,
-    tfs: t ? parseFloat(getComputedStyle(t).fontSize) : 0, legend: !!(t && t.classList.contains('dn-legend')),
-    lseg: t ? Array.from(t.querySelectorAll('.dn-lseg')).map(e => e.textContent) : [], aria: root.getAttribute('aria-label') || '' };
+    segl, lab, segs, ring: ring ? R(ring) : null, outer: outer ? R(outer) : null, table: t ? R(t) : (lg ? R(lg) : null), lgbox: lg ? R(lg) : null,
+    tfs: Math.min(...[fsOf(t), fsOf(lg)].filter(x => x > 0).concat([999])) % 999 || 0, legend: !!lg,
+    lseg: lg ? Array.from(lg.querySelectorAll('.dn-lseg')).map(e => e.textContent) : [], aria: root.getAttribute('aria-label') || '' };
 }"""
 
 
@@ -1164,11 +1199,11 @@ async def tanda_25b(b):
     print("25-11 (2) · Summary: Marca sola, con y sin Compare / Target")
     import re as _re
     for W, H in TAM:
-        pg = await page(b, dv_caso_a({"legend": {"content": "auto"}}), W, H)
+        pg = await page(b, dv_caso_a({}, legacy=False), W, H)
         S = await sb(pg)
         check(f"Marca sola {W}x{H}: Summary apagado por defecto", not S["summary"], str(S["summary"]))
         await pg.close()
-        pg = await page(b, dv_caso_a({"legend": {"content": "table"}, "summary": {"show": "on"}, "labels": {"content": "percent"}}), W, H, name=f"t2_marca_summary_on_{W}x{H}")
+        pg = await page(b, dv_caso_a({"summary": {"show": "on"}, "labels": {"content": "percent"}}), W, H, name=f"t2_marca_summary_on_{W}x{H}")
         S = await sb(pg)
         i = await info(pg)
         check(f"Marca sola on {W}x{H}: Summary encendido", len(S["summary"]) == 1, str(S["summary"]))
@@ -1183,7 +1218,7 @@ async def tanda_25b(b):
         await eventos(pg, f"Marca sola on {W}x{H}")
         await pg.close()
         lbl = f"Marca cmp+tgt {W}x{H}"
-        pg = await page(b, dv_ventas({"legend": {"content": "table"}}, compare=True, target=True, legacy=False), W, H, name=f"t2_marca_cmp_tgt_{W}x{H}")
+        pg = await page(b, dv_ventas({}, compare=True, target=True, legacy=False), W, H, name=f"t2_marca_cmp_tgt_{W}x{H}")
         S = await sb(pg)
         i = await info(pg)
         check(f"{lbl}: Summary encendido (Automatic con Compare)", len(S["summary"]) == 1, str(S["summary"]))
@@ -1203,9 +1238,9 @@ async def tanda_25b(b):
         await pg.close()
     print("25-11 (3) · Summary y objetivo: ≈ no es fallo")
     for lbl, dv, quiere in [
-        ("Familia (dataset real, todas ≈)", dv_ventas({"legend": {"content": "table"}}, cat="Familia", compare=True, target=True, legacy=False), "All 6 categories are near the target."),
-        ("Marca (con ✕)", dv_ventas({"legend": {"content": "table"}, "slices": {"maxSlices": 12, "groupBelow": 0}}, compare=True, target=True, legacy=False), None),
-        ("Marca Close at 50 % (✓ y ≈, sin ✕)", dv_ventas({"legend": {"content": "table"}, "target": {"closeAt": 50}}, compare=True, target=True, legacy=False), None),
+        ("Familia (dataset real, todas ≈)", dv_ventas({}, cat="Familia", compare=True, target=True, legacy=False), "All 6 categories are near the target."),
+        ("Marca (con ✕)", dv_ventas({"slices": {"maxSlices": 12, "groupBelow": 0}}, compare=True, target=True, legacy=False), None),
+        ("Marca Close at 50 % (✓ y ≈, sin ✕)", dv_ventas({"target": {"closeAt": 50}}, compare=True, target=True, legacy=False), None),
     ]:
         tag = "t3_summary_" + ("familia" if "Familia" in lbl else "marca_x" if "(con ✕)" in lbl else "marca_mix")
         pg = await page(b, dv, 1200, 640, name=tag)
@@ -1224,17 +1259,17 @@ async def tanda_25b(b):
             check(f"Summary {lbl}: todas ≈ en la tabla y ninguna contada como fallo", set(iconos) == {"≈"} and "miss" not in t, iconos)
         await eventos(pg, f"summary {lbl}")
         await pg.close()
-    pg = await page(b, dv_ventas({"legend": {"content": "table"}}, cat="Familia", compare=True, target=True, legacy=False), 960, 540, locale="es-ES")
+    pg = await page(b, dv_ventas({}, cat="Familia", compare=True, target=True, legacy=False), 960, 540, locale="es-ES")
     S = await sb(pg)
     t = S["summary"][0]["text"] if S["summary"] else ""
     check("Summary Familia en español: «Las 6 categorías están cerca del objetivo.»", "Las 6 categorías están cerca del objetivo." in t, t)
     await pg.close()
-    pg = await page(b, dv_ventas({"legend": {"content": "table"}}, compare=True, target=True, legacy=False), 960, 540, plan=None, edit=False, name="t2_summary_free_lectura")
+    pg = await page(b, dv_ventas({}, compare=True, target=True, legacy=False), 960, 540, plan=None, edit=False, name="t2_summary_free_lectura")
     S = await sb(pg)
     t = S["summary"][0]["text"] if S["summary"] else ""
     check("Summary sin licencia (lectura): solo cuotas, sin cambio ni objetivo", t.startswith("Aigua Serena leads") and "shift" not in t and "target" not in t, t)
     await pg.close()
-    pg = await page(b, dv_ventas({"legend": {"content": "table"}}, compare=True, target=True, legacy=False), 960, 540, locale="es-ES", name="t2_summary_es")
+    pg = await page(b, dv_ventas({}, compare=True, target=True, legacy=False), 960, 540, locale="es-ES", name="t2_summary_es")
     S = await sb(pg)
     t = S["summary"][0]["text"] if S["summary"] else ""
     check("Summary en español: plantillas completas", "lidera con el" in t and "Mayor cambio frente a Litros AA" in t, t)
@@ -1254,6 +1289,86 @@ async def tanda_25b(b):
         await pg.close()
 
 
+# ── Tipografía seleccionable (25-11) ──────────────────────────────────────────
+
+FUENTES = ["Arial Black", "Segoe UI Bold", "Georgia", "DIN"]
+
+FT = r"""() => {
+  const h = document.getElementById('host'), hr = h.getBoundingClientRect();
+  const root = h.querySelector('.dn-root');
+  const R = e => { const r = e.getBoundingClientRect(); return { x0: r.left - hr.left, y0: r.top - hr.top, x1: r.right - hr.left, y1: r.bottom - hr.top, w: r.width, h: r.height }; };
+  const fam = e => e ? getComputedStyle(e).fontFamily : '';
+  const ring = root.querySelector('.dn-slices');
+  const hole = root.querySelector('path.dn-slice');
+  return {
+    lab: Array.from(root.querySelectorAll('text.dn-label, text.dn-seglabel')).map(t => ({ text: t.textContent, fam: fam(t), w8: t.getAttribute('font-weight'), ...R(t) })),
+    center: Array.from(root.querySelectorAll('.dn-center-text')).map(t => ({ part: t.getAttribute('data-part'), text: t.textContent, fam: fam(t), fs: +t.getAttribute('font-size'), w8: t.getAttribute('font-weight'), ...R(t) })),
+    table: (e => e ? { fam: fam(e), ...R(e), over: e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1 } : null)(root.querySelector('.dn-table')),
+    legend: (e => e ? { fam: fam(e), ...R(e) } : null)(root.querySelector('.dn-legend')),
+    summary: (e => e ? { fam: fam(e), ...R(e) } : null)(root.querySelector('.dn-summary')),
+    ring: ring ? R(ring) : null,
+  };
+}"""
+
+
+async def tanda_fuentes(b):
+    print("25-11 (4) · Tipografía: Arial Black, Segoe UI Bold, Georgia y DIN en etiquetas, centro, leyenda, tabla y resumen")
+    for f in FUENTES:
+        for W, H in [(960, 540), (380, 260)]:
+            lbl = f"fuente {f} {W}x{H}"
+            objs = {"labels": {"fontFamily": f, "bold": f == "Arial Black"}, "center": {"valueFontFamily": f, "titleFontFamily": f},
+                    "legend": {"fontFamily": f}, "dataTable": {"fontFamily": f}, "summary": {"fontFamily": f}}
+            pg = await page(b, dv_ventas(objs, compare=True, target=True, nota=True, legacy=False), W, H, name=f"fuente_{f.replace(' ', '_')}_{W}x{H}")
+            F = await pg.evaluate(FT)
+            i = await info(pg)
+            comprobar_dibujo(i, W, H, lbl, mira_suma=False)
+            usa = lambda x: x is not None and f in x["fam"]
+            check(f"{lbl}: etiquetas con la fuente elegida", F["lab"] and all(f in l["fam"] for l in F["lab"]), str({l["fam"] for l in F["lab"]})[:80])
+            check(f"{lbl}: centro (valor y título) con la fuente elegida", F["center"] and all(f in c["fam"] for c in F["center"]), str({c["fam"] for c in F["center"]})[:80])
+            check(f"{lbl}: leyenda, tabla y resumen con la fuente elegida", usa(F["legend"]) and (F["table"] is None or usa(F["table"])) and (F["summary"] is None or usa(F["summary"])),
+                  f"{F['legend'] and F['legend']['fam']} | {F['table'] and F['table']['fam']}")
+            if f == "Arial Black":
+                check(f"{lbl}: negrita de las etiquetas aplicada", all(l["w8"] == "700" for l in F["lab"]), str({l["w8"] for l in F["lab"]}))
+            r = F["ring"]
+            if r and F["center"]:
+                cx, cy, ri = (r["x0"] + r["x1"]) / 2, (r["y0"] + r["y1"]) / 2, r["w"] / 2 * 0.58
+                fuera = [c["text"] for c in F["center"] if max(abs(c["x0"] - cx), abs(c["x1"] - cx)) > ri + 1 or ((max(abs(c["x0"] - cx), abs(c["x1"] - cx))) ** 2 + max(abs(c["y0"] - cy), abs(c["y1"] - cy)) ** 2) ** 0.5 > ri * 1.08]
+                check(f"{lbl}: el texto del centro cabe en el agujero (medido con la fuente real)", not fuera, str(fuera))
+            cajas = [x for x in (F["legend"], F["table"], F["summary"]) if x]
+            pis = [(a["fam"][:10], b_["fam"][:10]) for k, a in enumerate(cajas) for b_ in cajas[k + 1:] if overlap(a, b_)]
+            check(f"{lbl}: leyenda, tabla y resumen sin pisarse ni salirse", not pis and all(x["x1"] <= W + 0.5 and x["y1"] <= H + 0.5 for x in cajas), str(pis))
+            if F["table"]:
+                check(f"{lbl}: la tabla no desborda", not F["table"]["over"], "")
+            await eventos(pg, lbl)
+            await pg.close()
+    # Fuente ancha frente a la normal: las etiquetas deciden si caben con la real (con Arial Black no caben más que con la de serie).
+    pg = await page(b, dv_caso_a({}, legacy=False), 380, 260)
+    n0 = len((await pg.evaluate(FT))["lab"])
+    await pg.close()
+    pg = await page(b, dv_caso_a({"labels": {"fontFamily": "Arial Black", "bold": True}}, legacy=False), 380, 260)
+    F = await pg.evaluate(FT)
+    i = await info(pg)
+    comprobar_dibujo(i, 380, 260, "Arial Black negrita 380x260", mira_suma=False)
+    check("Arial Black negrita 380x260: no caben más etiquetas que con Segoe UI", len(F["lab"]) <= n0, f"{len(F['lab'])} vs {n0}")
+    await pg.close()
+    # Vacío = la fuente del estilo: Ledger y Editorial siguen en Georgia; Report theme en Segoe UI.
+    for est, quiere in [("report", "Segoe UI"), ("ledger", "Georgia"), ("editorial", "Georgia")]:
+        pg = await page(b, dv_caso_a({"style": {"template": est}}, legacy=False), 700, 400)
+        F = await pg.evaluate(FT)
+        check(f"fuente vacía con estilo {est}: {quiere}", F["lab"] and quiere in F["lab"][0]["fam"] and quiere in F["center"][0]["fam"], F["lab"][0]["fam"][:40] if F["lab"] else "")
+        await pg.close()
+    # Center: Value size y Title size escalan con k y el título encoge con el valor.
+    pg = await page(b, dv_caso_a({"center": {"fontSize": 30, "titleFontSize": 12, "valueBold": False, "titleColor": {"solid": {"color": "#C00000"}}}}, legacy=False), 960, 540, name="centro_tamanos_960x540")
+    F = await pg.evaluate(FT)
+    v = next((c for c in F["center"] if c["part"] == "value"), None)
+    t = next((c for c in F["center"] if c["part"] == "title"), None)
+    check("Center: Value size 30 escala con k (≤ 54 px) y sin negrita", v and v["fs"] <= 54 and v["w8"] == "400", str(v))
+    check("Center: Title size 12 en proporción al valor", v and t and abs(t["fs"] / v["fs"] - 12 / 30) < 0.05, f"{t and t['fs']} / {v and v['fs']}")
+    col = await pg.evaluate("() => { const t = document.querySelector('.dn-center-text[data-part=title]'); return t ? t.getAttribute('fill') : ''; }")
+    check("Center: Title color propio", col.upper() == "#C00000", col)
+    await pg.close()
+
+
 def ventas_por_par(a, b_):
     d = defaultdict(float)
     for r in VENTAS:
@@ -1264,6 +1379,12 @@ def ventas_por_par(a, b_):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
+        if "--fuentes" in sys.argv:
+            await tanda_fuentes(b)
+            await b.close()
+            print()
+            print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))
+            return
         if "--tanda2" in sys.argv:
             await tanda_25b(b)
             await b.close()
@@ -1573,6 +1694,7 @@ async def main():
         await bloque2(b)
         await leyenda_25(b)
         await tanda_25b(b)
+        await tanda_fuentes(b)
         await b.close()
     print()
     print("TODO OK" if not FALLOS else "FALLOS (%d):\n  - %s" % (len(FALLOS), "\n  - ".join(FALLOS)))

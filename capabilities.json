@@ -453,6 +453,36 @@
             "numeric": true
           }
         },
+        "fontFamily": {
+          "displayName": "Font",
+          "displayNameKey": "Prop_labels_fontFamily",
+          "type": {
+            "formatting": {
+              "fontFamily": true
+            }
+          }
+        },
+        "bold": {
+          "displayName": "Bold",
+          "displayNameKey": "Prop_labels_bold",
+          "type": {
+            "bool": true
+          }
+        },
+        "italic": {
+          "displayName": "Italic",
+          "displayNameKey": "Prop_labels_italic",
+          "type": {
+            "bool": true
+          }
+        },
+        "underline": {
+          "displayName": "Underline",
+          "displayNameKey": "Prop_labels_underline",
+          "type": {
+            "bool": true
+          }
+        },
         "color": {
           "displayName": "Text color (outside)",
           "displayNameKey": "Prop_labels_color",
@@ -536,6 +566,42 @@
             "text": true
           }
         },
+        "titleFontFamily": {
+          "displayName": "Title font",
+          "displayNameKey": "Prop_center_titleFontFamily",
+          "type": {
+            "formatting": {
+              "fontFamily": true
+            }
+          }
+        },
+        "titleFontSize": {
+          "displayName": "Title size",
+          "displayNameKey": "Prop_center_titleFontSize",
+          "type": {
+            "numeric": true
+          }
+        },
+        "titleColor": {
+          "displayName": "Title color",
+          "displayNameKey": "Prop_center_titleColor",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        },
+        "valueFontFamily": {
+          "displayName": "Value font",
+          "displayNameKey": "Prop_center_valueFontFamily",
+          "type": {
+            "formatting": {
+              "fontFamily": true
+            }
+          }
+        },
         "fontSize": {
           "displayName": "Value size",
           "displayNameKey": "Prop_center_fontSize",
@@ -543,8 +609,15 @@
             "numeric": true
           }
         },
+        "valueBold": {
+          "displayName": "Bold value",
+          "displayNameKey": "Prop_center_valueBold",
+          "type": {
+            "bool": true
+          }
+        },
         "color": {
-          "displayName": "Text color",
+          "displayName": "Value color",
           "displayNameKey": "Prop_center_color",
           "type": {
             "fill": {
@@ -656,6 +729,98 @@
                 "displayNameKey": "Enum_position_auto"
               },
               {
+                "value": "top",
+                "displayName": "Top",
+                "displayNameKey": "Enum_position_top"
+              },
+              {
+                "value": "bottom",
+                "displayName": "Bottom",
+                "displayNameKey": "Enum_position_bottom"
+              },
+              {
+                "value": "left",
+                "displayName": "Left",
+                "displayNameKey": "Enum_position_left"
+              },
+              {
+                "value": "right",
+                "displayName": "Right",
+                "displayNameKey": "Enum_position_right"
+              },
+              {
+                "value": "off",
+                "displayName": "Off",
+                "displayNameKey": "Enum_position_off"
+              }
+            ]
+          }
+        },
+        "fontSize": {
+          "displayName": "Text size",
+          "displayNameKey": "Prop_legend_fontSize",
+          "type": {
+            "numeric": true
+          }
+        },
+        "fontFamily": {
+          "displayName": "Font",
+          "displayNameKey": "Prop_legend_fontFamily",
+          "type": {
+            "formatting": {
+              "fontFamily": true
+            }
+          }
+        },
+        "bold": {
+          "displayName": "Bold",
+          "displayNameKey": "Prop_legend_bold",
+          "type": {
+            "bool": true
+          }
+        },
+        "italic": {
+          "displayName": "Italic",
+          "displayNameKey": "Prop_legend_italic",
+          "type": {
+            "bool": true
+          }
+        },
+        "underline": {
+          "displayName": "Underline",
+          "displayNameKey": "Prop_legend_underline",
+          "type": {
+            "bool": true
+          }
+        },
+        "color": {
+          "displayName": "Text color",
+          "displayNameKey": "Prop_legend_color",
+          "type": {
+            "fill": {
+              "solid": {
+                "color": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "dataTable": {
+      "displayName": "Data table",
+      "displayNameKey": "Obj_dataTable",
+      "properties": {
+        "position": {
+          "displayName": "Position",
+          "displayNameKey": "Prop_dataTable_position",
+          "type": {
+            "enumeration": [
+              {
+                "value": "auto",
+                "displayName": "Automatic",
+                "displayNameKey": "Enum_position_auto"
+              },
+              {
                 "value": "right",
                 "displayName": "Right",
                 "displayNameKey": "Enum_position_right"
@@ -664,11 +829,6 @@
                 "value": "left",
                 "displayName": "Left",
                 "displayNameKey": "Enum_position_left"
-              },
-              {
-                "value": "top",
-                "displayName": "Top",
-                "displayNameKey": "Enum_position_top"
               },
               {
                 "value": "bottom",
@@ -683,39 +843,16 @@
             ]
           }
         },
-        "content": {
-          "displayName": "Content",
-          "displayNameKey": "Prop_legend_content",
-          "type": {
-            "enumeration": [
-              {
-                "value": "auto",
-                "displayName": "Automatic",
-                "displayNameKey": "Enum_content_auto"
-              },
-              {
-                "value": "legend",
-                "displayName": "Legend",
-                "displayNameKey": "Enum_content_legend"
-              },
-              {
-                "value": "table",
-                "displayName": "Table",
-                "displayNameKey": "Enum_content_table"
-              }
-            ]
-          }
-        },
         "header": {
           "displayName": "Show header",
-          "displayNameKey": "Prop_legend_header",
+          "displayNameKey": "Prop_dataTable_header",
           "type": {
             "bool": true
           }
         },
         "headerColor": {
           "displayName": "Header text color",
-          "displayNameKey": "Prop_legend_headerColor",
+          "displayNameKey": "Prop_dataTable_headerColor",
           "type": {
             "fill": {
               "solid": {
@@ -726,7 +863,7 @@
         },
         "headerBackground": {
           "displayName": "Header background",
-          "displayNameKey": "Prop_legend_headerBackground",
+          "displayNameKey": "Prop_dataTable_headerBackground",
           "type": {
             "fill": {
               "solid": {
@@ -737,7 +874,7 @@
         },
         "totalRow": {
           "displayName": "Show total row",
-          "displayNameKey": "Prop_legend_totalRow",
+          "displayNameKey": "Prop_dataTable_totalRow",
           "type": {
             "enumeration": [
               {
@@ -760,49 +897,49 @@
         },
         "colValue": {
           "displayName": "Value column",
-          "displayNameKey": "Prop_legend_colValue",
+          "displayNameKey": "Prop_dataTable_colValue",
           "type": {
             "bool": true
           }
         },
         "colShare": {
           "displayName": "Share % column",
-          "displayNameKey": "Prop_legend_colShare",
+          "displayNameKey": "Prop_dataTable_colShare",
           "type": {
             "bool": true
           }
         },
         "colChange": {
           "displayName": "Change column",
-          "displayNameKey": "Prop_legend_colChange",
+          "displayNameKey": "Prop_dataTable_colChange",
           "type": {
             "bool": true
           }
         },
         "colTarget": {
           "displayName": "% of target column",
-          "displayNameKey": "Prop_legend_colTarget",
+          "displayNameKey": "Prop_dataTable_colTarget",
           "type": {
             "bool": true
           }
         },
         "colNote": {
           "displayName": "Notes",
-          "displayNameKey": "Prop_legend_colNote",
+          "displayNameKey": "Prop_dataTable_colNote",
           "type": {
             "bool": true
           }
         },
         "segRows": {
           "displayName": "Segment rows",
-          "displayNameKey": "Prop_legend_segRows",
+          "displayNameKey": "Prop_dataTable_segRows",
           "type": {
             "bool": true
           }
         },
         "gridlines": {
           "displayName": "Gridlines",
-          "displayNameKey": "Prop_legend_gridlines",
+          "displayNameKey": "Prop_dataTable_gridlines",
           "type": {
             "enumeration": [
               {
@@ -825,7 +962,7 @@
         },
         "gridColor": {
           "displayName": "Gridline color",
-          "displayNameKey": "Prop_legend_gridColor",
+          "displayNameKey": "Prop_dataTable_gridColor",
           "type": {
             "fill": {
               "solid": {
@@ -836,28 +973,58 @@
         },
         "gridWidth": {
           "displayName": "Gridline width",
-          "displayNameKey": "Prop_legend_gridWidth",
+          "displayNameKey": "Prop_dataTable_gridWidth",
           "type": {
             "numeric": true
           }
         },
         "banding": {
           "displayName": "Row banding",
-          "displayNameKey": "Prop_legend_banding",
+          "displayNameKey": "Prop_dataTable_banding",
           "type": {
             "bool": true
           }
         },
         "fontSize": {
           "displayName": "Text size",
-          "displayNameKey": "Prop_legend_fontSize",
+          "displayNameKey": "Prop_dataTable_fontSize",
           "type": {
             "numeric": true
           }
         },
+        "fontFamily": {
+          "displayName": "Font",
+          "displayNameKey": "Prop_dataTable_fontFamily",
+          "type": {
+            "formatting": {
+              "fontFamily": true
+            }
+          }
+        },
+        "bold": {
+          "displayName": "Bold",
+          "displayNameKey": "Prop_dataTable_bold",
+          "type": {
+            "bool": true
+          }
+        },
+        "italic": {
+          "displayName": "Italic",
+          "displayNameKey": "Prop_dataTable_italic",
+          "type": {
+            "bool": true
+          }
+        },
+        "underline": {
+          "displayName": "Underline",
+          "displayNameKey": "Prop_dataTable_underline",
+          "type": {
+            "bool": true
+          }
+        },
         "color": {
           "displayName": "Text color",
-          "displayNameKey": "Prop_legend_color",
+          "displayNameKey": "Prop_dataTable_color",
           "type": {
             "fill": {
               "solid": {
@@ -868,7 +1035,7 @@
         },
         "displayUnits": {
           "displayName": "Display units",
-          "displayNameKey": "Prop_legend_displayUnits",
+          "displayNameKey": "Prop_dataTable_displayUnits",
           "type": {
             "enumeration": [
               {
@@ -906,14 +1073,14 @@
         },
         "valueDecimals": {
           "displayName": "Value decimal places",
-          "displayNameKey": "Prop_legend_valueDecimals",
+          "displayNameKey": "Prop_dataTable_valueDecimals",
           "type": {
             "numeric": true
           }
         },
         "percentDecimals": {
           "displayName": "Percentage decimal places",
-          "displayNameKey": "Prop_legend_percentDecimals",
+          "displayNameKey": "Prop_dataTable_percentDecimals",
           "type": {
             "numeric": true
           }
@@ -952,6 +1119,36 @@
           "displayNameKey": "Prop_summary_fontSize",
           "type": {
             "numeric": true
+          }
+        },
+        "fontFamily": {
+          "displayName": "Font",
+          "displayNameKey": "Prop_summary_fontFamily",
+          "type": {
+            "formatting": {
+              "fontFamily": true
+            }
+          }
+        },
+        "bold": {
+          "displayName": "Bold",
+          "displayNameKey": "Prop_summary_bold",
+          "type": {
+            "bool": true
+          }
+        },
+        "italic": {
+          "displayName": "Italic",
+          "displayNameKey": "Prop_summary_italic",
+          "type": {
+            "bool": true
+          }
+        },
+        "underline": {
+          "displayName": "Underline",
+          "displayNameKey": "Prop_summary_underline",
+          "type": {
+            "bool": true
           }
         },
         "color": {
@@ -1095,9 +1292,32 @@
             }
           }
         },
+        "titleFontFamily": {
+          "displayName": "Title font",
+          "displayNameKey": "Prop_smallMultiples_titleFontFamily",
+          "type": {
+            "formatting": {
+              "fontFamily": true
+            }
+          }
+        },
         "titleBold": {
           "displayName": "Bold title",
           "displayNameKey": "Prop_smallMultiples_titleBold",
+          "type": {
+            "bool": true
+          }
+        },
+        "titleItalic": {
+          "displayName": "Italic title",
+          "displayNameKey": "Prop_smallMultiples_titleItalic",
+          "type": {
+            "bool": true
+          }
+        },
+        "titleUnderline": {
+          "displayName": "Underline title",
+          "displayNameKey": "Prop_smallMultiples_titleUnderline",
           "type": {
             "bool": true
           }
